@@ -361,9 +361,13 @@ pub struct OpenAIRequest {
 /// OpenAI API streaming chunk
 #[derive(Debug, Clone, Deserialize)]
 pub struct OpenAIChunk {
+    #[allow(dead_code)]
     pub id: String,
+    #[allow(dead_code)]
     pub object: String,
+    #[allow(dead_code)]
     pub created: i64,
+    #[allow(dead_code)]
     pub model: String,
     pub choices: Vec<OpenAIChoice>,
 }
@@ -371,6 +375,7 @@ pub struct OpenAIChunk {
 /// OpenAI choice in streaming response
 #[derive(Debug, Clone, Deserialize)]
 pub struct OpenAIChoice {
+    #[allow(dead_code)]
     pub index: u32,
     pub delta: OpenAIDelta,
     pub finish_reason: Option<String>,
@@ -379,6 +384,7 @@ pub struct OpenAIChoice {
 /// OpenAI delta in streaming response
 #[derive(Debug, Clone, Deserialize)]
 pub struct OpenAIDelta {
+    #[allow(dead_code)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -393,6 +399,7 @@ pub struct OpenAIToolCallDelta {
     pub index: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    #[allow(dead_code)]
     #[serde(skip_serializing_if = "Option::is_none", rename = "type")]
     pub call_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

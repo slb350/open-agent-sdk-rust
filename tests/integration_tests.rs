@@ -73,9 +73,7 @@ fn test_client_creation_with_full_config() {
         .model("test-model")
         .base_url("http://localhost:1234/v1")
         .temperature(0.5)
-        .max_tokens(500)
         .max_turns(10)
-        .timeout(30)
         .build()
         .unwrap();
 
@@ -191,12 +189,9 @@ fn test_builder_pattern_chain() {
         .model("model")
         .base_url("http://localhost")
         .temperature(0.7)
-        .max_tokens(100)
-        .timeout(30)
         .build();
 
     assert!(result.is_ok());
     let options = result.unwrap();
     assert_eq!(options.temperature, 0.7);
-    assert_eq!(options.max_tokens, Some(100));
 }

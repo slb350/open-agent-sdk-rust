@@ -234,7 +234,7 @@ mod tests {
 
         let tokens = estimate_tokens(&messages);
         // "Hello world" = 11 chars + overhead ≈ 5-8 tokens
-        assert!(tokens >= 3 && tokens <= 10);
+        assert!((3..=10).contains(&tokens));
     }
 
     #[test]

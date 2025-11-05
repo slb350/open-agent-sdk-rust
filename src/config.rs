@@ -1,6 +1,7 @@
 //! Configuration helpers for the Open Agent SDK
 
 use std::env;
+use std::str::FromStr;
 
 /// Supported provider shortcuts
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,15 +22,18 @@ impl Provider {
             Provider::VLLM => "http://localhost:8000/v1",
         }
     }
+}
 
-    /// Parse a provider from a string
-    pub fn from_str(s: &str) -> Option<Self> {
+impl FromStr for Provider {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "lmstudio" | "lm-studio" | "lm_studio" => Some(Provider::LMStudio),
-            "ollama" => Some(Provider::Ollama),
-            "llamacpp" | "llama-cpp" | "llama_cpp" | "llama.cpp" => Some(Provider::LlamaCpp),
-            "vllm" => Some(Provider::VLLM),
-            _ => None,
+            "lmstudio" | "lm-studio" | "lm_studio" => Ok(Provider::LMStudio),
+            "ollama" => Ok(Provider::Ollama),
+            "llamacpp" | "llama-cpp" | "llama_cpp" | "llama.cpp" => Ok(Provider::LlamaCpp),
+            "vllm" => Ok(Provider::VLLM),
+            _ => Err(format!("Unknown provider: {}", s)),
         }
     }
 }
@@ -118,13 +122,13 @@ mod tests {
 
     #[test]
     fn test_provider_from_str() {
-        assert_eq!(Provider::from_str("lmstudio"), Some(Provider::LMStudio));
-        assert_eq!(Provider::from_str("LM-Studio"), Some(Provider::LMStudio));
-        assert_eq!(Provider::from_str("ollama"), Some(Provider::Ollama));
-        assert_eq!(Provider::from_str("llamacpp"), Some(Provider::LlamaCpp));
-        assert_eq!(Provider::from_str("llama.cpp"), Some(Provider::LlamaCpp));
-        assert_eq!(Provider::from_str("vllm"), Some(Provider::VLLM));
-        assert_eq!(Provider::from_str("unknown"), None);
+        assert_eq!("lmstudio".parse::<Provider>(), Ok(Provider::LMStudio));
+        assert_eq!("LM-Studio".parse::<Provider>(), Ok(Provider::LMStudio));
+        assert_eq!("ollama".parse::<Provider>(), Ok(Provider::Ollama));
+        assert_eq!("llamacpp".parse::<Provider>(), Ok(Provider::LlamaCpp));
+        assert_eq!("llama.cpp".parse::<Provider>(), Ok(Provider::LlamaCpp));
+        assert_eq!("vllm".parse::<Provider>(), Ok(Provider::VLLM));
+        assert!("unknown".parse::<Provider>().is_err());
     }
 
     #[test]

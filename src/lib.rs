@@ -26,6 +26,9 @@
 //!             ContentBlock::ToolUse(tool_block) => {
 //!                 println!("Tool called: {}", tool_block.name);
 //!             }
+//!             ContentBlock::ToolResult(_) => {
+//!                 // Tool results can be ignored in simple queries
+//!             }
 //!         }
 //!     }
 //!

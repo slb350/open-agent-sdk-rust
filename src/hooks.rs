@@ -103,14 +103,6 @@ impl UserPromptSubmitEvent {
     }
 }
 
-/// Union type for all hook events
-#[derive(Debug, Clone)]
-pub enum HookEvent {
-    PreToolUse(PreToolUseEvent),
-    PostToolUse(PostToolUseEvent),
-    UserPromptSubmit(UserPromptSubmitEvent),
-}
-
 /// Decision returned by hook handler to control execution
 #[derive(Debug, Clone, Default)]
 pub struct HookDecision {

@@ -6,7 +6,7 @@
 //! - PreToolUse: Intercept and control tool execution (future enhancement)
 //! - PostToolUse: Monitor tool results after execution (future enhancement)
 
-use open_agent::{AgentOptions, Client, HookDecision, Hooks, UserPromptSubmitEvent};
+use open_agent::{AgentOptions, Client, HookDecision, Hooks};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -84,18 +84,6 @@ impl ToolCallAggregator {
 
         Ok(blocks)
     }
-
-    /// Flush any remaining content
-    pub fn flush(&mut self) -> Vec<ContentBlock> {
-        let mut blocks = Vec::new();
-
-        if !self.text_buffer.is_empty() {
-            blocks.push(ContentBlock::Text(TextBlock::new(self.text_buffer.clone())));
-            self.text_buffer.clear();
-        }
-
-        blocks
-    }
 }
 
 /// Parse SSE (Server-Sent Events) stream

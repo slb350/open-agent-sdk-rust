@@ -6,8 +6,8 @@ rust-version = "1.70"
 authors = ["Open Agent SDK Contributors"]
 description = "Production-ready Rust SDK for building AI agents with local OpenAI-compatible servers (LMStudio, Ollama, llama.cpp, vLLM). Features streaming, tools, hooks, retry logic, and comprehensive examples."
 documentation = "https://docs.rs/open-agent-sdk"
-homepage = "https://github.com/slb350/open-agent-sdk"
-repository = "https://github.com/slb350/open-agent-sdk"
+homepage = "https://github.com/slb350/open-agent-sdk-rust"
+repository = "https://github.com/slb350/open-agent-sdk-rust"
 readme = "README.md"
 license = "MIT"
 keywords = ["ai", "llm", "agent", "openai", "local"]
@@ -87,3 +87,11 @@ path = "examples/log_analyzer_agent.rs"
 [[example]]
 name = "advanced_patterns"
 path = "examples/advanced_patterns.rs"
+
+[[example]]
+name = "auto_execution_demo"
+path = "examples/auto_execution_demo.rs"
+
+[[example]]
+name = "multi_tool_agent"
+path = "examples/multi_tool_agent.rs"
