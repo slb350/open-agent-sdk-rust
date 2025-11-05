@@ -9,6 +9,7 @@
 # IDE / Editor
 .idea/
 .vscode/
+.obsidian/
 *.swp
 *.swo
 *~
