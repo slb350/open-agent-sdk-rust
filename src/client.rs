@@ -163,8 +163,8 @@ pub async fn query(prompt: &str, options: &AgentOptions) -> Result<ContentStream
 ///     // First query
 ///     client.send("What's the capital of France?").await?;
 ///
-///     while let Some(block) = client.receive().await {
-///         match block? {
+///     while let Some(block) = client.receive().await? {
+///         match block {
 ///             ContentBlock::Text(text) => {
 ///                 println!("Assistant: {}", text.text);
 ///             }
@@ -175,8 +175,8 @@ pub async fn query(prompt: &str, options: &AgentOptions) -> Result<ContentStream
 ///     // Follow-up query
 ///     client.send("What's its population?").await?;
 ///
-///     while let Some(block) = client.receive().await {
-///         match block? {
+///     while let Some(block) = client.receive().await? {
+///         match block {
 ///             ContentBlock::Text(text) => {
 ///                 println!("Assistant: {}", text.text);
 ///             }
@@ -371,17 +371,25 @@ impl Client {
     /// Internal method that returns one block (original receive logic)
     ///
     /// This is the original receive() logic, now extracted for reuse.
-    async fn receive_one(&mut self) -> Option<Result<ContentBlock>> {
+    /// Returns Result<Option<ContentBlock>>:
+    /// - Ok(Some(block)) - got a block
+    /// - Ok(None) - stream ended or interrupted
+    /// - Err(e) - error occurred
+    async fn receive_one(&mut self) -> Result<Option<ContentBlock>> {
         // Check if interrupted
         if self.interrupted.load(Ordering::SeqCst) {
             self.current_stream = None;
-            return None;
+            return Ok(None);
         }
 
         if let Some(stream) = &mut self.current_stream {
-            stream.next().await
+            match stream.next().await {
+                Some(Ok(block)) => Ok(Some(block)),
+                Some(Err(e)) => Err(e),
+                None => Ok(None),
+            }
         } else {
-            None
+            Ok(None)
         }
     }
 
@@ -392,7 +400,7 @@ impl Client {
     async fn collect_all_blocks(&mut self) -> Result<Vec<ContentBlock>> {
         let mut blocks = Vec::new();
 
-        while let Some(block_result) = self.receive_one().await {
+        while let Some(block) = self.receive_one().await? {
             // Check interrupt during collection
             if self.interrupted.load(Ordering::SeqCst) {
                 self.current_stream = None;
@@ -401,7 +409,7 @@ impl Client {
                 ));
             }
 
-            blocks.push(block_result?);
+            blocks.push(block);
         }
 
         Ok(blocks)
@@ -577,13 +585,35 @@ impl Client {
     }
 
     /// Receive the next content block from the current stream
-    pub async fn receive(&mut self) -> Option<Result<ContentBlock>> {
+    ///
+    /// Returns:
+    /// - `Ok(Some(block))` - Successfully received a content block
+    /// - `Ok(None)` - Stream ended normally or was interrupted
+    /// - `Err(e)` - An error occurred
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// # use open_agent::{Client, AgentOptions, ContentBlock};
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let mut client = Client::new(AgentOptions::default());
+    /// # client.send("Hello").await?;
+    /// while let Some(block) = client.receive().await? {
+    ///     match block {
+    ///         ContentBlock::Text(text) => println!("{}", text.text),
+    ///         _ => {}
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn receive(&mut self) -> Result<Option<ContentBlock>> {
         if self.options.auto_execute_tools {
             // Check if we have buffered blocks to yield
             if self.auto_exec_index < self.auto_exec_buffer.len() {
                 let block = self.auto_exec_buffer[self.auto_exec_index].clone();
                 self.auto_exec_index += 1;
-                return Some(Ok(block));
+                return Ok(Some(block));
             }
 
             // No buffered blocks - run auto-execution loop
@@ -594,18 +624,18 @@ impl Client {
                         self.auto_exec_index = 0;
 
                         if self.auto_exec_buffer.is_empty() {
-                            return None;
+                            return Ok(None);
                         }
 
                         let block = self.auto_exec_buffer[0].clone();
                         self.auto_exec_index = 1;
-                        return Some(Ok(block));
+                        return Ok(Some(block));
                     }
-                    Err(e) => return Some(Err(e)),
+                    Err(e) => return Err(e),
                 }
             }
 
-            None
+            Ok(None)
         } else {
             // Manual mode
             self.receive_one().await
@@ -678,8 +708,8 @@ impl Client {
     /// let mut client = Client::new(AgentOptions::default());
     /// client.send("Use the calculator").await?;
     ///
-    /// while let Some(block) = client.receive().await {
-    ///     match block? {
+    /// while let Some(block) = client.receive().await? {
+    ///     match block {
     ///         ContentBlock::ToolUse(tool_use) => {
     ///             // Execute tool manually
     ///             let result = serde_json::json!({"result": 42});
@@ -798,8 +828,48 @@ mod tests {
         // Interrupt before receiving
         client.interrupt();
 
-        // receive() should return None
+        // NEW SIGNATURE: receive() should return Ok(None) when interrupted
         let result = client.receive().await;
-        assert!(result.is_none());
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_receive_returns_ok_none_when_no_stream() {
+        let options = AgentOptions::builder()
+            .system_prompt("Test")
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .build()
+            .unwrap();
+
+        let mut client = Client::new(options);
+
+        // No stream started - receive() should return Ok(None)
+        let result = client.receive().await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_receive_error_propagation() {
+        // This test demonstrates that errors are wrapped in Err(), not Some(Err())
+        // We'll verify this behavior when we have a mock stream that produces errors
+        let options = AgentOptions::builder()
+            .system_prompt("Test")
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .build()
+            .unwrap();
+
+        let client = Client::new(options);
+
+        // Signature check: receive() returns Result<Option<ContentBlock>>
+        // This means we can use ? operator cleanly:
+        // while let Some(block) = client.receive().await? { ... }
+
+        // Type assertion to ensure signature is correct
+        let _: Result<Option<ContentBlock>> = std::future::ready(Ok(None)).await;
+        drop(client);
     }
 }

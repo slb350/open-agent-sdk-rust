@@ -91,8 +91,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         client.send(query).await?;
 
         // Process responses and handle tool calls
-        while let Some(block) = client.receive().await {
-            match block? {
+        while let Some(block) = client.receive().await? {
+            match block {
                 ContentBlock::Text(text) => {
                     if !text.text.trim().is_empty() {
                         println!("Assistant: {}", text.text);

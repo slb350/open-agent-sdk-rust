@@ -43,8 +43,8 @@ async fn timeout_example() -> Result<(), Box<dyn std::error::Error>> {
 
     // Collect messages with timeout
     let result = timeout(Duration::from_secs(3), async {
-        while let Some(block) = client.receive().await {
-            if let ContentBlock::Text(text) = block? {
+        while let Some(block) = client.receive().await? {
+            if let ContentBlock::Text(text) = block {
                 print!("{}", text.text);
                 response_text.push_str(&text.text);
             }
@@ -91,8 +91,8 @@ async fn conditional_example() -> Result<(), Box<dyn std::error::Error>> {
     println!("Receiving response (will stop if we see 'neural network')...\n");
 
     let mut full_text = String::new();
-    while let Some(block) = client.receive().await {
-        if let ContentBlock::Text(text) = block? {
+    while let Some(block) = client.receive().await? {
+        if let ContentBlock::Text(text) = block {
             print!("{}", text.text);
             full_text.push_str(&text.text);
 
@@ -162,13 +162,13 @@ async fn concurrent_example() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         match block_opt {
-            Some(Ok(ContentBlock::Text(text))) => {
+            Ok(Some(ContentBlock::Text(text))) => {
                 print!("{}", text.text);
                 full_text.push_str(&text.text);
                 tokio::time::sleep(Duration::from_millis(50)).await; // Simulate processing
             }
-            Some(Err(e)) => return Err(e.into()),
-            None => break,
+            Ok(None) => break,
+            Err(e) => return Err(e.into()),
             _ => {}
         }
     }
@@ -209,8 +209,8 @@ async fn retry_example() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let mut count = 0;
-    while let Some(block) = client.receive().await {
-        if let ContentBlock::Text(_) = block? {
+    while let Some(block) = client.receive().await? {
+        if let ContentBlock::Text(_) = block {
             count += 1;
             if count == 3 {
                 println!("\n⚠️  Oops, that was too broad. Interrupting...\n");
@@ -226,8 +226,8 @@ async fn retry_example() -> Result<(), Box<dyn std::error::Error>> {
         .send("Tell me about Alan Turing in 2 sentences")
         .await?;
 
-    while let Some(block) = client.receive().await {
-        if let ContentBlock::Text(text) = block? {
+    while let Some(block) = client.receive().await? {
+        if let ContentBlock::Text(text) = block {
             print!("{}", text.text);
         }
     }

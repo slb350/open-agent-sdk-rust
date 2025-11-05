@@ -21,17 +21,18 @@ async fn collect_response(client: &mut Client) -> Result<(Vec<String>, usize), S
         let mut text_blocks = Vec::new();
         let mut tool_blocks_received = 0;
 
-        while let Some(block) = client.receive().await {
-            match block {
-                Ok(ContentBlock::Text(text)) => {
+        loop {
+            match client.receive().await {
+                Ok(Some(ContentBlock::Text(text))) => {
                     text_blocks.push(text.text);
                 }
-                Ok(ContentBlock::ToolUse(_)) => {
+                Ok(Some(ContentBlock::ToolUse(_))) => {
                     tool_blocks_received += 1;
                 }
-                Ok(ContentBlock::ToolResult(_)) => {
+                Ok(Some(ContentBlock::ToolResult(_))) => {
                     // Ignore tool results in auto mode
                 }
+                Ok(None) => break,
                 Err(e) => {
                     return Err(format!("Error receiving block: {}", e));
                 }
@@ -296,15 +297,16 @@ async fn test_manual_mode_returns_tool_blocks() {
     let result = timeout(TEST_TIMEOUT, async {
         let mut received_blocks = 0;
 
-        while let Some(block) = client.receive().await {
-            match block {
-                Ok(_) => {
+        loop {
+            match client.receive().await {
+                Ok(Some(_)) => {
                     received_blocks += 1;
                     // In manual mode, just verify we receive some blocks
                     if received_blocks > 0 {
                         break;
                     }
                 }
+                Ok(None) => break,
                 Err(e) => {
                     return Err(format!("Error: {}", e));
                 }
@@ -337,9 +339,13 @@ async fn test_auto_execution_streaming() {
     let result = timeout(TEST_TIMEOUT, async {
         let mut block_count = 0;
 
-        while let Some(block) = client.receive().await {
-            if block.is_ok() {
-                block_count += 1;
+        loop {
+            match client.receive().await {
+                Ok(Some(_)) => {
+                    block_count += 1;
+                }
+                Ok(None) => break,
+                Err(_) => break,
             }
         }
 
@@ -371,7 +377,7 @@ async fn test_auto_execution_history() {
     client.send("Hello").await.unwrap();
 
     timeout(TEST_TIMEOUT, async {
-        while (client.receive().await).is_some() {}
+        while client.receive().await.unwrap_or(None).is_some() {}
     })
     .await
     .ok();

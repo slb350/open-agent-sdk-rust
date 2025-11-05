@@ -55,8 +55,8 @@ async fn pattern_1_stateless() -> Result<(), Box<dyn std::error::Error>> {
         client.send(task).await?;
 
         let mut response = String::new();
-        while let Some(block) = client.receive().await {
-            if let ContentBlock::Text(text) = block? {
+        while let Some(block) = client.receive().await? {
+            if let ContentBlock::Text(text) = block {
                 response.push_str(&text.text);
             }
         }
@@ -100,7 +100,7 @@ async fn pattern_2_manual_truncation() -> Result<(), Box<dyn std::error::Error>>
         .send("Analyze this: def add(a, b): return a + b")
         .await?;
     // Simulate processing
-    while (client.receive().await.transpose()?).is_some() {
+    while client.receive().await?.is_some() {
         // Process messages
     }
     println!("After task 1: {} messages", client.history().len());
@@ -108,7 +108,7 @@ async fn pattern_2_manual_truncation() -> Result<(), Box<dyn std::error::Error>>
     // Task 2: Write tests (simplified)
     println!("\nTask 2: Adding more messages...");
     client.send("Write unit tests for the add function").await?;
-    while (client.receive().await.transpose()?).is_some() {
+    while client.receive().await?.is_some() {
         // Process messages
     }
     println!("After task 2: {} messages", client.history().len());

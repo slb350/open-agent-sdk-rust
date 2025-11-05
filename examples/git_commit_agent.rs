@@ -174,8 +174,8 @@ Focus on WHAT changed and WHY, not just restating the diff."#,
         client.send(&prompt).await?;
 
         let mut response = String::new();
-        while let Some(block) = client.receive().await {
-            if let ContentBlock::Text(text) = block? {
+        while let Some(block) = client.receive().await? {
+            if let ContentBlock::Text(text) = block {
                 response.push_str(&text.text);
             }
         }

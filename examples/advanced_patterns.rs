@@ -46,8 +46,8 @@ async fn retry_example() -> Result<(), Box<dyn std::error::Error>> {
         client.send("What is 2+2?").await?;
 
         let mut response = String::new();
-        while let Some(block) = client.receive().await {
-            if let ContentBlock::Text(text) = block? {
+        while let Some(block) = client.receive().await? {
+            if let ContentBlock::Text(text) = block {
                 response.push_str(&text.text);
             }
         }
@@ -97,8 +97,8 @@ async fn conditional_retry_example() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
 
         let mut response = String::new();
-        while let Some(block) = client.receive().await {
-            if let ContentBlock::Text(text) = block? {
+        while let Some(block) = client.receive().await? {
+            if let ContentBlock::Text(text) = block {
                 response.push_str(&text.text);
             }
         }
@@ -157,8 +157,8 @@ async fn concurrent_requests_example() -> Result<(), Box<dyn std::error::Error>>
             client.send(&question_owned).await?;
 
             let mut response = String::new();
-            while let Some(block) = client.receive().await {
-                if let ContentBlock::Text(text) = block? {
+            while let Some(block) = client.receive().await? {
+                if let ContentBlock::Text(text) = block {
                     response.push_str(&text.text);
                 }
             }
@@ -239,8 +239,8 @@ async fn concurrent_with_retry_example() -> Result<(), Box<dyn std::error::Error
                 client.send(&question_owned).await?;
 
                 let mut response = String::new();
-                while let Some(block) = client.receive().await {
-                    if let ContentBlock::Text(text) = block? {
+                while let Some(block) = client.receive().await? {
+                    if let ContentBlock::Text(text) = block {
                         response.push_str(&text.text);
                     }
                 }
@@ -332,8 +332,8 @@ async fn rate_limiting_example() -> Result<(), Box<dyn std::error::Error>> {
             client.send(&question_owned).await?;
 
             let mut response = String::new();
-            while let Some(block) = client.receive().await {
-                if let ContentBlock::Text(text) = block? {
+            while let Some(block) = client.receive().await? {
+                if let ContentBlock::Text(text) = block {
                     response.push_str(&text.text);
                 }
             }

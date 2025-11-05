@@ -250,8 +250,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         client.send(query).await?;
 
-        while let Some(block) = client.receive().await {
-            match block? {
+        while let Some(block) = client.receive().await? {
+            match block {
                 ContentBlock::Text(text) => {
                     println!("Assistant: {}", text.text);
                 }

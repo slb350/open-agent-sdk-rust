@@ -120,8 +120,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     client.send(query1).await?;
 
     let mut response = String::new();
-    while let Some(block) = client.receive().await {
-        match block? {
+    while let Some(block) = client.receive().await? {
+        match block {
             ContentBlock::Text(text) => {
                 response.push_str(&text.text);
             }
@@ -154,8 +154,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     client.send(query2).await?;
 
     let mut response = String::new();
-    while let Some(block) = client.receive().await {
-        match block? {
+    while let Some(block) = client.receive().await? {
+        match block {
             ContentBlock::Text(text) => {
                 response.push_str(&text.text);
             }
@@ -183,8 +183,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     client.send(query3).await?;
 
     let mut response = String::new();
-    while let Some(block) = client.receive().await {
-        match block? {
+    while let Some(block) = client.receive().await? {
+        match block {
             ContentBlock::Text(text) => {
                 response.push_str(&text.text);
             }
