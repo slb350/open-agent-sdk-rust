@@ -51,6 +51,7 @@ rand = "0.8"
 [dev-dependencies]
 tokio-test = "0.4"
 regex = "1.10"
+criterion = "0.5"
 
 [lib]
 name = "open_agent"
@@ -95,3 +96,7 @@ path = "examples/auto_execution_demo.rs"
 [[example]]
 name = "multi_tool_agent"
 path = "examples/multi_tool_agent.rs"
+
+[[bench]]
+name = "performance"
+harness = false
