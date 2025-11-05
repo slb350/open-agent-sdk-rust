@@ -3,12 +3,14 @@
 > Build production-ready AI agents in Rust using your own hardware
 
 **What you can build:**
+
 - **Copy editors** that analyze manuscripts and track writing patterns
 - **Git commit generators** that write meaningful commit messages
 - **Market analyzers** that research competitors and summarize findings
 - **Code reviewers**, **data analysts**, **research assistants**, and more
 
 **Why local?**
+
 - **No API costs** - use your hardware, not OpenAI's
 - **Privacy** - your data never leaves your machine
 - **Control** - pick your model (Qwen, Llama, Mistral, etc.)
@@ -173,7 +175,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-**Advanced: Manual Tool Execution**
+### Advanced: Manual Tool Execution
 
 For custom execution logic or result interception:
 
@@ -211,6 +213,7 @@ while let Some(block) = client.receive().await {
 ```
 
 **Key Features:**
+
 - **Automatic execution** - Tools run automatically with safety limits
 - **Type-safe schemas** - Automatic JSON schema generation from parameters
 - **OpenAI-compatible** - Works with any OpenAI function calling endpoint
@@ -252,6 +255,7 @@ if tokens > 28000 {
 ### Recommended Patterns
 
 **1. Stateless Agents** (Best for single-task agents):
+
 ```rust
 // Process each task independently - no history accumulation
 for task in tasks {
@@ -262,6 +266,7 @@ for task in tasks {
 ```
 
 **2. Manual Truncation** (At natural breakpoints):
+
 ```rust
 use open_agent::truncate_messages;
 
@@ -275,6 +280,7 @@ for task in tasks {
 ```
 
 **3. External Memory** (RAG-lite for research agents):
+
 ```rust
 // Store important facts in database, keep conversation context small
 let mut database = HashMap::new();
@@ -292,6 +298,7 @@ let truncated = truncate_messages(client.history(), 0, false);
 ### Why Manual?
 
 The SDK **intentionally** does not auto-compact history because:
+
 - **Domain-specific needs**: Copy editors need different strategies than research agents
 - **Token accuracy varies**: Each model family has different tokenizers
 - **Risk of breaking context**: Silently removing messages could break tool chains
@@ -340,23 +347,26 @@ let mut client = Client::new(options);
 ### Hook Types
 
 **PreToolUse** - Fires before tool execution
+
 - **Block operations**: Return `Some(HookDecision::block(reason))`
 - **Modify inputs**: Return `Some(HookDecision::modify_input(json!({}), reason))`
 - **Allow**: Return `Some(HookDecision::continue_())`
 
 **PostToolUse** - Fires after tool result added to history
+
 - **Observational** (tool already executed)
 - Use for audit logging, metrics, result validation
 - Return `None` or `Some(HookDecision::...)`
 
 **UserPromptSubmit** - Fires before sending prompt to API
+
 - **Block prompts**: Return `Some(HookDecision::block(reason))`
 - **Modify prompts**: Return `Some(HookDecision::modify_prompt(text, reason))`
 - **Allow**: Return `Some(HookDecision::continue_())`
 
 ### Common Patterns
 
-**Pattern 1: Redirect to Sandbox**
+#### Pattern 1: Redirect to Sandbox
 
 ```rust
 hooks.add_pre_tool_use(|event| async move {
@@ -376,7 +386,7 @@ hooks.add_pre_tool_use(|event| async move {
 })
 ```
 
-**Pattern 2: Compliance Audit Log**
+#### Pattern 2: Compliance Audit Log
 
 ```rust
 let audit_log = Arc::new(Mutex::new(Vec::new()));
@@ -409,7 +419,7 @@ See `examples/hooks_example.rs` and `examples/multi_tool_agent.rs` for comprehen
 
 Cancel long-running operations cleanly without corrupting client state. Perfect for timeouts, user cancellations, or conditional interruptions.
 
-### Quick Example
+### Interrupt Quick Example
 
 ```rust
 use open_agent::{Client, AgentOptions};
@@ -447,9 +457,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### Common Patterns
+### Common Interrupt Patterns
 
-**1. Conditional Interruption**
+#### 1. Conditional Interruption
 
 ```rust
 let mut full_text = String::new();
@@ -464,7 +474,7 @@ while let Some(block) = client.receive().await {
 }
 ```
 
-**2. Concurrent Cancellation**
+#### 2. Concurrent Cancellation
 
 ```rust
 use tokio::select;
@@ -489,6 +499,7 @@ tokio::select! {
 ### How It Works
 
 When you call `client.interrupt()`:
+
 1. **Active stream closure** - HTTP stream closed immediately (not just a flag)
 2. **Clean state** - Client remains in valid state for reuse
 3. **Partial output** - Text blocks flushed to history, incomplete tools skipped
@@ -502,6 +513,7 @@ See `examples/interrupt_demo.rs` for comprehensive patterns.
 We've included production-ready agents that demonstrate real-world usage:
 
 ### Git Commit Agent
+
 **[examples/git_commit_agent.rs](examples/git_commit_agent.rs)**
 
 Analyzes your staged git changes and writes professional commit messages following conventional commit format.
@@ -526,11 +538,13 @@ cargo run --example git_commit_agent
 ```
 
 **Features:**
+
 - Analyzes diff to determine commit type (feat/fix/docs/etc)
 - Writes clear, descriptive commit messages
 - Follows conventional commit standards
 
 ### Log Analyzer Agent
+
 **[examples/log_analyzer_agent.rs](examples/log_analyzer_agent.rs)**
 
 Intelligently analyzes application logs to identify patterns, errors, and provide actionable insights.
@@ -541,6 +555,7 @@ cargo run --example log_analyzer_agent -- /var/log/app.log
 ```
 
 **Features:**
+
 - Automatic error pattern detection
 - Time-based analysis (peak error times)
 - Root cause suggestions
@@ -549,6 +564,7 @@ cargo run --example log_analyzer_agent -- /var/log/app.log
 ### Why These Examples?
 
 These agents demonstrate:
+
 - **Practical Value**: Solve real problems developers face daily
 - **Tool Integration**: Show how to integrate with system commands (git, file I/O)
 - **Structured Output**: Parse and format LLM responses for actionable results
@@ -557,6 +573,7 @@ These agents demonstrate:
 ## Why Not Just Use OpenAI Client?
 
 **Without open-agent-sdk** (raw reqwest):
+
 ```rust
 use reqwest::Client;
 
@@ -581,6 +598,7 @@ let response = client
 ```
 
 **With open-agent-sdk**:
+
 ```rust
 use open_agent::{query, AgentOptions};
 
@@ -675,19 +693,21 @@ let my_tool = tool("name", "description")
 ## Recommended Models
 
 **Local models** (LM Studio, Ollama, llama.cpp):
+
 - **GPT-OSS-120B** - Best in class for speed and quality
 - **Qwen 3 30B** - Excellent instruction following, good for most tasks
 - **GPT-OSS-20B** - Solid all-around performance
 - **Mistral 7B** - Fast and efficient for simple agents
 
 **Cloud-proxied via local gateway**:
+
 - **kimi-k2:1t-cloud** - Tested and working via Ollama gateway
 - **deepseek-v3.1:671b-cloud** - High-quality reasoning model
 - **qwen3-coder:480b-cloud** - Code-focused models
 
 ## Project Structure
 
-```
+```text
 open-agent-sdk-rust/
 ├── src/
 │   ├── client.rs          # query() and Client implementation
@@ -723,11 +743,13 @@ open-agent-sdk-rust/
 ## Examples
 
 ### Production Agents
+
 - **`git_commit_agent.rs`** – Analyzes git diffs and writes professional commit messages
 - **`log_analyzer_agent.rs`** – Parses logs, finds patterns, suggests fixes
 - **`multi_tool_agent.rs`** – Complete production setup with 5 tools, hooks, and auto-execution
 
 ### Core SDK Usage
+
 - `simple_query.rs` – Minimal streaming query (simplest quickstart)
 - `calculator_tools.rs` – Manual tool execution pattern
 - `auto_execution_demo.rs` – Automatic tool execution pattern
@@ -780,6 +802,7 @@ cargo test test_agent_options_builder
 ```
 
 **Test Coverage:**
+
 - 57 unit tests across 10 modules
 - 28 integration tests
   - 6 hooks integration tests
