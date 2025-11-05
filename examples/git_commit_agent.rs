@@ -175,11 +175,8 @@ Focus on WHAT changed and WHY, not just restating the diff."#,
 
         let mut response = String::new();
         while let Some(block) = client.receive().await {
-            match block? {
-                ContentBlock::Text(text) => {
-                    response.push_str(&text.text);
-                }
-                _ => {}
+            if let ContentBlock::Text(text) = block? {
+                response.push_str(&text.text);
             }
         }
 
@@ -299,7 +296,7 @@ Focus on WHAT changed and WHY, not just restating the diff."#,
                 "a" => {
                     // Commit with the message
                     let output = Command::new("git")
-                        .args(&["commit", "-m", &commit_message])
+                        .args(["commit", "-m", &commit_message])
                         .output()?;
 
                     if output.status.success() {
@@ -328,7 +325,7 @@ Focus on WHAT changed and WHY, not just restating the diff."#,
                     let edited_message = lines.join("\n");
                     if !edited_message.trim().is_empty() {
                         let output = Command::new("git")
-                            .args(&["commit", "-m", &edited_message])
+                            .args(["commit", "-m", &edited_message])
                             .output()?;
 
                         if output.status.success() {

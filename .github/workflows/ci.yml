@@ -54,7 +54,7 @@ jobs:
       - name: Run tests
         run: cargo test --all-features --all --verbose
 
-  # MSRV check: Ensure Rust 1.70 compatibility
+  # MSRV check: Ensure Rust 1.78 compatibility
   msrv:
     name: Minimum Supported Rust Version
     runs-on: ubuntu-latest
@@ -62,7 +62,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.70"
+          toolchain: "1.78"
       - uses: Swatinem/rust-cache@v2
       - name: Check with MSRV
         run: cargo check --all-features --all

@@ -251,7 +251,7 @@ async fn test_manual_mode_still_works_after_auto_execution_implementation() {
 
     // In manual mode, receive() should yield ToolUse blocks
     // User manually calls get_tool() and executes
-    assert_eq!(client.options().auto_execute_tools, false);
+    assert!(!client.options().auto_execute_tools);
 
     // Manual execution should still work
     if let Some(tool) = client.get_tool("manual_op") {

@@ -44,12 +44,9 @@ async fn timeout_example() -> Result<(), Box<dyn std::error::Error>> {
     // Collect messages with timeout
     let result = timeout(Duration::from_secs(3), async {
         while let Some(block) = client.receive().await {
-            match block? {
-                ContentBlock::Text(text) => {
-                    print!("{}", text.text);
-                    response_text.push_str(&text.text);
-                }
-                _ => {}
+            if let ContentBlock::Text(text) = block? {
+                print!("{}", text.text);
+                response_text.push_str(&text.text);
             }
         }
         Ok::<_, Box<dyn std::error::Error>>(())
@@ -95,19 +92,16 @@ async fn conditional_example() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut full_text = String::new();
     while let Some(block) = client.receive().await {
-        match block? {
-            ContentBlock::Text(text) => {
-                print!("{}", text.text);
-                full_text.push_str(&text.text);
+        if let ContentBlock::Text(text) = block? {
+            print!("{}", text.text);
+            full_text.push_str(&text.text);
 
-                // Interrupt if we see a specific keyword
-                if full_text.to_lowercase().contains("neural network") {
-                    client.interrupt();
-                    println!("\n\n⚠️  Found keyword 'neural network' - interrupting!");
-                    break;
-                }
+            // Interrupt if we see a specific keyword
+            if full_text.to_lowercase().contains("neural network") {
+                client.interrupt();
+                println!("\n\n⚠️  Found keyword 'neural network' - interrupting!");
+                break;
             }
-            _ => {}
         }
     }
 
@@ -122,6 +116,7 @@ async fn conditional_example() -> Result<(), Box<dyn std::error::Error>> {
 // ============================================================================
 // Example 3: Concurrent Interruption
 // ============================================================================
+#[allow(clippy::await_holding_lock)]
 async fn concurrent_example() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", "=".repeat(60));
     println!("Example 3: Concurrent Interruption (Simulated User Cancel)");
@@ -215,16 +210,13 @@ async fn retry_example() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut count = 0;
     while let Some(block) = client.receive().await {
-        match block? {
-            ContentBlock::Text(_) => {
-                count += 1;
-                if count == 3 {
-                    println!("\n⚠️  Oops, that was too broad. Interrupting...\n");
-                    client.interrupt();
-                    break;
-                }
+        if let ContentBlock::Text(_) = block? {
+            count += 1;
+            if count == 3 {
+                println!("\n⚠️  Oops, that was too broad. Interrupting...\n");
+                client.interrupt();
+                break;
             }
-            _ => {}
         }
     }
 
@@ -235,11 +227,8 @@ async fn retry_example() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     while let Some(block) = client.receive().await {
-        match block? {
-            ContentBlock::Text(text) => {
-                print!("{}", text.text);
-            }
-            _ => {}
+        if let ContentBlock::Text(text) = block? {
+            print!("{}", text.text);
         }
     }
 

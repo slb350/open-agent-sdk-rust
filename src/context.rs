@@ -108,7 +108,7 @@ pub fn estimate_tokens(messages: &[Message]) -> usize {
     total_chars += 16;
 
     // Convert characters to tokens (4 chars ≈ 1 token, round up for safety)
-    (total_chars + 3) / 4 // Ceiling division
+    total_chars.div_ceil(4)
 }
 
 /// Truncate message history, keeping recent messages

@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Log entry with parsed fields
 #[derive(Debug, Clone)]
@@ -245,7 +245,7 @@ impl LogAnalyzerAgent {
 
     async fn analyze_logs(
         &self,
-        log_file: &PathBuf,
+        log_file: &Path,
         analyzer: &LogAnalyzer,
     ) -> Result<String, Box<dyn std::error::Error>> {
         let summary = analyzer.get_summary();
@@ -294,11 +294,8 @@ and resolve them."#,
 
         let mut response = String::new();
         while let Some(block) = client.receive().await {
-            match block? {
-                ContentBlock::Text(text) => {
-                    response.push_str(&text.text);
-                }
-                _ => {}
+            if let ContentBlock::Text(text) = block? {
+                response.push_str(&text.text);
             }
         }
 
@@ -351,7 +348,7 @@ and resolve them."#,
                 println!("\n🔴 Top Error Patterns:");
                 for pattern in patterns {
                     if let Some(arr) = pattern.as_array() {
-                        if let (Some(name), Some(count)) = (arr.get(0), arr.get(1)) {
+                        if let (Some(name), Some(count)) = (arr.first(), arr.get(1)) {
                             println!("  - {}: {} occurrences", name, count);
                         }
                     }

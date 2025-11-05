@@ -237,7 +237,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // Example queries
-    let queries = vec![
+    let queries = [
         "What's 15 kilometers in miles?",
         "Calculate 25 divided by 5, then multiply by 3",
         "What's the current Unix timestamp?",

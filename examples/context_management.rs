@@ -100,7 +100,7 @@ async fn pattern_2_manual_truncation() -> Result<(), Box<dyn std::error::Error>>
         .send("Analyze this: def add(a, b): return a + b")
         .await?;
     // Simulate processing
-    while let Some(_) = client.receive().await.transpose()? {
+    while (client.receive().await.transpose()?).is_some() {
         // Process messages
     }
     println!("After task 1: {} messages", client.history().len());
@@ -108,7 +108,7 @@ async fn pattern_2_manual_truncation() -> Result<(), Box<dyn std::error::Error>>
     // Task 2: Write tests (simplified)
     println!("\nTask 2: Adding more messages...");
     client.send("Write unit tests for the add function").await?;
-    while let Some(_) = client.receive().await.transpose()? {
+    while (client.receive().await.transpose()?).is_some() {
         // Process messages
     }
     println!("After task 2: {} messages", client.history().len());
@@ -145,7 +145,7 @@ async fn pattern_3_token_monitoring() -> Result<(), Box<dyn std::error::Error>> 
     let mut client = Client::new(options);
 
     // Simulate multiple interactions
-    let interactions = vec![
+    let interactions = [
         "What is Rust?",
         "Explain ownership",
         "What are lifetimes?",

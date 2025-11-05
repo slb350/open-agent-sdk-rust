@@ -47,11 +47,8 @@ async fn retry_example() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut response = String::new();
         while let Some(block) = client.receive().await {
-            match block? {
-                ContentBlock::Text(text) => {
-                    response.push_str(&text.text);
-                }
-                _ => {}
+            if let ContentBlock::Text(text) = block? {
+                response.push_str(&text.text);
             }
         }
 
@@ -101,11 +98,8 @@ async fn conditional_retry_example() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut response = String::new();
         while let Some(block) = client.receive().await {
-            match block? {
-                ContentBlock::Text(text) => {
-                    response.push_str(&text.text);
-                }
-                _ => {}
+            if let ContentBlock::Text(text) = block? {
+                response.push_str(&text.text);
             }
         }
 
@@ -142,7 +136,7 @@ async fn concurrent_requests_example() -> Result<(), Box<dyn std::error::Error>>
         .temperature(0.7)
         .build()?;
 
-    let questions = vec![
+    let questions = [
         "What is 5+5?",
         "What is the capital of France?",
         "Name a primary color",
@@ -164,11 +158,8 @@ async fn concurrent_requests_example() -> Result<(), Box<dyn std::error::Error>>
 
             let mut response = String::new();
             while let Some(block) = client.receive().await {
-                match block? {
-                    ContentBlock::Text(text) => {
-                        response.push_str(&text.text);
-                    }
-                    _ => {}
+                if let ContentBlock::Text(text) = block? {
+                    response.push_str(&text.text);
                 }
             }
 
@@ -221,7 +212,7 @@ async fn concurrent_with_retry_example() -> Result<(), Box<dyn std::error::Error
         .temperature(0.7)
         .build()?;
 
-    let questions = vec!["What is 10+10?", "What is the capital of Japan?"];
+    let questions = ["What is 10+10?", "What is the capital of Japan?"];
 
     let retry_config = RetryConfig::new()
         .with_max_attempts(2)
@@ -249,11 +240,8 @@ async fn concurrent_with_retry_example() -> Result<(), Box<dyn std::error::Error
 
                 let mut response = String::new();
                 while let Some(block) = client.receive().await {
-                    match block? {
-                        ContentBlock::Text(text) => {
-                            response.push_str(&text.text);
-                        }
-                        _ => {}
+                    if let ContentBlock::Text(text) = block? {
+                        response.push_str(&text.text);
                     }
                 }
 
@@ -310,7 +298,7 @@ async fn rate_limiting_example() -> Result<(), Box<dyn std::error::Error>> {
         .temperature(0.7)
         .build()?;
 
-    let questions = vec![
+    let questions = [
         "What is 1+1?",
         "What is 2+2?",
         "What is 3+3?",
@@ -345,11 +333,8 @@ async fn rate_limiting_example() -> Result<(), Box<dyn std::error::Error>> {
 
             let mut response = String::new();
             while let Some(block) = client.receive().await {
-                match block? {
-                    ContentBlock::Text(text) => {
-                        response.push_str(&text.text);
-                    }
-                    _ => {}
+                if let ContentBlock::Text(text) = block? {
+                    response.push_str(&text.text);
                 }
             }
 

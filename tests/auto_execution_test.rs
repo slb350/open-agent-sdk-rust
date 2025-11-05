@@ -372,7 +372,7 @@ async fn test_auto_execution_history() {
     client.send("Hello").await.unwrap();
 
     timeout(TEST_TIMEOUT, async {
-        while let Some(_) = client.receive().await {}
+        while (client.receive().await).is_some() {}
     })
     .await
     .ok();
