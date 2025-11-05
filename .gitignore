@@ -1,0 +1,34 @@
+# Rust Build Artifacts
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo.lock for libraries (keep it for binaries)
+# Cargo.lock
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+*.profraw
+*.profdata
+
+# Documentation build
+/doc/
+
+# Benchmarking
+/benches/target/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Temporary files
+*.tmp
+*.log

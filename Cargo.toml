@@ -1,0 +1,89 @@
+[package]
+name = "open-agent-sdk"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+authors = ["Open Agent SDK Contributors"]
+description = "Production-ready Rust SDK for building AI agents with local OpenAI-compatible servers (LMStudio, Ollama, llama.cpp, vLLM). Features streaming, tools, hooks, retry logic, and comprehensive examples."
+documentation = "https://docs.rs/open-agent-sdk"
+homepage = "https://github.com/slb350/open-agent-sdk"
+repository = "https://github.com/slb350/open-agent-sdk"
+readme = "README.md"
+license = "MIT"
+keywords = ["ai", "llm", "agent", "openai", "local"]
+categories = ["api-bindings", "asynchronous", "development-tools"]
+exclude = [
+    ".gitignore",
+    ".github/",
+    "tests/fixtures/",
+]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.40", features = ["full"] }
+tokio-stream = "0.1"
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json", "stream"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Async utilities
+futures = "0.3"
+async-trait = "0.1"
+
+# Streaming
+eventsource-stream = "0.2"
+
+# Random (for retry jitter)
+rand = "0.8"
+
+[dev-dependencies]
+tokio-test = "0.4"
+regex = "1.10"
+
+[lib]
+name = "open_agent"
+path = "src/lib.rs"
+
+[[example]]
+name = "simple_query"
+path = "examples/simple_query.rs"
+
+[[example]]
+name = "calculator_tools"
+path = "examples/calculator_tools.rs"
+
+[[example]]
+name = "hooks_example"
+path = "examples/hooks_example.rs"
+
+[[example]]
+name = "context_management"
+path = "examples/context_management.rs"
+
+[[example]]
+name = "interrupt_demo"
+path = "examples/interrupt_demo.rs"
+
+[[example]]
+name = "git_commit_agent"
+path = "examples/git_commit_agent.rs"
+
+[[example]]
+name = "log_analyzer_agent"
+path = "examples/log_analyzer_agent.rs"
+
+[[example]]
+name = "advanced_patterns"
+path = "examples/advanced_patterns.rs"
