@@ -2,7 +2,7 @@
 name = "open-agent-sdk"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.78"
+rust-version = "1.83"
 authors = ["Open Agent SDK Contributors"]
 description = "Production-ready Rust SDK for building AI agents with local OpenAI-compatible servers (LMStudio, Ollama, llama.cpp, vLLM). Features streaming, tools, hooks, retry logic, and comprehensive examples."
 documentation = "https://docs.rs/open-agent-sdk"
