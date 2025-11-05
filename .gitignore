@@ -32,3 +32,8 @@
 # Temporary files
 *.tmp
 *.log
+
+# Local development documentation (not committed to repo)
+CLAUDE.md
+DEVELOPMENT.md
+PHASE4_PLAN.md
