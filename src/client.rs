@@ -3,12 +3,12 @@
 use crate::types::{
     AgentOptions, ContentBlock, Message, MessageRole, OpenAIMessage, OpenAIRequest, TextBlock,
 };
-use crate::utils::{parse_sse_stream, ToolCallAggregator};
+use crate::utils::{ToolCallAggregator, parse_sse_stream};
 use crate::{Error, Result};
 use futures::stream::{Stream, StreamExt};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 /// Stream of content blocks from the model

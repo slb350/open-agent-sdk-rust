@@ -17,7 +17,7 @@
 //!   - Ollama running on localhost:11434
 //!   - qwen3:8b model (or change model in code)
 
-use open_agent::{tool, AgentOptions, Client, ContentBlock};
+use open_agent::{AgentOptions, Client, ContentBlock, tool};
 use serde_json::json;
 
 #[tokio::main]

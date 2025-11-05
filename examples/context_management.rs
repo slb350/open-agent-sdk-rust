@@ -12,7 +12,7 @@
 //! 3. Token budget monitoring with periodic checks
 
 use open_agent::{
-    estimate_tokens, is_approaching_limit, truncate_messages, AgentOptions, Client, ContentBlock,
+    AgentOptions, Client, ContentBlock, estimate_tokens, is_approaching_limit, truncate_messages,
 };
 
 #[tokio::main]

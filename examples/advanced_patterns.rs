@@ -9,7 +9,7 @@
 //!     cargo run --example advanced_patterns
 
 use futures::stream::{FuturesUnordered, StreamExt};
-use open_agent::retry::{retry_with_backoff, retry_with_backoff_conditional, RetryConfig};
+use open_agent::retry::{RetryConfig, retry_with_backoff, retry_with_backoff_conditional};
 use open_agent::{AgentOptions, Client, ContentBlock};
 use std::time::Duration;
 use tokio::time::Instant;

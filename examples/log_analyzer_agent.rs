@@ -15,7 +15,7 @@
 
 use open_agent::{AgentOptions, Client, ContentBlock};
 use regex::Regex;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;

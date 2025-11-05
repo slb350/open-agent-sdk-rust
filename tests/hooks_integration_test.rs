@@ -3,7 +3,7 @@
 //! Tests verifying that PreToolUse and PostToolUse hooks are properly
 //! integrated with the automatic tool execution loop.
 
-use open_agent::{tool, AgentOptions, Client, HookDecision, Hooks};
+use open_agent::{AgentOptions, Client, HookDecision, Hooks, tool};
 use serde_json::json;
 use std::sync::{Arc, Mutex};
 

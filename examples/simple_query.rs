@@ -3,7 +3,7 @@
 //! Demonstrates basic usage of the query function
 
 use futures::StreamExt;
-use open_agent::{query, AgentOptions, ContentBlock};
+use open_agent::{AgentOptions, ContentBlock, query};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

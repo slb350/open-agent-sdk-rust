@@ -3,11 +3,11 @@
 //! Tests that combine multiple features together to verify they work correctly
 //! in realistic scenarios.
 
-use open_agent::{tool, AgentOptions, Client, HookDecision, Hooks};
+use open_agent::{AgentOptions, Client, HookDecision, Hooks, tool};
 use serde_json::json;
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
     Arc, Mutex,
+    atomic::{AtomicUsize, Ordering},
 };
 
 /// Test: Auto-execution + Hooks together

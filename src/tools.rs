@@ -331,7 +331,7 @@ mod tests {
         // Should reset schema and add param without panicking
         let tool = tool("test", "Test tool")
             .schema(json!("string")) // Set to non-object
-            .param("key", "number")  // Should reset schema to {} and add param
+            .param("key", "number") // Should reset schema to {} and add param
             .build(|_| async { Ok(json!({})) });
 
         let format = tool.to_openai_format();

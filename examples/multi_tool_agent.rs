@@ -19,8 +19,8 @@
 //!   - qwen3:8b model (or adjust model name)
 
 use open_agent::{
-    tool, AgentOptions, Client, ContentBlock, HookDecision, Hooks, PostToolUseEvent,
-    PreToolUseEvent,
+    AgentOptions, Client, ContentBlock, HookDecision, Hooks, PostToolUseEvent, PreToolUseEvent,
+    tool,
 };
 use serde_json::json;
 use std::sync::{Arc, Mutex};

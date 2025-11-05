@@ -7,9 +7,9 @@
 //! NOTE: These tests make real API calls to Ollama at localhost:11434
 //! Run with: cargo test --test auto_execution_test -- --test-threads=1 --nocapture
 
-use open_agent::{tool, AgentOptions, Client, ContentBlock, Error};
+use open_agent::{AgentOptions, Client, ContentBlock, Error, tool};
 use serde_json::json;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(30);
 const OLLAMA_URL: &str = "http://localhost:11434/v1";

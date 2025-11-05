@@ -1,7 +1,7 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use open_agent::{
-    estimate_tokens, is_approaching_limit, truncate_messages, ContentBlock, Message, MessageRole,
-    TextBlock, ToolResultBlock, ToolUseBlock,
+    ContentBlock, Message, MessageRole, TextBlock, ToolResultBlock, ToolUseBlock, estimate_tokens,
+    is_approaching_limit, truncate_messages,
 };
 use serde_json::json;
 

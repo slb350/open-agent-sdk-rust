@@ -3,7 +3,7 @@
 //! Demonstrates using tools to give local LLMs function calling abilities.
 //! Shows manual tool execution pattern.
 
-use open_agent::{tool, AgentOptions, Client, ContentBlock};
+use open_agent::{AgentOptions, Client, ContentBlock, tool};
 use serde_json::json;
 use std::collections::HashMap;
 

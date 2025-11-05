@@ -47,15 +47,15 @@ mod utils;
 
 pub mod retry;
 
-pub use client::{query, Client};
-pub use config::{get_base_url, get_model, Provider};
+pub use client::{Client, query};
+pub use config::{Provider, get_base_url, get_model};
 pub use context::{estimate_tokens, is_approaching_limit, truncate_messages};
 pub use error::{Error, Result};
 pub use hooks::{
-    HookDecision, Hooks, PostToolUseEvent, PreToolUseEvent, UserPromptSubmitEvent,
-    HOOK_POST_TOOL_USE, HOOK_PRE_TOOL_USE, HOOK_USER_PROMPT_SUBMIT,
+    HOOK_POST_TOOL_USE, HOOK_PRE_TOOL_USE, HOOK_USER_PROMPT_SUBMIT, HookDecision, Hooks,
+    PostToolUseEvent, PreToolUseEvent, UserPromptSubmitEvent,
 };
-pub use tools::{tool, Tool, ToolBuilder};
+pub use tools::{Tool, ToolBuilder, tool};
 pub use types::{
     AgentOptions, AgentOptionsBuilder, ContentBlock, Message, MessageRole, TextBlock,
     ToolResultBlock, ToolUseBlock,
@@ -64,8 +64,8 @@ pub use types::{
 /// Re-export common types for convenience
 pub mod prelude {
     pub use crate::{
-        query, tool, AgentOptions, AgentOptionsBuilder, Client, ContentBlock, Error, HookDecision,
-        Hooks, PostToolUseEvent, PreToolUseEvent, Result, TextBlock, Tool, ToolUseBlock,
-        UserPromptSubmitEvent,
+        AgentOptions, AgentOptionsBuilder, Client, ContentBlock, Error, HookDecision, Hooks,
+        PostToolUseEvent, PreToolUseEvent, Result, TextBlock, Tool, ToolUseBlock,
+        UserPromptSubmitEvent, query, tool,
     };
 }
