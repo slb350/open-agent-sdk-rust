@@ -63,7 +63,7 @@ async fn test_auto_execution_simple_query() {
         .build()
         .unwrap();
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options).expect("Failed to create client");
     client
         .send("What is 2+2? Answer with just the number.")
         .await
@@ -109,7 +109,7 @@ async fn test_auto_execution_with_tools() {
         .build()
         .unwrap();
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options).expect("Failed to create client");
     client
         .send("Use the add tool to calculate 25 + 17")
         .await
@@ -151,7 +151,7 @@ async fn test_auto_execution_max_iterations() {
         .build()
         .unwrap();
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options).expect("Failed to create client");
     client.send("Increment 0 five times").await.unwrap();
 
     let result = collect_response(&mut client).await;
@@ -189,7 +189,7 @@ async fn test_auto_execution_tool_error() {
         .build()
         .unwrap();
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options).expect("Failed to create client");
     client.send("Calculate 10 divided by 2").await.unwrap();
 
     let result = collect_response(&mut client).await;
@@ -234,7 +234,7 @@ async fn test_auto_execution_multiple_tools() {
         .build()
         .unwrap();
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options).expect("Failed to create client");
     client
         .send("What tools do you have available?")
         .await
@@ -257,7 +257,7 @@ async fn test_auto_execution_no_tools() {
         .build()
         .unwrap();
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options).expect("Failed to create client");
     client.send("Hello, respond briefly").await.unwrap();
 
     let (text_blocks, tool_blocks) = collect_response(&mut client)
@@ -291,7 +291,7 @@ async fn test_manual_mode_returns_tool_blocks() {
         .build()
         .unwrap();
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options).expect("Failed to create client");
     client.send("What is 5 plus 3?").await.unwrap();
 
     let result = timeout(TEST_TIMEOUT, async {
@@ -333,7 +333,7 @@ async fn test_auto_execution_streaming() {
         .build()
         .unwrap();
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options).expect("Failed to create client");
     client.send("Count to 3").await.unwrap();
 
     let result = timeout(TEST_TIMEOUT, async {
@@ -370,7 +370,7 @@ async fn test_auto_execution_history() {
         .build()
         .unwrap();
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options).expect("Failed to create client");
 
     let initial_history_len = client.history().len();
 
@@ -403,7 +403,7 @@ async fn test_auto_execution_temperature() {
         .build()
         .unwrap();
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options).expect("Failed to create client");
     client.send("Say hello").await.unwrap();
 
     let result = collect_response(&mut client).await;
@@ -423,7 +423,7 @@ async fn test_auto_execution_max_tokens() {
         .build()
         .unwrap();
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options).expect("Failed to create client");
     client.send("Tell me a story").await.unwrap();
 
     let (text_blocks, _) = collect_response(&mut client)
@@ -448,7 +448,7 @@ async fn test_auto_execution_custom_timeout() {
         .build()
         .unwrap();
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options).expect("Failed to create client");
     client.send("Hello").await.unwrap();
 
     // Should complete within our test timeout

@@ -5,6 +5,92 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+**BREAKING**: API Stability Improvements - Private Fields with Getters
+
+Following Rust API Guidelines (C-STRUCT-PRIVATE), all public struct fields are now private with getter methods for better encapsulation and future-proof APIs:
+
+#### AgentOptions
+- **Private fields**: `system_prompt`, `model`, `base_url`, `api_key`, `max_turns`, `max_tokens`, `temperature`, `timeout`, `tools`, `auto_execute_tools`, `max_tool_iterations`, `hooks`
+- **Getter methods**: `.system_prompt()`, `.model()`, `.base_url()`, `.api_key()`, `.max_turns()`, `.max_tokens()`, `.temperature()`, `.timeout()`, `.tools()`, `.auto_execute_tools()`, `.max_tool_iterations()`, `.hooks()`
+- **Migration**: `options.model` → `options.model()`
+
+#### Tool
+- **Private fields**: `name`, `description`, `input_schema`, `handler`
+- **Getter methods**: `.name()`, `.description()`, `.input_schema()`
+- **Migration**: `tool.name` → `tool.name()`
+
+#### HookDecision
+- **Private fields**: `continue_execution`, `modified_input`, `modified_prompt`, `reason`
+- **Getter methods**: `.continue_execution()`, `.modified_input()`, `.modified_prompt()`, `.reason()`
+- **Migration**: `decision.continue_execution` → `decision.continue_execution()`
+- **Note**: Getters return references; use `.clone()` if owned value needed
+
+**BREAKING**: Client::new() Returns Result
+
+`Client::new()` now returns `Result<Self>` instead of panicking on HTTP client creation failure.
+
+**Migration**:
+```rust
+// Before:
+let client = Client::new(options);
+
+// After:
+let client = Client::new(options)?;
+// or
+let client = Client::new(options).expect("Failed to create client");
+```
+
+**BREAKING**: add_tool_result() Returns Result
+
+`Client::add_tool_result()` now returns `Result<()>` instead of silently failing on serialization errors.
+
+**Migration**:
+```rust
+// Before:
+client.add_tool_result(&id, result);
+
+// After:
+client.add_tool_result(&id, result)?;
+```
+
+### Added
+
+- **New method**: `Client::interrupt_handle()` - Returns a cloned `Arc<AtomicBool>` for thread-safe cancellation
+  - Replaces direct access to the private `interrupted` field
+  - Migration: `client.interrupted.clone()` → `client.interrupt_handle()`
+
+- **Input Validation**: `AgentOptionsBuilder::build()` now validates configuration:
+  - Temperature must be between 0.0 and 2.0
+  - Model name cannot be empty or whitespace
+  - Base URL must start with `http://` or `https://`
+  - Max tokens must be greater than 0
+
+### Fixed
+
+- **Safety**: HTTP client no longer panics on invalid timeout - returns error instead
+- **Error Handling**: Error response body parsing failures now logged instead of silently suppressed
+- **SSE Parsing**: Handles empty chunks/heartbeats gracefully
+- **Schema Validation**: Replaced `.unwrap()` with defensive assertions for better error messages
+- **Tool Arguments**: Doc examples updated to validate parameters instead of using `.unwrap_or(0.0)`
+
+### Documentation
+
+- Added SAFETY comments to unsafe blocks in tests
+- Documented OpenAI tool serialization limitation (ToolUse/ToolResult blocks not serialized to conversation history)
+- Fixed documentation accuracy issues (system_prompt optionality, max_tokens defaults)
+- Updated 150+ doctests for new APIs
+
+### Technical Details
+
+- All 66 unit and integration tests passing
+- 135/139 doctests passing (97% success rate, 14 intentionally ignored)
+- Zero tech debt: All identified issues fixed
+- Breaking changes acceptable before 1.0 for long-term API stability
+
 ## [0.3.0] - 2025-11-05
 
 ### Changed

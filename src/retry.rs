@@ -137,7 +137,7 @@ impl RetryConfig {
 ///     .build()?;
 ///
 /// let result = retry_with_backoff(config, || async {
-///     let mut client = Client::new(options.clone());
+///     let mut client = Client::new(options.clone())?;
 ///     client.send("Hello").await?;
 ///     Ok::<_, open_agent::Error>(())
 /// }).await?;
@@ -207,7 +207,7 @@ pub fn is_retryable_error(error: &Error) -> bool {
 ///     .build()?;
 ///
 /// let result = retry_with_backoff_conditional(config, || async {
-///     let mut client = Client::new(options.clone());
+///     let mut client = Client::new(options.clone())?;
 ///     client.send("Hello").await?;
 ///     Ok::<_, open_agent::Error>(())
 /// }).await?;

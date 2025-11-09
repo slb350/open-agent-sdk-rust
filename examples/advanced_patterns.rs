@@ -42,7 +42,7 @@ async fn retry_example() -> Result<(), Box<dyn std::error::Error>> {
 
     let start = Instant::now();
     let result = retry_with_backoff(retry_config, || async {
-        let mut client = Client::new(options.clone());
+        let mut client = Client::new(options.clone())?;
         client.send("What is 2+2?").await?;
 
         let mut response = String::new();
@@ -91,7 +91,7 @@ async fn conditional_retry_example() -> Result<(), Box<dyn std::error::Error>> {
 
     let start = Instant::now();
     let result = retry_with_backoff_conditional(retry_config, || async {
-        let mut client = Client::new(options.clone());
+        let mut client = Client::new(options.clone())?;
         client
             .send("Explain quantum computing in one sentence")
             .await?;
@@ -153,7 +153,7 @@ async fn concurrent_requests_example() -> Result<(), Box<dyn std::error::Error>>
         let question_owned = question.to_string();
 
         let future = async move {
-            let mut client = Client::new(options_clone);
+            let mut client = Client::new(options_clone)?;
             client.send(&question_owned).await?;
 
             let mut response = String::new();
@@ -235,7 +235,7 @@ async fn concurrent_with_retry_example() -> Result<(), Box<dyn std::error::Error
         let future = async move {
             // Wrap the operation in retry logic
             let result = retry_with_backoff(retry_config_clone, || async {
-                let mut client = Client::new(options_clone.clone());
+                let mut client = Client::new(options_clone.clone())?;
                 client.send(&question_owned).await?;
 
                 let mut response = String::new();
@@ -328,7 +328,7 @@ async fn rate_limiting_example() -> Result<(), Box<dyn std::error::Error>> {
             let _permit = semaphore_clone.acquire().await.unwrap();
             println!("  [Starting Query {}]", i + 1);
 
-            let mut client = Client::new(options_clone);
+            let mut client = Client::new(options_clone)?;
             client.send(&question_owned).await?;
 
             let mut response = String::new();

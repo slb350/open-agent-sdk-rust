@@ -32,7 +32,7 @@ async fn timeout_example() -> Result<(), Box<dyn std::error::Error>> {
         .temperature(0.7)
         .build()?;
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options)?;
     client
         .send("Write a detailed 1000-word essay about quantum computing")
         .await?;
@@ -85,7 +85,7 @@ async fn conditional_example() -> Result<(), Box<dyn std::error::Error>> {
         .temperature(0.7)
         .build()?;
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options)?;
     client.send("Tell me about machine learning").await?;
 
     println!("Receiving response (will stop if we see 'neural network')...\n");
@@ -131,7 +131,7 @@ async fn concurrent_example() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     // Wrap client in Arc<Mutex> for shared access across tasks
-    let client = Arc::new(Mutex::new(Client::new(options)));
+    let client = Arc::new(Mutex::new(Client::new(options)?));
 
     {
         let mut client_lock = client.lock().unwrap();
@@ -200,7 +200,7 @@ async fn retry_example() -> Result<(), Box<dyn std::error::Error>> {
         .temperature(0.7)
         .build()?;
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options)?;
 
     // First query - will be interrupted
     println!("First query (will be interrupted)...\n");

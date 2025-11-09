@@ -75,7 +75,7 @@ async fn test_auto_execution_with_hooks_integration() {
         .build()
         .unwrap();
 
-    let _client = Client::new(options);
+    let _client = Client::new(options).expect("Failed to create client");
 
     // Verify structure is correct
     assert!(execution_count.load(Ordering::SeqCst) == 0);
@@ -106,7 +106,7 @@ async fn test_auto_execution_with_interrupt_integration() {
         .build()
         .unwrap();
 
-    let client = Client::new(options);
+    let client = Client::new(options).expect("Failed to create client");
 
     // Interrupt can be used to stop auto-execution
     // The interrupt() method sets the interrupt flag
@@ -136,7 +136,7 @@ async fn test_auto_execution_with_context_management() {
         .build()
         .unwrap();
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options).expect("Failed to create client");
 
     // After auto-execution, check token count
     let initial_tokens = estimate_tokens(client.history());
@@ -220,7 +220,7 @@ async fn test_multiple_hooks_with_auto_execution() {
         .build()
         .unwrap();
 
-    let _client = Client::new(options);
+    let _client = Client::new(options).expect("Failed to create client");
 
     // Multiple hooks should execute in sequence
     // First hook that returns a decision stops the chain
@@ -247,11 +247,11 @@ async fn test_manual_mode_still_works_after_auto_execution_implementation() {
         .build()
         .unwrap();
 
-    let client = Client::new(options);
+    let client = Client::new(options).expect("Failed to create client");
 
     // In manual mode, receive() should yield ToolUse blocks
     // User manually calls get_tool() and executes
-    assert!(!client.options().auto_execute_tools);
+    assert!(!client.options().auto_execute_tools());
 
     // Manual execution should still work
     if let Some(tool) = client.get_tool("manual_op") {
@@ -289,7 +289,7 @@ async fn test_history_management_with_auto_execution_and_hooks() {
         .build()
         .unwrap();
 
-    let client = Client::new(options);
+    let client = Client::new(options).expect("Failed to create client");
 
     let initial_history_len = client.history().len();
 
@@ -336,7 +336,7 @@ async fn test_error_handling_auto_execution_with_hooks() {
         .build()
         .unwrap();
 
-    let _client = Client::new(options);
+    let _client = Client::new(options).expect("Failed to create client");
 
     // Tool failures should not crash auto-execution
     // Hooks can modify error results
@@ -368,7 +368,7 @@ async fn test_feature_isolation_and_compatibility() {
         .build()
         .unwrap();
 
-    let _client = Client::new(options);
+    let _client = Client::new(options).expect("Failed to create client");
 
     // All features should coexist without conflicts
 }
@@ -456,7 +456,7 @@ async fn test_complex_workflow_integration() {
         .build()
         .unwrap();
 
-    let _client = Client::new(options);
+    let _client = Client::new(options).expect("Failed to create client");
 
     // Complex workflow should work seamlessly
     // - Multiple tools

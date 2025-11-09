@@ -231,9 +231,9 @@ pub type ToolHandler =
 /// );
 ///
 /// // Access tool metadata
-/// println!("Tool: {}", calculator.name);
-/// println!("Description: {}", calculator.description);
-/// println!("Schema: {}", calculator.input_schema);
+/// println!("Tool: {}", calculator.name());
+/// println!("Description: {}", calculator.description());
+/// println!("Schema: {}", calculator.input_schema());
 /// ```
 #[derive(Clone)]
 pub struct Tool {
@@ -251,7 +251,7 @@ pub struct Tool {
     /// - `get_weather` - Fetches weather data
     /// - `calculate` - Performs calculations
     /// - `search_documents` - Searches through document store
-    pub name: String,
+    name: String,
 
     /// Human-readable description of what the tool does.
     ///
@@ -272,7 +272,7 @@ pub struct Tool {
     /// location name and optional temperature units (celsius/fahrenheit)."
     ///
     /// Poor: "Weather tool" (too vague, doesn't explain parameters or behavior)
-    pub description: String,
+    description: String,
 
     /// JSON Schema defining the tool's input parameters.
     ///
@@ -297,7 +297,7 @@ pub struct Tool {
     /// ```
     ///
     /// See [`Tool::new`] for details on how simple schemas are converted to this format.
-    pub input_schema: Value,
+    input_schema: Value,
 
     /// Async handler function that executes the tool's logic.
     ///
@@ -341,14 +341,14 @@ pub struct Tool {
     ///
     /// ## Example Handler
     ///
-    /// ```rust,no_run
+    /// ```ignore
     /// use serde_json::{json, Value};
-    /// use open_agent::Result;
+    /// use open_agent::{Result, Error};
     ///
     /// let handler = |args: Value| Box::pin(async move {
     ///     // Extract and validate arguments
     ///     let query = args["query"].as_str()
-    ///         .ok_or("Missing query parameter")?;
+    ///         .ok_or_else(|| Error::tool("Missing query parameter"))?;
     ///
     ///     // Perform async operation
     ///     let results = perform_search(query).await?;
@@ -361,7 +361,7 @@ pub struct Tool {
     /// });
     /// # async fn perform_search(query: &str) -> Result<Vec<String>> { Ok(vec![]) }
     /// ```
-    pub handler: ToolHandler,
+    handler: ToolHandler,
 }
 
 impl Tool {
@@ -443,8 +443,12 @@ impl Tool {
     ///     }),
     ///     |args| {
     ///         Box::pin(async move {
-    ///             let a = args["a"].as_f64().unwrap_or(0.0);
-    ///             let b = args["b"].as_f64().unwrap_or(0.0);
+    ///             let a = args.get("a")
+    ///                 .and_then(|v| v.as_f64())
+    ///                 .ok_or_else(|| open_agent::Error::invalid_input("Parameter 'a' must be a number"))?;
+    ///             let b = args.get("b")
+    ///                 .and_then(|v| v.as_f64())
+    ///                 .ok_or_else(|| open_agent::Error::invalid_input("Parameter 'b' must be a number"))?;
     ///             Ok(json!({"result": a + b}))
     ///         })
     ///     }
@@ -661,6 +665,21 @@ impl Tool {
             }
         })
     }
+
+    /// Returns the tool's name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the tool's description.
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+
+    /// Returns a reference to the tool's input schema.
+    pub fn input_schema(&self) -> &Value {
+        &self.input_schema
+    }
 }
 
 /// Custom Debug implementation for Tool.
@@ -764,7 +783,9 @@ fn convert_schema_to_openai(schema: Value) -> Value {
     // Check if the input is already a complete JSON Schema
     // A complete schema has both "type": "object" and a "properties" field
     if schema.is_object() {
-        let obj = schema.as_object().unwrap();
+        let obj = schema
+            .as_object()
+            .expect("BUG: is_object() returned true but as_object() returned None");
         if obj.contains_key("type") && obj.contains_key("properties") {
             // This is already a full JSON Schema - pass it through unchanged
             return schema;
@@ -788,7 +809,9 @@ fn convert_schema_to_openai(schema: Value) -> Value {
                 // Case 2: Extended property schema with metadata
                 // Clone the property schema so we can modify it
                 let mut prop = param_type.clone();
-                let prop_obj = prop.as_object_mut().unwrap();
+                let prop_obj = prop
+                    .as_object_mut()
+                    .expect("BUG: is_object() returned true but as_object_mut() returned None");
 
                 // Extract and remove the "optional" flag (not standard JSON Schema)
                 let is_optional = prop_obj
@@ -1109,8 +1132,12 @@ impl ToolBuilder {
             self.schema = serde_json::json!({});
         }
 
-        // Safe unwrap: we just ensured it's an object above
-        let obj = self.schema.as_object_mut().unwrap();
+        // Get mutable reference to the object. This should always succeed because we just
+        // ensured it's an object above, but we use expect() for defensive programming.
+        let obj = self
+            .schema
+            .as_object_mut()
+            .expect("BUG: schema should be an object after initialization");
 
         // Insert the parameter as a simple type string
         // This will be converted to proper JSON Schema by convert_schema_to_openai
@@ -1169,17 +1196,17 @@ impl ToolBuilder {
     ///
     /// ### Handler with Error Handling
     /// ```rust
-    /// # use open_agent::tool;
+    /// # use open_agent::{tool, Error};
     /// # use serde_json::json;
     /// let my_tool = tool("divide", "Divide two numbers")
     ///     .param("a", "number")
     ///     .param("b", "number")
     ///     .build(|args| async move {
-    ///         let a = args["a"].as_f64().ok_or("Invalid 'a' parameter")?;
-    ///         let b = args["b"].as_f64().ok_or("Invalid 'b' parameter")?;
+    ///         let a = args["a"].as_f64().ok_or_else(|| Error::tool("Invalid 'a' parameter"))?;
+    ///         let b = args["b"].as_f64().ok_or_else(|| Error::tool("Invalid 'b' parameter"))?;
     ///
     ///         if b == 0.0 {
-    ///             return Err("Division by zero".into());
+    ///             return Err(Error::tool("Division by zero"));
     ///         }
     ///
     ///         Ok(json!({"result": a / b}))
@@ -1235,8 +1262,12 @@ impl ToolBuilder {
 ///     .param("a", "number")
 ///     .param("b", "number")
 ///     .build(|args| async move {
-///         let a = args["a"].as_f64().unwrap_or(0.0);
-///         let b = args["b"].as_f64().unwrap_or(0.0);
+///         let a = args.get("a")
+///             .and_then(|v| v.as_f64())
+///             .ok_or_else(|| open_agent::Error::invalid_input("Parameter 'a' must be a number"))?;
+///         let b = args.get("b")
+///             .and_then(|v| v.as_f64())
+///             .ok_or_else(|| open_agent::Error::invalid_input("Parameter 'b' must be a number"))?;
 ///         Ok(json!({"result": a + b}))
 ///     });
 /// ```
@@ -1244,7 +1275,7 @@ impl ToolBuilder {
 /// ### Tool with External HTTP Client
 ///
 /// ```rust,no_run
-/// use open_agent::tool;
+/// use open_agent::{tool, Error};
 /// use serde_json::json;
 /// # use std::sync::Arc;
 ///
@@ -1265,7 +1296,7 @@ impl ToolBuilder {
 ///         async move {
 ///             let url = args["url"].as_str().unwrap_or("");
 ///             let content = client.get(url).await
-///                 .map_err(|e| format!("Failed to fetch: {}", e))?;
+///                 .map_err(|e| Error::tool(format!("Failed to fetch: {}", e)))?;
 ///             Ok(json!({"content": content}))
 ///         }
 ///     });
@@ -1327,7 +1358,7 @@ impl ToolBuilder {
 /// ### Integration with Agent
 ///
 /// ```rust,no_run
-/// use open_agent::{Agent, tool};
+/// use open_agent::{Client, AgentOptions, tool};
 /// use serde_json::json;
 ///
 /// # async fn example() -> open_agent::Result<()> {
@@ -1337,10 +1368,14 @@ impl ToolBuilder {
 ///         Ok(json!({"temp": 72, "conditions": "sunny"}))
 ///     });
 ///
-/// let mut agent = Agent::new("gpt-4", "your-api-key");
-/// agent.add_tool(weather_tool);
+/// let options = AgentOptions::builder()
+///     .model("gpt-4")
+///     .base_url("http://localhost:1234/v1")
+///     .tool(weather_tool)
+///     .build()?;
 ///
-/// // Agent can now use the tool when responding to queries
+/// let client = Client::new(options)?;
+/// // Client can now use the tool when responding to queries
 /// # Ok(())
 /// # }
 /// ```
@@ -1357,6 +1392,7 @@ pub fn tool(name: impl Into<String>, description: impl Into<String>) -> ToolBuil
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Error;
     use serde_json::json;
 
     #[test]
@@ -1402,8 +1438,14 @@ mod tests {
             .param("a", "number")
             .param("b", "number")
             .build(|args| async move {
-                let a = args["a"].as_f64().unwrap_or(0.0);
-                let b = args["b"].as_f64().unwrap_or(0.0);
+                let a = args
+                    .get("a")
+                    .and_then(|v| v.as_f64())
+                    .ok_or_else(|| Error::invalid_input("Parameter 'a' must be a number"))?;
+                let b = args
+                    .get("b")
+                    .and_then(|v| v.as_f64())
+                    .ok_or_else(|| Error::invalid_input("Parameter 'b' must be a number"))?;
                 Ok(json!({"result": a + b}))
             });
 

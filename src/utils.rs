@@ -436,9 +436,12 @@ impl ToolCallAggregator {
 pub fn parse_sse_stream(
     body: reqwest::Response,
 ) -> Pin<Box<dyn Stream<Item = Result<OpenAIChunk>> + Send>> {
-    let stream = body.bytes_stream().map(move |result| {
+    let stream = body.bytes_stream().filter_map(move |result| async move {
         // Convert HTTP errors to our Error type
-        let bytes = result.map_err(Error::Http)?;
+        let bytes = match result.map_err(Error::Http) {
+            Ok(b) => b,
+            Err(e) => return Some(Err(e)),
+        };
 
         // Convert bytes to string. Use lossy conversion to handle potential
         // UTF-8 boundary splits (though the API should send well-formed UTF-8).
@@ -457,16 +460,20 @@ pub fn parse_sse_stream(
 
                 // Parse the JSON payload into an OpenAIChunk.
                 // This is where we deserialize the actual chunk data.
-                let chunk: OpenAIChunk = serde_json::from_str(data)
-                    .map_err(|e| Error::stream(format!("Failed to parse chunk: {}", e)))?;
+                let chunk: OpenAIChunk = match serde_json::from_str(data) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        return Some(Err(Error::stream(format!("Failed to parse chunk: {}", e))));
+                    }
+                };
 
-                return Ok(chunk);
+                return Some(Ok(chunk));
             }
         }
 
-        // If we processed all lines and found no "data: " line, that's an error.
-        // This shouldn't happen with a well-formed SSE stream.
-        Err(Error::stream("No data in SSE chunk"))
+        // If we processed all lines and found no "data: " line, skip this chunk.
+        // This handles heartbeats, comments, and other SSE events gracefully.
+        None
     });
 
     // Pin the stream to the heap and box it for dynamic dispatch.

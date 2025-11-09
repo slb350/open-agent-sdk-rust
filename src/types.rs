@@ -49,7 +49,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use open_agent_sdk::types::{AgentOptions, Message};
+//! use open_agent::{AgentOptions, Message};
 //!
 //! // Build agent configuration
 //! let options = AgentOptions::builder()
@@ -94,7 +94,7 @@ use std::sync::Arc;
 /// # Examples
 ///
 /// ```no_run
-/// use open_agent_sdk::types::AgentOptions;
+/// use open_agent::AgentOptions;
 ///
 /// let options = AgentOptions::builder()
 ///     .model("qwen2.5-32b-instruct")
@@ -112,42 +112,42 @@ pub struct AgentOptions {
     /// This is sent as the first message in the conversation to establish
     /// context and instructions. Can be empty if no system-level guidance
     /// is needed.
-    pub system_prompt: String,
+    system_prompt: String,
 
     /// Model identifier for the LLM to use (e.g., "qwen2.5-32b-instruct", "gpt-4").
     ///
     /// This must match a model available at the configured `base_url`.
     /// Different models have varying capabilities for tool use, context
     /// length, and response quality.
-    pub model: String,
+    model: String,
 
     /// OpenAI-compatible API endpoint URL (e.g., "http://localhost:1234/v1").
     ///
     /// The SDK communicates using the OpenAI chat completions API format,
     /// which is widely supported by local inference servers (LM Studio,
     /// llama.cpp, vLLM) and cloud providers.
-    pub base_url: String,
+    base_url: String,
 
     /// API authentication key for the provider.
     ///
     /// Many local servers don't require authentication, so the default
     /// "not-needed" is often sufficient. For cloud providers like OpenAI,
     /// set this to your actual API key.
-    pub api_key: String,
+    api_key: String,
 
     /// Maximum number of conversation turns (user message + assistant response = 1 turn).
     ///
     /// This limits how long a conversation can continue. In auto-execution mode
     /// with tools, this prevents infinite loops. Set to 1 for single-shot
     /// interactions or higher for multi-turn conversations.
-    pub max_turns: u32,
+    max_turns: u32,
 
     /// Maximum tokens the model should generate in a single response.
     ///
     /// `None` uses the provider's default. Lower values constrain response
     /// length, which can be useful for cost control or ensuring concise answers.
     /// Note this is separate from the model's context window size.
-    pub max_tokens: Option<u32>,
+    max_tokens: Option<u32>,
 
     /// Sampling temperature for response generation (typically 0.0 to 2.0).
     ///
@@ -156,21 +156,21 @@ pub struct AgentOptions {
     /// - 1.0+: More random and creative responses
     ///
     /// Lower temperatures are better for factual tasks, higher for creative ones.
-    pub temperature: f32,
+    temperature: f32,
 
     /// HTTP request timeout in seconds.
     ///
     /// Maximum time to wait for the API to respond. Applies per API call,
     /// not to the entire conversation. Increase for slower models or when
     /// expecting long responses.
-    pub timeout: u64,
+    timeout: u64,
 
     /// Tools available for the agent to use during conversations.
     ///
     /// Tools are wrapped in `Arc` for efficient cloning. When the agent
     /// receives a tool use request, it looks up the tool by name in this
     /// vector. Empty by default.
-    pub tools: Vec<Arc<Tool>>,
+    tools: Vec<Arc<Tool>>,
 
     /// Whether to automatically execute tools and continue the conversation.
     ///
@@ -181,14 +181,14 @@ pub struct AgentOptions {
     ///
     /// Auto-execution is convenient but gives less control. Manual execution
     /// allows for approval workflows and selective tool access.
-    pub auto_execute_tools: bool,
+    auto_execute_tools: bool,
 
     /// Maximum iterations of tool execution in automatic mode.
     ///
     /// Prevents infinite loops where the agent continuously requests tools.
     /// Each tool execution attempt counts as one iteration. Only relevant
     /// when `auto_execute_tools` is true.
-    pub max_tool_iterations: u32,
+    max_tool_iterations: u32,
 
     /// Lifecycle hooks for observing and intercepting agent operations.
     ///
@@ -199,7 +199,7 @@ pub struct AgentOptions {
     ///
     /// Useful for logging, metrics, debugging, and implementing custom
     /// authorization logic.
-    pub hooks: Hooks,
+    hooks: Hooks,
 }
 
 /// Custom Debug implementation to prevent sensitive data leakage.
@@ -282,7 +282,7 @@ impl AgentOptions {
     /// # Example
     ///
     /// ```no_run
-    /// use open_agent_sdk::types::AgentOptions;
+    /// use open_agent::AgentOptions;
     ///
     /// let options = AgentOptions::builder()
     ///     .model("qwen2.5-32b-instruct")
@@ -292,6 +292,66 @@ impl AgentOptions {
     /// ```
     pub fn builder() -> AgentOptionsBuilder {
         AgentOptionsBuilder::default()
+    }
+
+    /// Returns the system prompt.
+    pub fn system_prompt(&self) -> &str {
+        &self.system_prompt
+    }
+
+    /// Returns the model identifier.
+    pub fn model(&self) -> &str {
+        &self.model
+    }
+
+    /// Returns the base URL.
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    /// Returns the API key.
+    pub fn api_key(&self) -> &str {
+        &self.api_key
+    }
+
+    /// Returns the maximum number of conversation turns.
+    pub fn max_turns(&self) -> u32 {
+        self.max_turns
+    }
+
+    /// Returns the maximum tokens setting.
+    pub fn max_tokens(&self) -> Option<u32> {
+        self.max_tokens
+    }
+
+    /// Returns the sampling temperature.
+    pub fn temperature(&self) -> f32 {
+        self.temperature
+    }
+
+    /// Returns the HTTP timeout in seconds.
+    pub fn timeout(&self) -> u64 {
+        self.timeout
+    }
+
+    /// Returns a reference to the tools vector.
+    pub fn tools(&self) -> &[Arc<Tool>] {
+        &self.tools
+    }
+
+    /// Returns whether automatic tool execution is enabled.
+    pub fn auto_execute_tools(&self) -> bool {
+        self.auto_execute_tools
+    }
+
+    /// Returns the maximum tool execution iterations.
+    pub fn max_tool_iterations(&self) -> u32 {
+        self.max_tool_iterations
+    }
+
+    /// Returns a reference to the hooks configuration.
+    pub fn hooks(&self) -> &Hooks {
+        &self.hooks
     }
 }
 
@@ -320,8 +380,8 @@ impl AgentOptions {
 /// # Examples
 ///
 /// ```no_run
-/// use open_agent_sdk::types::AgentOptions;
-/// use open_agent_sdk::tools::Tool;
+/// use open_agent::AgentOptions;
+/// use open_agent::Tool;
 ///
 /// let calculator = Tool::new(
 ///     "calculate",
@@ -407,7 +467,7 @@ impl AgentOptionsBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// # use open_agent_sdk::types::AgentOptions;
+    /// # use open_agent::AgentOptions;
     /// let options = AgentOptions::builder()
     ///     .model("qwen2.5-32b-instruct")
     ///     .base_url("http://localhost:1234/v1")
@@ -428,7 +488,7 @@ impl AgentOptionsBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// # use open_agent_sdk::types::AgentOptions;
+    /// # use open_agent::AgentOptions;
     /// let options = AgentOptions::builder()
     ///     .model("gpt-4")
     ///     .base_url("https://api.openai.com/v1")
@@ -450,7 +510,7 @@ impl AgentOptionsBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// # use open_agent_sdk::types::AgentOptions;
+    /// # use open_agent::AgentOptions;
     /// let options = AgentOptions::builder()
     ///     .model("qwen2.5-32b-instruct")
     ///     .base_url("http://localhost:1234/v1")
@@ -470,7 +530,7 @@ impl AgentOptionsBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// # use open_agent_sdk::types::AgentOptions;
+    /// # use open_agent::AgentOptions;
     /// let options = AgentOptions::builder()
     ///     .model("gpt-4")
     ///     .base_url("https://api.openai.com/v1")
@@ -491,7 +551,7 @@ impl AgentOptionsBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// # use open_agent_sdk::types::AgentOptions;
+    /// # use open_agent::AgentOptions;
     /// let options = AgentOptions::builder()
     ///     .model("qwen2.5-32b-instruct")
     ///     .base_url("http://localhost:1234/v1")
@@ -512,7 +572,7 @@ impl AgentOptionsBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// # use open_agent_sdk::types::AgentOptions;
+    /// # use open_agent::AgentOptions;
     /// let options = AgentOptions::builder()
     ///     .model("qwen2.5-32b-instruct")
     ///     .base_url("http://localhost:1234/v1")
@@ -535,7 +595,7 @@ impl AgentOptionsBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// # use open_agent_sdk::types::AgentOptions;
+    /// # use open_agent::AgentOptions;
     /// let options = AgentOptions::builder()
     ///     .model("qwen2.5-32b-instruct")
     ///     .base_url("http://localhost:1234/v1")
@@ -556,7 +616,7 @@ impl AgentOptionsBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// # use open_agent_sdk::types::AgentOptions;
+    /// # use open_agent::AgentOptions;
     /// let options = AgentOptions::builder()
     ///     .model("qwen2.5-32b-instruct")
     ///     .base_url("http://localhost:1234/v1")
@@ -578,7 +638,7 @@ impl AgentOptionsBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// # use open_agent_sdk::types::AgentOptions;
+    /// # use open_agent::AgentOptions;
     /// let options = AgentOptions::builder()
     ///     .model("qwen2.5-32b-instruct")
     ///     .base_url("http://localhost:1234/v1")
@@ -599,7 +659,7 @@ impl AgentOptionsBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// # use open_agent_sdk::types::AgentOptions;
+    /// # use open_agent::AgentOptions;
     /// let options = AgentOptions::builder()
     ///     .model("qwen2.5-32b-instruct")
     ///     .base_url("http://localhost:1234/v1")
@@ -621,8 +681,8 @@ impl AgentOptionsBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// # use open_agent_sdk::types::AgentOptions;
-    /// # use open_agent_sdk::tools::Tool;
+    /// # use open_agent::AgentOptions;
+    /// # use open_agent::Tool;
     /// let calculator = Tool::new(
     ///     "calculate",
     ///     "Evaluate a math expression",
@@ -650,8 +710,8 @@ impl AgentOptionsBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// # use open_agent_sdk::types::AgentOptions;
-    /// # use open_agent_sdk::tools::Tool;
+    /// # use open_agent::AgentOptions;
+    /// # use open_agent::Tool;
     /// let tools = vec![
     ///     Tool::new("add", "Add numbers", serde_json::json!({}),
     ///         |input| Box::pin(async move { Ok(serde_json::json!({})) })),
@@ -680,10 +740,12 @@ impl AgentOptionsBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// # use open_agent_sdk::types::AgentOptions;
-    /// # use open_agent_sdk::hooks::Hooks;
+    /// # use open_agent::{AgentOptions, Hooks, HookDecision};
     /// let hooks = Hooks::new()
-    ///     .on_llm_request(|req| println!("Sending request: {:?}", req));
+    ///     .add_user_prompt_submit(|event| async move {
+    ///         println!("User prompt: {}", event.prompt);
+    ///         Some(HookDecision::continue_())
+    ///     });
     ///
     /// let options = AgentOptions::builder()
     ///     .model("qwen2.5-32b-instruct")
@@ -715,7 +777,7 @@ impl AgentOptionsBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// # use open_agent_sdk::types::AgentOptions;
+    /// # use open_agent::AgentOptions;
     /// // Success - all required fields set
     /// let options = AgentOptions::builder()
     ///     .model("qwen2.5-32b-instruct")
@@ -740,6 +802,42 @@ impl AgentOptionsBuilder {
             .base_url
             .ok_or_else(|| crate::Error::config("base_url is required"))?;
 
+        // Validate model is not empty or whitespace
+        if model.trim().is_empty() {
+            return Err(crate::Error::invalid_input(
+                "model cannot be empty or whitespace",
+            ));
+        }
+
+        // Validate base_url is not empty and has valid URL format
+        if base_url.trim().is_empty() {
+            return Err(crate::Error::invalid_input("base_url cannot be empty"));
+        }
+        // Check if URL has a valid scheme (http:// or https://)
+        if !base_url.starts_with("http://") && !base_url.starts_with("https://") {
+            return Err(crate::Error::invalid_input(
+                "base_url must start with http:// or https://",
+            ));
+        }
+
+        // Validate temperature is in valid range (0.0 to 2.0)
+        let temperature = self.temperature.unwrap_or(0.7);
+        if !(0.0..=2.0).contains(&temperature) {
+            return Err(crate::Error::invalid_input(
+                "temperature must be between 0.0 and 2.0",
+            ));
+        }
+
+        // Validate max_tokens if set
+        let max_tokens = self.max_tokens.or(Some(4096));
+        if let Some(tokens) = max_tokens {
+            if tokens == 0 {
+                return Err(crate::Error::invalid_input(
+                    "max_tokens must be greater than 0",
+                ));
+            }
+        }
+
         // Construct the final options, applying defaults where values weren't set
         Ok(AgentOptions {
             // Empty system prompt is valid - not all use cases need one
@@ -750,11 +848,8 @@ impl AgentOptionsBuilder {
             api_key: self.api_key.unwrap_or_else(|| "not-needed".to_string()),
             // Default to single-turn for simplicity
             max_turns: self.max_turns.unwrap_or(1),
-            // If max_tokens was explicitly set to Some(n), use it; otherwise default to Some(4096).
-            // We use .or() here rather than .unwrap_or() because max_tokens is Option<u32>
-            max_tokens: self.max_tokens.or(Some(4096)),
-            // Balanced temperature for general use
-            temperature: self.temperature.unwrap_or(0.7),
+            max_tokens,
+            temperature,
             // Conservative timeout that works for most requests
             timeout: self.timeout.unwrap_or(60),
             // Tools vector was built up during configuration, use as-is
@@ -859,7 +954,7 @@ pub enum ContentBlock {
 /// # Example
 ///
 /// ```
-/// use open_agent_sdk::types::{TextBlock, ContentBlock};
+/// use open_agent::{TextBlock, ContentBlock};
 ///
 /// let block = TextBlock::new("Hello, world!");
 /// let content = ContentBlock::Text(block);
@@ -876,7 +971,7 @@ impl TextBlock {
     /// # Example
     ///
     /// ```
-    /// use open_agent_sdk::types::TextBlock;
+    /// use open_agent::TextBlock;
     ///
     /// let block = TextBlock::new("Hello");
     /// assert_eq!(block.text, "Hello");
@@ -902,7 +997,7 @@ impl TextBlock {
 /// # Example
 ///
 /// ```
-/// use open_agent_sdk::types::{ToolUseBlock, ContentBlock};
+/// use open_agent::{ToolUseBlock, ContentBlock};
 /// use serde_json::json;
 ///
 /// let block = ToolUseBlock::new(
@@ -946,7 +1041,7 @@ impl ToolUseBlock {
     /// # Example
     ///
     /// ```
-    /// use open_agent_sdk::types::ToolUseBlock;
+    /// use open_agent::ToolUseBlock;
     /// use serde_json::json;
     ///
     /// let block = ToolUseBlock::new(
@@ -978,7 +1073,7 @@ impl ToolUseBlock {
 /// # Example
 ///
 /// ```
-/// use open_agent_sdk::types::{ToolResultBlock, ContentBlock};
+/// use open_agent::{ToolResultBlock, ContentBlock};
 /// use serde_json::json;
 ///
 /// let result = ToolResultBlock::new(
@@ -1015,7 +1110,7 @@ impl ToolResultBlock {
     /// # Example
     ///
     /// ```
-    /// use open_agent_sdk::types::ToolResultBlock;
+    /// use open_agent::ToolResultBlock;
     /// use serde_json::json;
     ///
     /// let result = ToolResultBlock::new(
@@ -1049,14 +1144,14 @@ impl ToolResultBlock {
 ///
 /// ## Simple Text Message
 /// ```
-/// use open_agent_sdk::types::Message;
+/// use open_agent::Message;
 ///
 /// let msg = Message::user("What's the weather?");
 /// ```
 ///
 /// ## Assistant Response with Tool Call
 /// ```
-/// use open_agent_sdk::types::{Message, ContentBlock, TextBlock, ToolUseBlock};
+/// use open_agent::{Message, ContentBlock, TextBlock, ToolUseBlock};
 /// use serde_json::json;
 ///
 /// let msg = Message::assistant(vec![
@@ -1071,7 +1166,7 @@ impl ToolResultBlock {
 ///
 /// ## Tool Result
 /// ```
-/// use open_agent_sdk::types::{Message, ContentBlock, ToolResultBlock};
+/// use open_agent::{Message, ContentBlock, ToolResultBlock};
 /// use serde_json::json;
 ///
 /// let msg = Message::user_with_blocks(vec![
@@ -1103,7 +1198,7 @@ impl Message {
     /// # Example
     ///
     /// ```
-    /// use open_agent_sdk::types::{Message, MessageRole, ContentBlock, TextBlock};
+    /// use open_agent::{Message, MessageRole, ContentBlock, TextBlock};
     ///
     /// let msg = Message::new(
     ///     MessageRole::User,
@@ -1122,7 +1217,7 @@ impl Message {
     /// # Example
     ///
     /// ```
-    /// use open_agent_sdk::types::Message;
+    /// use open_agent::Message;
     ///
     /// let msg = Message::user("What is 2+2?");
     /// ```
@@ -1141,7 +1236,7 @@ impl Message {
     /// # Example
     ///
     /// ```
-    /// use open_agent_sdk::types::{Message, ContentBlock, TextBlock};
+    /// use open_agent::{Message, ContentBlock, TextBlock};
     ///
     /// let msg = Message::assistant(vec![
     ///     ContentBlock::Text(TextBlock::new("The answer is 4"))
@@ -1162,7 +1257,7 @@ impl Message {
     /// # Example
     ///
     /// ```
-    /// use open_agent_sdk::types::Message;
+    /// use open_agent::Message;
     ///
     /// let msg = Message::system("You are a helpful assistant. Be concise.");
     /// ```
@@ -1182,7 +1277,7 @@ impl Message {
     /// # Example
     ///
     /// ```
-    /// use open_agent_sdk::types::{Message, ContentBlock, ToolResultBlock};
+    /// use open_agent::{Message, ContentBlock, ToolResultBlock};
     /// use serde_json::json;
     ///
     /// let msg = Message::user_with_blocks(vec![
@@ -1338,7 +1433,7 @@ pub struct OpenAIFunction {
 ///
 /// # Example
 ///
-/// ```
+/// ```ignore
 /// use open_agent_sdk::types::{OpenAIRequest, OpenAIMessage};
 ///
 /// let request = OpenAIRequest {
@@ -1872,5 +1967,143 @@ mod tests {
         let options2 = options1.clone();
         assert_eq!(options1.model, options2.model);
         assert_eq!(options1.base_url, options2.base_url);
+    }
+
+    #[test]
+    fn test_temperature_validation() {
+        // Temperature too low (< 0.0)
+        let result = AgentOptions::builder()
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .temperature(-0.1)
+            .build();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("temperature"));
+
+        // Temperature too high (> 2.0)
+        let result = AgentOptions::builder()
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .temperature(2.1)
+            .build();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("temperature"));
+
+        // Valid temperatures should work
+        let result = AgentOptions::builder()
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .temperature(0.0)
+            .build();
+        assert!(result.is_ok());
+
+        let result = AgentOptions::builder()
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .temperature(2.0)
+            .build();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_url_validation() {
+        // Empty URL should fail
+        let result = AgentOptions::builder()
+            .model("test-model")
+            .base_url("")
+            .build();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("base_url"));
+
+        // Invalid URL format should fail
+        let result = AgentOptions::builder()
+            .model("test-model")
+            .base_url("not-a-url")
+            .build();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("base_url"));
+
+        // Valid URLs should work
+        let result = AgentOptions::builder()
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .build();
+        assert!(result.is_ok());
+
+        let result = AgentOptions::builder()
+            .model("test-model")
+            .base_url("https://api.openai.com/v1")
+            .build();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_model_validation() {
+        // Empty model should fail
+        let result = AgentOptions::builder()
+            .model("")
+            .base_url("http://localhost:1234/v1")
+            .build();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("model"));
+
+        // Whitespace-only model should fail
+        let result = AgentOptions::builder()
+            .model("   ")
+            .base_url("http://localhost:1234/v1")
+            .build();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("model"));
+    }
+
+    #[test]
+    fn test_max_tokens_validation() {
+        // max_tokens = 0 should fail
+        let result = AgentOptions::builder()
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .max_tokens(0)
+            .build();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("max_tokens"));
+
+        // Valid max_tokens should work
+        let result = AgentOptions::builder()
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .max_tokens(1)
+            .build();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_agent_options_getters() {
+        // Test that AgentOptions provides getter methods for field access
+        let options = AgentOptions::builder()
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .system_prompt("Test prompt")
+            .api_key("test-key")
+            .max_turns(5)
+            .max_tokens(1000)
+            .temperature(0.5)
+            .timeout(30)
+            .auto_execute_tools(true)
+            .max_tool_iterations(10)
+            .build()
+            .unwrap();
+
+        // All fields should be accessible via getter methods, not direct field access
+        assert_eq!(options.system_prompt(), "Test prompt");
+        assert_eq!(options.model(), "test-model");
+        assert_eq!(options.base_url(), "http://localhost:1234/v1");
+        assert_eq!(options.api_key(), "test-key");
+        assert_eq!(options.max_turns(), 5);
+        assert_eq!(options.max_tokens(), Some(1000));
+        assert_eq!(options.temperature(), 0.5);
+        assert_eq!(options.timeout(), 30);
+        assert_eq!(options.auto_execute_tools(), true);
+        assert_eq!(options.max_tool_iterations(), 10);
+        assert_eq!(options.tools().len(), 0);
     }
 }

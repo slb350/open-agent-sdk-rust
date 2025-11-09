@@ -37,7 +37,7 @@ async fn test_pre_tool_use_blocks_tool_in_auto_mode() {
         .build()
         .unwrap();
 
-    let _client = Client::new(options);
+    let _client = Client::new(options).expect("Failed to create client");
 
     // If model tries to call delete_file during auto-execution:
     // 1. PreToolUse hook should fire
@@ -95,7 +95,7 @@ async fn test_pre_tool_use_modifies_input_in_auto_mode() {
         .build()
         .unwrap();
 
-    let _client = Client::new(options);
+    let _client = Client::new(options).expect("Failed to create client");
 
     // If model tries to call calculate(value=500):
     // 1. PreToolUse hook should fire
@@ -140,7 +140,7 @@ async fn test_post_tool_use_modifies_result_in_auto_mode() {
         .build()
         .unwrap();
 
-    let _client = Client::new(options);
+    let _client = Client::new(options).expect("Failed to create client");
 
     // If model calls get_data during auto-execution:
     // 1. Tool returns {"data": "sensitive_information"}
@@ -193,7 +193,7 @@ async fn test_post_tool_use_logs_execution_in_auto_mode() {
         .build()
         .unwrap();
 
-    let _client = Client::new(options);
+    let _client = Client::new(options).expect("Failed to create client");
 
     // After auto-execution with multiple tool calls:
     // 1. PostToolUse hook should fire for each tool
@@ -247,7 +247,7 @@ async fn test_multiple_pre_tool_use_hooks() {
         .build()
         .unwrap();
 
-    let _client = Client::new(options);
+    let _client = Client::new(options).expect("Failed to create client");
 
     // If model calls test_op(value=2000):
     // 1. First hook should block (value > 1000)
@@ -287,7 +287,7 @@ async fn test_hooks_dont_break_manual_mode() {
         .build()
         .unwrap();
 
-    let _client = Client::new(options);
+    let _client = Client::new(options).expect("Failed to create client");
 
     // In manual mode:
     // 1. receive() should yield ToolUse blocks

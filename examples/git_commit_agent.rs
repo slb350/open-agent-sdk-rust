@@ -170,7 +170,7 @@ Focus on WHAT changed and WHY, not just restating the diff."#,
             analysis
         );
 
-        let mut client = Client::new(self.options.clone());
+        let mut client = Client::new(self.options.clone())?;
         client.send(&prompt).await?;
 
         let mut response = String::new();

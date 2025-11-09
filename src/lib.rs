@@ -78,7 +78,7 @@
 //!         .build()?;
 //!
 //!     // Create a stateful client that maintains conversation history
-//!     let mut client = Client::new(options);
+//!     let mut client = Client::new(options)?;
 //!
 //!     // First turn
 //!     client.send("What's 2+2?").await?;
@@ -165,148 +165,36 @@ pub mod retry;
 
 // --- Core Client API ---
 
-pub use client::{
-    /// Stateful multi-turn conversation client with automatic history management.
-    /// Use this when you need to maintain conversation context across multiple turns.
-    /// Supports tool execution, interrupts, and lifecycle hooks.
-    Client,
-
-    /// Simple single-turn query function that returns a stream of content blocks.
-    /// Use this for one-off queries without conversation state.
-    /// Returns a ContentStream that yields ContentBlock items as they arrive.
-    query,
-};
+pub use client::{Client, query};
 
 // --- Provider Configuration ---
 
-pub use config::{
-    /// Enum representing supported LLM providers (LMStudio, Ollama, LlamaCpp, VLLM).
-    /// Used to get default base URLs and model names for each provider.
-    Provider,
-
-    /// Get the base URL for API requests, with support for environment variable overrides.
-    /// Priority: environment variable > provider default > fallback parameter.
-    get_base_url,
-
-    /// Get the model name for requests, with optional environment variable override.
-    /// Priority: environment variable (if prefer_env=true) > fallback parameter.
-    get_model,
-};
+pub use config::{Provider, get_base_url, get_model};
 
 // --- Context Management ---
 
-pub use context::{
-    /// Estimate the number of tokens in a message history using a character-based approximation.
-    /// Approximation: ~1 token per 4 characters (70-85% accurate across model families).
-    estimate_tokens,
-
-    /// Check if a message history is approaching a token limit.
-    /// Returns true if estimated tokens exceed the limit. Useful for proactive truncation.
-    is_approaching_limit,
-
-    /// Truncate message history to keep only the most recent turns.
-    /// Can optionally preserve the system message regardless of turn count.
-    truncate_messages,
-};
+pub use context::{estimate_tokens, is_approaching_limit, truncate_messages};
 
 // --- Error Handling ---
 
-pub use error::{
-    /// Comprehensive error type covering HTTP, JSON, API, streaming, and configuration errors.
-    /// Implements std::error::Error and provides detailed error context.
-    Error,
-
-    /// Type alias for Result<T, Error> used throughout the SDK.
-    /// Makes error handling more concise in client code.
-    Result,
-};
+pub use error::{Error, Result};
 
 // --- Lifecycle Hooks ---
 
 pub use hooks::{
-    /// Constant string identifier for the PreToolUse hook type.
-    /// Used internally for hook registration and logging.
-    HOOK_PRE_TOOL_USE,
-
-    /// Constant string identifier for the PostToolUse hook type.
-    /// Used internally for hook registration and logging.
-    HOOK_POST_TOOL_USE,
-
-    /// Constant string identifier for the UserPromptSubmit hook type.
-    /// Used internally for hook registration and logging.
-    HOOK_USER_PROMPT_SUBMIT,
-
-    /// Decision object returned by hooks to control execution flow.
-    /// Can continue, block, or modify inputs/prompts during lifecycle events.
-    HookDecision,
-
-    /// Container for registering and managing lifecycle hooks.
-    /// Hooks are executed sequentially with the first non-None decision taking effect.
-    Hooks,
-
-    /// Event data passed to PostToolUse hooks after tool execution.
-    /// Contains tool name, input, ID, result, and full conversation history.
-    PostToolUseEvent,
-
-    /// Event data passed to PreToolUse hooks before tool execution.
-    /// Contains tool name, input, ID, and full conversation history.
-    PreToolUseEvent,
-
-    /// Event data passed to UserPromptSubmit hooks before sending prompts to the API.
-    /// Contains the user prompt and full conversation history.
-    UserPromptSubmitEvent,
+    HOOK_POST_TOOL_USE, HOOK_PRE_TOOL_USE, HOOK_USER_PROMPT_SUBMIT, HookDecision, Hooks,
+    PostToolUseEvent, PreToolUseEvent, UserPromptSubmitEvent,
 };
 
 // --- Tool System ---
 
-pub use tools::{
-    /// Tool definition with name, description, JSON schema, and async handler.
-    /// Created using ToolBuilder or the tool() convenience function.
-    Tool,
-
-    /// Builder for constructing tools with fluent parameter definition.
-    /// Automatically generates JSON schema from parameter types.
-    ToolBuilder,
-
-    /// Convenience function to start building a tool with name and description.
-    /// Returns a ToolBuilder for adding parameters and handler.
-    tool,
-};
+pub use tools::{Tool, ToolBuilder, tool};
 
 // --- Core Types ---
 
 pub use types::{
-    /// Configuration options for agents, built using the builder pattern.
-    /// Contains system prompt, model, base URL, tools, hooks, and execution settings.
-    AgentOptions,
-
-    /// Builder for constructing AgentOptions with type-safe validation.
-    /// Required fields: system_prompt, model, base_url.
-    AgentOptionsBuilder,
-
-    /// Enum representing a unit of content in a message (Text, ToolUse, or ToolResult).
-    /// Messages can contain multiple content blocks of different types.
-    ContentBlock,
-
-    /// A single message in a conversation with a role and content blocks.
-    /// Used to build conversation history and communicate with the LLM.
-    Message,
-
-    /// Role of a message participant (System, User, Assistant, or Tool).
-    /// Determines how the LLM interprets the message content.
-    MessageRole,
-
-    /// Content block containing plain text generated by the model or provided by the user.
-    /// Contains a single text field with the content.
-    TextBlock,
-
-    /// Content block containing the result of a tool execution.
-    /// Includes the tool use ID, content (success or error), and optional error flag.
-    ToolResultBlock,
-
-    /// Content block representing a tool call made by the model.
-    /// Contains tool name, unique ID, and JSON input parameters.
-    ToolUseBlock,
+    AgentOptions, AgentOptionsBuilder, ContentBlock, Message, MessageRole, TextBlock,
+    ToolResultBlock, ToolUseBlock,
 };
 
 // ============================================================================

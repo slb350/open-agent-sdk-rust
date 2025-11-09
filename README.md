@@ -106,7 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .base_url("http://localhost:11434/v1")
         .build()?;
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options)?;
 
     client.send("What's the capital of France?").await?;
 
@@ -158,7 +158,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .max_tool_iterations(10)       // Safety limit for tool loops
         .build()?;
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options)?;
     client.send("What's 25 + 17?").await?;
 
     // Simply iterate - tools execute automatically!
@@ -189,7 +189,7 @@ let options = AgentOptions::builder()
     .auto_execute_tools(false)  // Manual mode
     .build()?;
 
-let mut client = Client::new(options);
+let mut client = Client::new(options)?;
 client.send("What's 25 + 17?").await?;
 
 while let Some(block) = client.receive().await {
@@ -231,7 +231,7 @@ Local models have fixed context windows (typically 8k-32k tokens). The SDK provi
 ```rust
 use open_agent::{Client, AgentOptions, estimate_tokens, truncate_messages};
 
-let mut client = Client::new(options);
+let mut client = Client::new(options)?;
 
 // Long conversation...
 for i in 0..50 {
@@ -270,7 +270,7 @@ for task in tasks {
 ```rust
 use open_agent::truncate_messages;
 
-let mut client = Client::new(options);
+let mut client = Client::new(options)?;
 for task in tasks {
     client.send(&task).await?;
     // Truncate after each major task
@@ -284,7 +284,7 @@ for task in tasks {
 ```rust
 // Store important facts in database, keep conversation context small
 let mut database = HashMap::new();
-let mut client = Client::new(options);
+let mut client = Client::new(options)?;
 
 client.send("Research topic X").await?;
 // Save response to database
@@ -341,7 +341,7 @@ let options = AgentOptions::builder()
     .hooks(hooks)
     .build()?;
 
-let mut client = Client::new(options);
+let mut client = Client::new(options)?;
 ```
 
 ### Hook Types
@@ -433,7 +433,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .base_url("http://localhost:1234/v1")
         .build()?;
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options)?;
     client.send("Write a detailed 1000-word essay...").await?;
 
     // Timeout after 5 seconds
@@ -663,7 +663,7 @@ Returns a stream yielding `ContentBlock` items.
 Multi-turn conversation client with tool monitoring.
 
 ```rust
-let mut client = Client::new(options);
+let mut client = Client::new(options)?;
 client.send(prompt).await?;
 
 while let Some(block) = client.receive().await {

@@ -51,7 +51,7 @@ async fn pattern_1_stateless() -> Result<(), Box<dyn std::error::Error>> {
 
     for task in tasks {
         // Fresh client for each task - no history accumulation
-        let mut client = Client::new(options.clone());
+        let mut client = Client::new(options.clone())?;
         client.send(task).await?;
 
         let mut response = String::new();
@@ -92,7 +92,7 @@ async fn pattern_2_manual_truncation() -> Result<(), Box<dyn std::error::Error>>
         .max_turns(10)
         .build()?;
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options)?;
 
     // Task 1: Code analysis (simplified - no actual API call for demo)
     println!("Task 1: Adding messages to history...");
@@ -142,7 +142,7 @@ async fn pattern_3_token_monitoring() -> Result<(), Box<dyn std::error::Error>> 
         .system_prompt("You are a helpful assistant")
         .build()?;
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options)?;
 
     // Simulate multiple interactions
     let interactions = [

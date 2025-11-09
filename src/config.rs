@@ -210,7 +210,8 @@ impl FromStr for Provider {
 /// let url = get_base_url(None, Some("http://localhost:1234/v1"));
 ///
 /// // Override via environment (takes precedence over everything)
-/// std::env::set_var("OPEN_AGENT_BASE_URL", "http://custom-server:8080/v1");
+/// // SAFETY: This is a doctest example showing how env vars work
+/// unsafe { std::env::set_var("OPEN_AGENT_BASE_URL", "http://custom-server:8080/v1"); }
 /// let url = get_base_url(Some(Provider::Ollama), None);
 /// // Returns "http://custom-server:8080/v1" despite provider being set
 /// ```
@@ -317,7 +318,10 @@ mod tests {
 
     #[test]
     fn test_get_base_url_with_provider() {
-        // Clear environment variable (safe in test isolation)
+        // SAFETY: This test runs in an isolated test environment where environment
+        // variable modifications won't affect other tests due to test isolation.
+        // The OPEN_AGENT_BASE_URL variable is specific to this library and not
+        // used by the Rust standard library or other critical system components.
         unsafe {
             env::remove_var("OPEN_AGENT_BASE_URL");
         }
@@ -328,7 +332,10 @@ mod tests {
 
     #[test]
     fn test_get_base_url_with_fallback() {
-        // Clear environment variable (safe in test isolation)
+        // SAFETY: This test runs in an isolated test environment where environment
+        // variable modifications won't affect other tests due to test isolation.
+        // The OPEN_AGENT_BASE_URL variable is specific to this library and not
+        // used by the Rust standard library or other critical system components.
         unsafe {
             env::remove_var("OPEN_AGENT_BASE_URL");
         }

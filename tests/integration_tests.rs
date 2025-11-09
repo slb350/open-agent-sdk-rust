@@ -25,8 +25,8 @@ fn test_agent_options_with_tools() {
         .build()
         .unwrap();
 
-    assert_eq!(options.tools.len(), 1);
-    assert_eq!(options.tools[0].name, "add");
+    assert_eq!(options.tools().len(), 1);
+    assert_eq!(options.tools()[0].name(), "add");
 }
 
 #[test]
@@ -50,7 +50,7 @@ fn test_agent_options_with_hooks() {
         .unwrap();
 
     // Just verify it builds successfully with hooks
-    assert!(!options.system_prompt.is_empty());
+    assert!(!options.system_prompt().is_empty());
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn test_client_creation_with_full_config() {
         .build()
         .unwrap();
 
-    let client = Client::new(options);
+    let client = Client::new(options).expect("Failed to create client");
     assert_eq!(client.history().len(), 0);
 }
 
@@ -193,5 +193,5 @@ fn test_builder_pattern_chain() {
 
     assert!(result.is_ok());
     let options = result.unwrap();
-    assert_eq!(options.temperature, 0.7);
+    assert_eq!(options.temperature(), 0.7);
 }

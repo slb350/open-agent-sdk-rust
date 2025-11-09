@@ -101,7 +101,7 @@
 //! ```rust,no_run
 //! # use open_agent::{Client, AgentOptions};
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let mut client = Client::new(AgentOptions::default());
+//! let mut client = Client::new(AgentOptions::default())?;
 //! let handle = client.interrupt_handle(); // Clone Arc for use in other threads
 //!
 //! // In another thread or async task:
@@ -177,7 +177,7 @@
 //! let mut client = Client::new(AgentOptions::builder()
 //!     .model("gpt-4")
 //!     .api_key("sk-...")
-//!     .build()?);
+//!     .build()?)?;
 //!
 //! // First question
 //! client.send("What's the capital of France?").await?;
@@ -219,7 +219,7 @@
 //!     .model("gpt-4")
 //!     .api_key("sk-...")
 //!     .tools(vec![calculator])
-//!     .build()?);
+//!     .build()?)?;
 //!
 //! client.send("Calculate 2+2").await?;
 //!
@@ -233,7 +233,7 @@
 //!             let result = tool.execute(tool_use.input).await?;
 //!
 //!             // Add result and continue
-//!             client.add_tool_result(&tool_use.id, result);
+//!             client.add_tool_result(&tool_use.id, result)?;
 //!             client.send("").await?;
 //!         }
 //!         ContentBlock::Text(text) => {
@@ -266,7 +266,7 @@
 //!     .tools(vec![calculator])
 //!     .auto_execute_tools(true)  // Enable auto-execution
 //!     .max_tool_iterations(5)    // Max 5 tool rounds
-//!     .build()?);
+//!     .build()?)?;
 //!
 //! client.send("Calculate 2+2 and then multiply by 3").await?;
 //!
@@ -310,7 +310,7 @@
 //!     .model("gpt-4")
 //!     .api_key("sk-...")
 //!     .hooks(hooks)
-//!     .build()?);
+//!     .build()?)?;
 //!
 //! // Hooks will be executed automatically
 //! client.send("Hello!").await?;
@@ -529,7 +529,7 @@ pub async fn query(prompt: &str, options: &AgentOptions) -> Result<ContentStream
     // Create HTTP client with configured timeout
     // The timeout applies to the entire request, not individual chunks
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(options.timeout))
+        .timeout(Duration::from_secs(options.timeout()))
         .build()
         .map_err(Error::Http)?;
 
@@ -539,10 +539,10 @@ pub async fn query(prompt: &str, options: &AgentOptions) -> Result<ContentStream
 
     // Add system prompt if provided
     // System prompts set the assistant's behavior and context
-    if !options.system_prompt.is_empty() {
+    if !options.system_prompt().is_empty() {
         messages.push(OpenAIMessage {
             role: "system".to_string(),
-            content: options.system_prompt.clone(),
+            content: options.system_prompt().to_string(),
             tool_calls: None,
             tool_call_id: None,
         });
@@ -559,8 +559,14 @@ pub async fn query(prompt: &str, options: &AgentOptions) -> Result<ContentStream
 
     // Convert tools to OpenAI format if any are provided
     // Tools are described using JSON Schema for parameter validation
-    let tools = if !options.tools.is_empty() {
-        Some(options.tools.iter().map(|t| t.to_openai_format()).collect())
+    let tools = if !options.tools().is_empty() {
+        Some(
+            options
+                .tools()
+                .iter()
+                .map(|t| t.to_openai_format())
+                .collect(),
+        )
     } else {
         None
     };
@@ -568,19 +574,19 @@ pub async fn query(prompt: &str, options: &AgentOptions) -> Result<ContentStream
     // Build the OpenAI-compatible request payload
     // stream=true enables Server-Sent Events for incremental responses
     let request = OpenAIRequest {
-        model: options.model.clone(),
+        model: options.model().to_string(),
         messages,
         stream: true, // Critical: enables SSE streaming
-        max_tokens: options.max_tokens,
-        temperature: Some(options.temperature),
+        max_tokens: options.max_tokens(),
+        temperature: Some(options.temperature()),
         tools,
     };
 
     // Make HTTP POST request to the chat completions endpoint
-    let url = format!("{}/chat/completions", options.base_url);
+    let url = format!("{}/chat/completions", options.base_url());
     let response = client
         .post(&url)
-        .header("Authorization", format!("Bearer {}", options.api_key))
+        .header("Authorization", format!("Bearer {}", options.api_key()))
         .header("Content-Type", "application/json")
         .json(&request)
         .send()
@@ -591,10 +597,10 @@ pub async fn query(prompt: &str, options: &AgentOptions) -> Result<ContentStream
     // This catches authentication failures, rate limits, invalid models, etc.
     if !response.status().is_success() {
         let status = response.status();
-        let body = response
-            .text()
-            .await
-            .unwrap_or_else(|_| "Unknown error".to_string());
+        let body = response.text().await.unwrap_or_else(|e| {
+            eprintln!("WARNING: Failed to read error response body: {}", e);
+            "Unknown error (failed to read response body)".to_string()
+        });
         return Err(Error::api(format!("API error {}: {}", status, body)));
     }
 
@@ -700,7 +706,7 @@ pub async fn query(prompt: &str, options: &AgentOptions) -> Result<ContentStream
 /// let mut client = Client::new(AgentOptions::builder()
 ///     .model("gpt-4")
 ///     .api_key("sk-...")
-///     .build()?);
+///     .build()?)?;
 ///
 /// // First question
 /// client.send("What's the capital of France?").await?;
@@ -739,7 +745,7 @@ pub async fn query(prompt: &str, options: &AgentOptions) -> Result<ContentStream
 ///     .model("gpt-4")
 ///     .api_key("sk-...")
 ///     .tools(vec![calculator])
-///     .build()?);
+///     .build()?)?;
 ///
 /// client.send("What's 2+2?").await?;
 ///
@@ -748,7 +754,7 @@ pub async fn query(prompt: &str, options: &AgentOptions) -> Result<ContentStream
 ///         ContentBlock::ToolUse(tool_use) => {
 ///             // Execute tool manually
 ///             let result = json!({"result": 4});
-///             client.add_tool_result(&tool_use.id, result);
+///             client.add_tool_result(&tool_use.id, result)?;
 ///
 ///             // Continue conversation to get model's response
 ///             client.send("").await?;
@@ -782,7 +788,7 @@ pub async fn query(prompt: &str, options: &AgentOptions) -> Result<ContentStream
 ///     .api_key("sk-...")
 ///     .tools(vec![calculator])
 ///     .auto_execute_tools(true)  // Enable auto-execution
-///     .build()?);
+///     .build()?)?;
 ///
 /// client.send("What's 2+2?").await?;
 ///
@@ -803,13 +809,13 @@ pub async fn query(prompt: &str, options: &AgentOptions) -> Result<ContentStream
 /// use std::time::Duration;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let mut client = Client::new(AgentOptions::default());
+/// let mut client = Client::new(AgentOptions::default())?;
 ///
 /// // Start a long-running query
 /// client.send("Write a very long story").await?;
 ///
 /// // Spawn a task to interrupt after timeout
-/// let interrupt_handle = client.interrupted.clone();
+/// let interrupt_handle = client.interrupt_handle();
 /// tokio::spawn(async move {
 ///     tokio::time::sleep(Duration::from_secs(5)).await;
 ///     interrupt_handle.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -900,39 +906,43 @@ impl Client {
     ///
     /// - `options`: Configuration including model, API key, tools, hooks, etc.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if the HTTP client cannot be built (extremely rare, usually indicates
-    /// invalid TLS configuration or system resource exhaustion).
+    /// Returns an error if the HTTP client cannot be built. This can happen due to:
+    /// - Invalid TLS configuration
+    /// - System resource exhaustion
+    /// - Invalid timeout values
     ///
     /// # Examples
     ///
     /// ```rust
     /// use open_agent::{Client, AgentOptions};
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = Client::new(AgentOptions::builder()
     ///     .model("gpt-4")
-    ///     .api_key("sk-...")
-    ///     .build()
-    ///     .unwrap());
+    ///     .base_url("http://localhost:1234/v1")
+    ///     .build()?)?;
+    /// # Ok(())
+    /// # }
     /// ```
-    pub fn new(options: AgentOptions) -> Self {
+    pub fn new(options: AgentOptions) -> Result<Self> {
         // Build HTTP client with configured timeout
         // This client is reused across all requests for connection pooling
         let http_client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(options.timeout))
+            .timeout(Duration::from_secs(options.timeout()))
             .build()
-            .expect("Failed to build HTTP client");
+            .map_err(|e| Error::config(format!("Failed to build HTTP client: {}", e)))?;
 
-        Self {
+        Ok(Self {
             options,
-            history: Vec::new(),              // Empty conversation history
-            current_stream: None,              // No active stream yet
+            history: Vec::new(),  // Empty conversation history
+            current_stream: None, // No active stream yet
             http_client,
             interrupted: Arc::new(AtomicBool::new(false)), // Not interrupted initially
-            auto_exec_buffer: Vec::new(),      // Empty buffer for auto mode
-            auto_exec_index: 0,                // Start at beginning of buffer
-        }
+            auto_exec_buffer: Vec::new(),                  // Empty buffer for auto mode
+            auto_exec_index: 0,                            // Start at beginning of buffer
+        })
     }
 
     /// Sends a user message and initiates streaming of the model's response.
@@ -1008,7 +1018,7 @@ impl Client {
     /// ```rust,no_run
     /// # use open_agent::{Client, AgentOptions};
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let mut client = Client::new(AgentOptions::default());
+    /// # let mut client = Client::new(AgentOptions::default())?;
     /// client.send("Hello!").await?;
     ///
     /// while let Some(block) = client.receive().await? {
@@ -1024,13 +1034,13 @@ impl Client {
     /// # use open_agent::{Client, AgentOptions, ContentBlock};
     /// # use serde_json::json;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let mut client = Client::new(AgentOptions::default());
+    /// # let mut client = Client::new(AgentOptions::default())?;
     /// client.send("Use the calculator").await?;
     ///
     /// while let Some(block) = client.receive().await? {
     ///     if let ContentBlock::ToolUse(tool_use) = block {
     ///         // Execute tool and add result
-    ///         client.add_tool_result(&tool_use.id, json!({"result": 42}));
+    ///         client.add_tool_result(&tool_use.id, json!({"result": 42}))?;
     ///
     ///         // Continue conversation with empty prompt
     ///         client.send("").await?;
@@ -1060,17 +1070,17 @@ impl Client {
         let event = UserPromptSubmitEvent::new(final_prompt.clone(), history_snapshot);
 
         // Execute all registered UserPromptSubmit hooks
-        if let Some(decision) = self.options.hooks.execute_user_prompt_submit(event).await {
+        if let Some(decision) = self.options.hooks().execute_user_prompt_submit(event).await {
             // Check if hook wants to block execution
-            if !decision.continue_execution {
+            if !decision.continue_execution() {
                 return Err(Error::other(format!(
                     "Prompt blocked by hook: {}",
-                    decision.reason.unwrap_or_default()
+                    decision.reason().unwrap_or("")
                 )));
             }
             // Apply any prompt modifications from hooks
-            if let Some(modified) = decision.modified_prompt {
-                final_prompt = modified;
+            if let Some(modified) = decision.modified_prompt() {
+                final_prompt = modified.to_string();
             }
         }
 
@@ -1085,10 +1095,10 @@ impl Client {
 
         // Add system prompt as first message if configured
         // System prompts are added fresh for each request (not from history)
-        if !self.options.system_prompt.is_empty() {
+        if !self.options.system_prompt().is_empty() {
             messages.push(OpenAIMessage {
                 role: "system".to_string(),
-                content: self.options.system_prompt.clone(),
+                content: self.options.system_prompt().to_string(),
                 tool_calls: None,
                 tool_call_id: None,
             });
@@ -1098,14 +1108,21 @@ impl Client {
         // This includes user prompts, assistant responses, and tool results
         for msg in &self.history {
             // Extract text content from all content blocks
-            // Non-text blocks (tool use, tool results) are currently filtered out
-            // TODO: Properly handle tool_calls and tool_call_id fields
+            //
+            // KNOWN LIMITATION: ToolUse and ToolResult blocks are not serialized to OpenAI format.
+            // This works for the current streaming use case where tool calls are handled via
+            // ContentBlock::ToolUse/ToolResult in the response stream, but means conversation
+            // history cannot be fully round-tripped through OpenAI format. To implement proper
+            // serialization:
+            // 1. When processing ContentBlock::ToolUse, populate tool_calls array
+            // 2. When processing ContentBlock::ToolResult, populate tool_call_id field
+            // 3. Handle the different message structures (assistant with tool_calls vs tool with tool_call_id)
             let content = msg
                 .content
                 .iter()
                 .filter_map(|block| match block {
                     ContentBlock::Text(text) => Some(text.text.clone()),
-                    _ => None, // Skip ToolUse and ToolResult blocks for now
+                    _ => None, // Skip ToolUse and ToolResult blocks (see limitation above)
                 })
                 .collect::<Vec<_>>()
                 .join("\n");
@@ -1120,17 +1137,17 @@ impl Client {
                 }
                 .to_string(),
                 content,
-                tool_calls: None,    // TODO: Populate from ToolUse blocks
-                tool_call_id: None,  // TODO: Populate from ToolResult blocks
+                tool_calls: None, // LIMITATION: Not populated from ToolUse blocks (see above)
+                tool_call_id: None, // LIMITATION: Not populated from ToolResult blocks (see above)
             });
         }
 
         // Convert tools to OpenAI format if any are registered
         // Each tool is described with name, description, and JSON Schema parameters
-        let tools = if !self.options.tools.is_empty() {
+        let tools = if !self.options.tools().is_empty() {
             Some(
                 self.options
-                    .tools
+                    .tools()
                     .iter()
                     .map(|t| t.to_openai_format())
                     .collect(),
@@ -1141,20 +1158,23 @@ impl Client {
 
         // Build the OpenAI-compatible request payload
         let request = OpenAIRequest {
-            model: self.options.model.clone(),
+            model: self.options.model().to_string(),
             messages,
             stream: true, // Always stream for progressive rendering
-            max_tokens: self.options.max_tokens,
-            temperature: Some(self.options.temperature),
+            max_tokens: self.options.max_tokens(),
+            temperature: Some(self.options.temperature()),
             tools,
         };
 
         // Make HTTP POST request to chat completions endpoint
-        let url = format!("{}/chat/completions", self.options.base_url);
+        let url = format!("{}/chat/completions", self.options.base_url());
         let response = self
             .http_client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.options.api_key))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.options.api_key()),
+            )
             .header("Content-Type", "application/json")
             .json(&request)
             .send()
@@ -1165,10 +1185,10 @@ impl Client {
         // This catches authentication, rate limits, invalid models, etc.
         if !response.status().is_success() {
             let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
+            let body = response.text().await.unwrap_or_else(|e| {
+                eprintln!("WARNING: Failed to read error response body: {}", e);
+                "Unknown error (failed to read response body)".to_string()
+            });
             return Err(Error::api(format!("API error {}: {}", status, body)));
         }
 
@@ -1322,9 +1342,9 @@ impl Client {
         // Find tool in registered tools by name
         let tool = self
             .options
-            .tools
+            .tools()
             .iter()
-            .find(|t| t.name == tool_name)
+            .find(|t| t.name() == tool_name)
             .ok_or_else(|| Error::tool(format!("Tool '{}' not found", tool_name)))?;
 
         // Execute the tool's async function
@@ -1383,7 +1403,7 @@ impl Client {
 
         // Track iterations to prevent infinite loops
         let mut iteration = 0;
-        let max_iterations = self.options.max_tool_iterations;
+        let max_iterations = self.options.max_tool_iterations();
 
         loop {
             // ========================================================================
@@ -1478,15 +1498,16 @@ impl Client {
                     let mut block_reason = None;
 
                     // Execute all PreToolUse hooks
-                    if let Some(decision) = self.options.hooks.execute_pre_tool_use(pre_event).await
+                    if let Some(decision) =
+                        self.options.hooks().execute_pre_tool_use(pre_event).await
                     {
-                        if !decision.continue_execution {
+                        if !decision.continue_execution() {
                             // Hook blocked execution
                             should_execute = false;
-                            block_reason = decision.reason;
-                        } else if let Some(modified) = decision.modified_input {
+                            block_reason = decision.reason().map(|s| s.to_string());
+                        } else if let Some(modified) = decision.modified_input() {
                             // Hook modified the input
-                            tool_input = modified;
+                            tool_input = modified.clone();
                         }
                     }
 
@@ -1534,12 +1555,12 @@ impl Client {
 
                     let mut final_result = result;
                     if let Some(decision) =
-                        self.options.hooks.execute_post_tool_use(post_event).await
+                        self.options.hooks().execute_post_tool_use(post_event).await
                     {
                         // PostToolUse can modify the result
                         // Note: Uses modified_input field (naming is historical)
-                        if let Some(modified) = decision.modified_input {
-                            final_result = modified;
+                        if let Some(modified) = decision.modified_input() {
+                            final_result = modified.clone();
                         }
                     }
 
@@ -1631,7 +1652,7 @@ impl Client {
     /// ```rust,no_run
     /// # use open_agent::{Client, AgentOptions, ContentBlock};
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let mut client = Client::new(AgentOptions::default());
+    /// # let mut client = Client::new(AgentOptions::default())?;
     /// client.send("Hello!").await?;
     ///
     /// while let Some(block) = client.receive().await? {
@@ -1650,7 +1671,7 @@ impl Client {
     /// # use open_agent::{Client, AgentOptions, ContentBlock};
     /// # use serde_json::json;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let mut client = Client::new(AgentOptions::default());
+    /// # let mut client = Client::new(AgentOptions::default())?;
     /// client.send("Use the calculator").await?;
     ///
     /// while let Some(block) = client.receive().await? {
@@ -1665,7 +1686,7 @@ impl Client {
     ///             let result = json!({"result": 42});
     ///
     ///             // Add result and continue
-    ///             client.add_tool_result(&tool_use.id, result);
+    ///             client.add_tool_result(&tool_use.id, result)?;
     ///             client.send("").await?;
     ///         }
     ///         _ => {}
@@ -1683,7 +1704,7 @@ impl Client {
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut client = Client::new(AgentOptions::builder()
     ///     .auto_execute_tools(true)
-    ///     .build()?);
+    ///     .build()?)?;
     ///
     /// client.send("Calculate 2+2").await?;
     ///
@@ -1702,7 +1723,7 @@ impl Client {
     /// ```rust,no_run
     /// # use open_agent::{Client, AgentOptions};
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let mut client = Client::new(AgentOptions::default());
+    /// # let mut client = Client::new(AgentOptions::default())?;
     /// client.send("Hello").await?;
     ///
     /// loop {
@@ -1727,7 +1748,7 @@ impl Client {
         // ========================================================================
         // AUTO-EXECUTION MODE
         // ========================================================================
-        if self.options.auto_execute_tools {
+        if self.options.auto_execute_tools() {
             // Check if we have buffered blocks to return
             // In auto mode, all final text blocks are buffered and returned one at a time
             if self.auto_exec_index < self.auto_exec_buffer.len() {
@@ -1795,8 +1816,8 @@ impl Client {
     /// ```rust,no_run
     /// # use open_agent::{Client, AgentOptions};
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut client = Client::new(AgentOptions::default());
-    /// let interrupt_handle = client.interrupted.clone();
+    /// let mut client = Client::new(AgentOptions::default())?;
+    /// let interrupt_handle = client.interrupt_handle();
     ///
     /// // Use from another thread
     /// tokio::spawn(async move {
@@ -1828,7 +1849,7 @@ impl Client {
     /// use open_agent::{Client, AgentOptions};
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut client = Client::new(AgentOptions::default());
+    /// let mut client = Client::new(AgentOptions::default())?;
     ///
     /// client.send("Tell me a long story").await?;
     ///
@@ -1854,12 +1875,12 @@ impl Client {
     /// use std::time::Duration;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut client = Client::new(AgentOptions::default());
+    /// let mut client = Client::new(AgentOptions::default())?;
     ///
     /// client.send("Long request").await?;
     ///
     /// // Spawn timeout task
-    /// let interrupt_handle = client.interrupted.clone();
+    /// let interrupt_handle = client.interrupt_handle();
     /// tokio::spawn(async move {
     ///     tokio::time::sleep(Duration::from_secs(10)).await;
     ///     interrupt_handle.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -1874,6 +1895,35 @@ impl Client {
     pub fn interrupt(&self) {
         // Set interrupt flag using SeqCst for immediate visibility across all threads
         self.interrupted.store(true, Ordering::SeqCst);
+    }
+
+    /// Returns a clone of the interrupt handle for thread-safe cancellation.
+    ///
+    /// This method provides access to the shared `Arc<AtomicBool>` interrupt flag,
+    /// allowing it to be used from other threads or async tasks to signal cancellation.
+    ///
+    /// # Returns
+    ///
+    /// A cloned `Arc<AtomicBool>` that can be used to interrupt operations from any thread.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// # use open_agent::{Client, AgentOptions};
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut client = Client::new(AgentOptions::default())?;
+    /// let interrupt_handle = client.interrupt_handle();
+    ///
+    /// // Use from another thread
+    /// tokio::spawn(async move {
+    ///     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    ///     interrupt_handle.store(true, std::sync::atomic::Ordering::SeqCst);
+    /// });
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn interrupt_handle(&self) -> Arc<AtomicBool> {
+        self.interrupted.clone()
     }
 
     /// Returns a reference to the conversation history.
@@ -1898,10 +1948,13 @@ impl Client {
     ///
     /// ```rust
     /// # use open_agent::{Client, AgentOptions};
-    /// let client = Client::new(AgentOptions::default());
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let client = Client::new(AgentOptions::default())?;
     ///
     /// // Initially empty
     /// assert_eq!(client.history().len(), 0);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn history(&self) -> &[Message] {
         &self.history
@@ -1924,12 +1977,15 @@ impl Client {
     ///
     /// ```rust
     /// # use open_agent::{Client, AgentOptions};
-    /// let mut client = Client::new(AgentOptions::default());
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut client = Client::new(AgentOptions::default())?;
     ///
     /// // Remove oldest messages to stay within context limit
     /// if client.history().len() > 50 {
     ///     client.history_mut().drain(0..10);
     /// }
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn history_mut(&mut self) -> &mut Vec<Message> {
         &mut self.history
@@ -1949,12 +2005,15 @@ impl Client {
     ///
     /// ```rust
     /// # use open_agent::{Client, AgentOptions};
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = Client::new(AgentOptions::builder()
     ///     .model("gpt-4")
-    ///     .build()
-    ///     .unwrap());
+    ///     .base_url("http://localhost:1234/v1")
+    ///     .build()?)?;
     ///
-    /// println!("Using model: {}", client.options().model);
+    /// println!("Using model: {}", client.options().model());
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn options(&self) -> &AgentOptions {
         &self.options
@@ -1983,7 +2042,7 @@ impl Client {
     /// ```rust,no_run
     /// # use open_agent::{Client, AgentOptions, ContentBlock};
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut client = Client::new(AgentOptions::default());
+    /// let mut client = Client::new(AgentOptions::default())?;
     ///
     /// // First conversation
     /// client.send("Hello").await?;
@@ -2044,7 +2103,7 @@ impl Client {
     /// use serde_json::json;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut client = Client::new(AgentOptions::default());
+    /// let mut client = Client::new(AgentOptions::default())?;
     /// client.send("Use the calculator").await?;
     ///
     /// while let Some(block) = client.receive().await? {
@@ -2054,7 +2113,7 @@ impl Client {
     ///             let result = json!({"result": 42});
     ///
     ///             // Add result to history
-    ///             client.add_tool_result(&tool_use.id, result);
+    ///             client.add_tool_result(&tool_use.id, result)?;
     ///
     ///             // Continue conversation to get model's response
     ///             client.send("").await?;
@@ -2076,7 +2135,7 @@ impl Client {
     /// use serde_json::json;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let mut client = Client::new(AgentOptions::default());
+    /// # let mut client = Client::new(AgentOptions::default())?;
     /// # client.send("test").await?;
     /// while let Some(block) = client.receive().await? {
     ///     if let ContentBlock::ToolUse(tool_use) = block {
@@ -2089,7 +2148,7 @@ impl Client {
     ///             })
     ///         };
     ///
-    ///         client.add_tool_result(&tool_use.id, result);
+    ///         client.add_tool_result(&tool_use.id, result)?;
     ///         client.send("").await?;
     ///     }
     /// }
@@ -2108,7 +2167,7 @@ impl Client {
     /// use serde_json::json;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let mut client = Client::new(AgentOptions::default());
+    /// # let mut client = Client::new(AgentOptions::default())?;
     /// client.send("Calculate 2+2 and 3+3").await?;
     ///
     /// let mut tool_calls = Vec::new();
@@ -2123,7 +2182,7 @@ impl Client {
     /// // Execute and add results for all tools
     /// for tool_call in tool_calls {
     ///     let result = json!({"result": 42}); // Execute tool
-    ///     client.add_tool_result(&tool_call.id, result);
+    ///     client.add_tool_result(&tool_call.id, result)?;
     /// }
     ///
     /// // Continue conversation
@@ -2131,7 +2190,7 @@ impl Client {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn add_tool_result(&mut self, tool_use_id: &str, content: serde_json::Value) {
+    pub fn add_tool_result(&mut self, tool_use_id: &str, content: serde_json::Value) -> Result<()> {
         use crate::types::ToolResultBlock;
 
         // Create a tool result block with the given ID and content
@@ -2140,12 +2199,15 @@ impl Client {
         // Add to history as a tool message
         // Note: Currently using a simplified representation with TextBlock
         // TODO: Properly serialize ToolResultBlock for OpenAI format
+        let serialized = serde_json::to_string(&result_block.content)
+            .map_err(|e| Error::config(format!("Failed to serialize tool result: {}", e)))?;
+
         self.history.push(Message::new(
             MessageRole::Tool,
-            vec![ContentBlock::Text(TextBlock::new(
-                serde_json::to_string(&result_block.content).unwrap_or_default(),
-            ))],
+            vec![ContentBlock::Text(TextBlock::new(serialized))],
         ));
+
+        Ok(())
     }
 
     /// Looks up a registered tool by name.
@@ -2177,14 +2239,14 @@ impl Client {
     /// use open_agent::{Client, AgentOptions, ContentBlock};
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let mut client = Client::new(AgentOptions::default());
+    /// # let mut client = Client::new(AgentOptions::default())?;
     /// # client.send("test").await?;
     /// while let Some(block) = client.receive().await? {
     ///     if let ContentBlock::ToolUse(tool_use) = block {
     ///         if let Some(tool) = client.get_tool(&tool_use.name) {
     ///             // Execute the tool
     ///             let result = tool.execute(tool_use.input.clone()).await?;
-    ///             client.add_tool_result(&tool_use.id, result);
+    ///             client.add_tool_result(&tool_use.id, result)?;
     ///             client.send("").await?;
     ///         } else {
     ///             println!("Unknown tool: {}", tool_use.name);
@@ -2199,17 +2261,20 @@ impl Client {
     ///
     /// ```rust
     /// # use open_agent::{Client, AgentOptions};
-    /// # let client = Client::new(AgentOptions::default());
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let client = Client::new(AgentOptions::default())?;
     /// if client.get_tool("calculator").is_some() {
     ///     println!("Calculator is available");
     /// }
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn get_tool(&self, name: &str) -> Option<&crate::tools::Tool> {
         // Search registered tools by name
         self.options
-            .tools
+            .tools()
             .iter()
-            .find(|t| t.name == name)
+            .find(|t| t.name() == name)
             .map(|t| t.as_ref())
     }
 }
@@ -2227,7 +2292,25 @@ mod tests {
             .build()
             .unwrap();
 
-        let client = Client::new(options);
+        let client = Client::new(options).expect("Should create client successfully");
+        assert_eq!(client.history().len(), 0);
+    }
+
+    #[test]
+    fn test_client_new_returns_result() {
+        // Test that Client::new() returns Result instead of panicking
+        let options = AgentOptions::builder()
+            .system_prompt("Test")
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .build()
+            .unwrap();
+
+        // This should not panic - it should return Ok(client)
+        let result = Client::new(options);
+        assert!(result.is_ok(), "Client::new() should return Ok");
+
+        let client = result.unwrap();
         assert_eq!(client.history().len(), 0);
     }
 
@@ -2240,7 +2323,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let client = Client::new(options);
+        let client = Client::new(options).expect("Should create client successfully");
         // Initially not interrupted
         assert!(!client.interrupted.load(Ordering::SeqCst));
     }
@@ -2254,7 +2337,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let client = Client::new(options);
+        let client = Client::new(options).expect("Should create client successfully");
         client.interrupt();
         assert!(client.interrupted.load(Ordering::SeqCst));
     }
@@ -2268,7 +2351,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let client = Client::new(options);
+        let client = Client::new(options).expect("Should create client successfully");
         client.interrupt();
         assert!(client.interrupted.load(Ordering::SeqCst));
 
@@ -2286,7 +2369,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let mut client = Client::new(options);
+        let mut client = Client::new(options).expect("Should create client successfully");
 
         // Interrupt before receiving
         client.interrupt();
@@ -2306,7 +2389,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let mut client = Client::new(options);
+        let mut client = Client::new(options).expect("Should create client successfully");
 
         // No stream started - receive() should return Ok(None)
         let result = client.receive().await;
@@ -2325,7 +2408,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let client = Client::new(options);
+        let client = Client::new(options).expect("Should create client successfully");
 
         // Signature check: receive() returns Result<Option<ContentBlock>>
         // This means we can use ? operator cleanly:

@@ -289,7 +289,7 @@ timeout issues, or permission problems, provide concrete steps to diagnose
 and resolve them."#,
         );
 
-        let mut client = Client::new(self.options.clone());
+        let mut client = Client::new(self.options.clone())?;
         client.send(&context).await?;
 
         let mut response = String::new();

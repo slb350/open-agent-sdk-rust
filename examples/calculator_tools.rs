@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("User: {}", query);
         println!("{}", "-".repeat(50));
 
-        let mut client = Client::new(options.clone());
+        let mut client = Client::new(options.clone())?;
         client.send(query).await?;
 
         // Process responses and handle tool calls
@@ -109,7 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 println!("   Result: {}", result);
 
                                 // Add result to conversation
-                                client.add_tool_result(&tool_use.id, result);
+                                client.add_tool_result(&tool_use.id, result)?;
 
                                 // Continue conversation to get assistant's response
                                 client.send("").await?;

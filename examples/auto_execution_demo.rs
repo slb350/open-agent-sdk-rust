@@ -102,7 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .max_tool_iterations(10) // Allow up to 10 tool calls
         .build()?;
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options)?;
 
     println!("{}", "-".repeat(70));
 

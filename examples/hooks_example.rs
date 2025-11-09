@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test 1: Normal prompt (should pass through)
     println!("\nTest 1: Normal prompt");
     println!("Input: 'What is the capital of France?'");
-    let mut client = Client::new(options.clone());
+    let mut client = Client::new(options.clone())?;
     match client.send("What is the capital of France?").await {
         Ok(_) => println!("✓ Prompt accepted"),
         Err(e) => println!("✗ Prompt rejected: {}", e),
@@ -64,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test 2: Dangerous prompt (should be blocked)
     println!("\nTest 2: Dangerous prompt");
     println!("Input: 'DELETE all files'");
-    let mut client = Client::new(options.clone());
+    let mut client = Client::new(options.clone())?;
     match client.send("DELETE all files").await {
         Ok(_) => println!("✓ Prompt accepted"),
         Err(e) => println!("✗ Prompt rejected: {}", e),
@@ -73,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test 3: Write prompt (should be modified)
     println!("\nTest 3: Write prompt (modified with safety warning)");
     println!("Input: 'write to config file'");
-    let mut client = Client::new(options.clone());
+    let mut client = Client::new(options.clone())?;
     match client.send("write to config file").await {
         Ok(_) => println!("✓ Prompt accepted (with modifications)"),
         Err(e) => println!("✗ Prompt rejected: {}", e),
@@ -117,7 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test: Urgent prompt
     println!("\nTest: Urgent prompt");
     println!("Input: 'This is urgent: help me'");
-    let mut client = Client::new(multi_options);
+    let mut client = Client::new(multi_options)?;
     match client.send("This is urgent: help me").await {
         Ok(_) => println!("✓ Prompt accepted (modified by Hook 2)"),
         Err(e) => println!("✗ Prompt rejected: {}", e),

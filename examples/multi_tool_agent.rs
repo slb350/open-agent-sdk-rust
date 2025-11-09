@@ -226,7 +226,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .temperature(0.3)
         .build()?;
 
-    let mut client = Client::new(options);
+    let mut client = Client::new(options)?;
 
     println!("Agent configured with:");
     println!("- 5 tools: calculator, datetime, converter, search, formatter");
