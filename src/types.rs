@@ -65,9 +65,9 @@
 //! let msg = Message::user("Hello, how are you?");
 //! ```
 
+use crate::Error;
 use crate::hooks::Hooks;
 use crate::tools::Tool;
-use crate::Error;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -114,7 +114,9 @@ impl ModelName {
         let trimmed = name.trim();
 
         if trimmed.is_empty() {
-            return Err(Error::invalid_input("Model name cannot be empty or whitespace"));
+            return Err(Error::invalid_input(
+                "Model name cannot be empty or whitespace",
+            ));
         }
 
         Ok(ModelName(name))
@@ -183,7 +185,9 @@ impl BaseUrl {
         }
 
         if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
-            return Err(Error::invalid_input("base_url must start with http:// or https://"));
+            return Err(Error::invalid_input(
+                "base_url must start with http:// or https://",
+            ));
         }
 
         Ok(BaseUrl(url))
@@ -248,7 +252,7 @@ impl Temperature {
     pub fn new(temp: f32) -> crate::Result<Self> {
         if !(0.0..=2.0).contains(&temp) {
             return Err(Error::invalid_input(
-                "temperature must be between 0.0 and 2.0"
+                "temperature must be between 0.0 and 2.0",
             ));
         }
 

@@ -56,6 +56,7 @@ criterion = "0.5"
 [lib]
 name = "open_agent"
 path = "src/lib.rs"
+bench = false
 
 [[example]]
 name = "simple_query"

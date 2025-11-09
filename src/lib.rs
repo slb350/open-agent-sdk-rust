@@ -214,7 +214,7 @@ pub use types::{
 pub mod prelude {
     pub use crate::{
         AgentOptions, AgentOptionsBuilder, BaseUrl, Client, ContentBlock, Error, HookDecision,
-        Hooks, ModelName, PostToolUseEvent, PreToolUseEvent, Result, Temperature, TextBlock,
-        Tool, ToolUseBlock, UserPromptSubmitEvent, query, tool,
+        Hooks, ModelName, PostToolUseEvent, PreToolUseEvent, Result, Temperature, TextBlock, Tool,
+        ToolUseBlock, UserPromptSubmitEvent, query, tool,
     };
 }
