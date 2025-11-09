@@ -504,7 +504,7 @@ impl AgentOptionsBuilder {
     ///
     /// Must be an OpenAI-compatible endpoint. Common values:
     /// - Local: "http://localhost:1234/v1" (LM Studio default)
-    /// - OpenAI: "https://api.openai.com/v1"
+    /// - OpenAI: <https://api.openai.com/v1>
     /// - Custom: Your inference server URL
     ///
     /// # Example
@@ -2102,7 +2102,7 @@ mod tests {
         assert_eq!(options.max_tokens(), Some(1000));
         assert_eq!(options.temperature(), 0.5);
         assert_eq!(options.timeout(), 30);
-        assert_eq!(options.auto_execute_tools(), true);
+        assert!(options.auto_execute_tools());
         assert_eq!(options.max_tool_iterations(), 10);
         assert_eq!(options.tools().len(), 0);
     }

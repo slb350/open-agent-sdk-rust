@@ -88,10 +88,10 @@
 //!
 //! The client maintains several pieces of state:
 //!
-//! - **history**: Full conversation history (Vec<Message>)
-//! - **current_stream**: Active SSE stream being consumed (Option<ContentStream>)
-//! - **interrupted**: Atomic flag for cancellation (Arc<AtomicBool>)
-//! - **auto_exec_buffer**: Buffered blocks for auto-execution mode (Vec<ContentBlock>)
+//! - **history**: Full conversation history (`Vec<Message>`)
+//! - **current_stream**: Active SSE stream being consumed (`Option<ContentStream>`)
+//! - **interrupted**: Atomic flag for cancellation (`Arc<AtomicBool>`)
+//! - **auto_exec_buffer**: Buffered blocks for auto-execution mode (`Vec<ContentBlock>`)
 //! - **auto_exec_index**: Current position in buffer (usize)
 //!
 //! ## Interruption Mechanism
@@ -393,7 +393,7 @@ pub type ContentStream = Pin<Box<dyn Stream<Item = Result<ContentBlock>> + Send>
 ///
 /// # Returns
 ///
-/// Returns a [`ContentStream`] that yields content blocks as they arrive from the model.
+/// Returns a `ContentStream` that yields content blocks as they arrive from the model.
 /// The stream must be polled to completion to receive all blocks.
 ///
 /// # Behavior

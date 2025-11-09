@@ -1089,7 +1089,7 @@ impl ToolBuilder {
     ///
     /// - `name`: Parameter name (will be required in tool calls)
     /// - `type_str`: Type string like "string", "number", "boolean", etc.
-    ///   See [`type_to_json_schema`] for supported type strings.
+    ///   Supported types: "string", "number", "integer", "boolean", "array", "object".
     ///
     /// ## Behavior
     ///

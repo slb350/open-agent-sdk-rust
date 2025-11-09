@@ -974,7 +974,7 @@ impl Hooks {
 
     /// Registers a PostToolUse hook handler using the builder pattern.
     ///
-    /// Identical to `add_pre_tool_use` but for PostToolUse events. See [`add_pre_tool_use`]
+    /// Identical to `add_pre_tool_use` but for PostToolUse events. See [`Self::add_pre_tool_use`]
     /// for detailed documentation.
     ///
     /// # Example
@@ -1003,7 +1003,7 @@ impl Hooks {
 
     /// Registers a UserPromptSubmit hook handler using the builder pattern.
     ///
-    /// Identical to `add_pre_tool_use` but for UserPromptSubmit events. See [`add_pre_tool_use`]
+    /// Identical to `add_pre_tool_use` but for UserPromptSubmit events. See [`Self::add_pre_tool_use`]
     /// for detailed documentation.
     ///
     /// # Example
@@ -1098,7 +1098,7 @@ impl Hooks {
 
     /// Executes all registered PostToolUse hooks in order and returns the first decision.
     ///
-    /// Identical in behavior to [`execute_pre_tool_use`] but for PostToolUse events.
+    /// Identical in behavior to [`Self::execute_pre_tool_use`] but for PostToolUse events.
     /// See that method for detailed documentation of the execution model.
     ///
     /// # Note
@@ -1118,7 +1118,7 @@ impl Hooks {
 
     /// Executes all registered UserPromptSubmit hooks in order and returns the first decision.
     ///
-    /// Identical in behavior to [`execute_pre_tool_use`] but for UserPromptSubmit events.
+    /// Identical in behavior to [`Self::execute_pre_tool_use`] but for UserPromptSubmit events.
     /// See that method for detailed documentation of the execution model.
     pub async fn execute_user_prompt_submit(
         &self,
