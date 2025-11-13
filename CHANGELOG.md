@@ -5,6 +5,62 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2025-11-13
+
+### Fixed
+
+**CRITICAL**: Tool Call Serialization Bug - Infinite Loop with auto_execute_tools
+
+Fixed a critical bug where tool calls and tool results were not being serialized into OpenAI message format, causing an infinite loop when using `auto_execute_tools(true)`:
+
+**The Problem:**
+- Internal conversation history stored tool results as `ContentBlock::ToolResult`
+- When building OpenAI API requests, only text blocks were extracted
+- Tool results were silently dropped from the conversation history
+- LLM never saw tool results, so it called the same tool repeatedly
+- Loop continued until `max_tool_iterations` was reached
+- Same tool called 50+ times instead of once
+
+**The Fix:**
+- Tool calls now properly serialized with `tool_calls` array in assistant messages
+- Tool results now serialized as separate messages with `role: "tool"` and `tool_call_id`
+- Message building logic handles three cases:
+  1. Messages with ToolResult blocks → separate tool messages with `tool_call_id`
+  2. Messages with ToolUse blocks → assistant messages with `tool_calls` array
+  3. Messages with only text → normal text messages
+
+**Impact:**
+- ✅ Tool results now included in conversation history
+- ✅ LLM sees tool results and responds appropriately
+- ✅ Each tool called only once per unique request
+- ✅ `auto_execute_tools(true)` now fully functional
+- ✅ Works correctly with llama.cpp and other OpenAI-compatible servers
+
+**Technical Details:**
+- Modified `client.rs` message building logic (lines ~1105-1214)
+- Added imports for `OpenAIToolCall` and `OpenAIFunction`
+- Properly populates `tool_calls` field with tool ID, name, and serialized arguments
+- Properly populates `tool_call_id` field in tool response messages
+- Arguments serialized as JSON strings per OpenAI API specification
+
+**Test Case:**
+```rust
+// Before: Tool called 50+ times, no final response
+// After: Tool called once, final text response returned
+
+let client = Client::new(AgentOptions::builder()
+    .auto_execute_tools(true)
+    .tool(database_tool)
+    .build()?)?;
+
+client.send("how many users?").await?;
+while let Some(block) = client.receive().await? {
+    // Now receives: "The users table has 5 rows."
+}
+```
+
+See `examples/test_tool_serialization.rs` for demonstration.
+
 ## [0.4.0] - 2025-11-09
 
 ### Changed

@@ -313,7 +313,8 @@
 //! ```
 
 use crate::types::{
-    AgentOptions, ContentBlock, Message, MessageRole, OpenAIMessage, OpenAIRequest, TextBlock,
+    AgentOptions, ContentBlock, Message, MessageRole, OpenAIFunction, OpenAIMessage,
+    OpenAIRequest, OpenAIToolCall, TextBlock,
 };
 use crate::utils::{ToolCallAggregator, parse_sse_stream};
 use crate::{Error, Result};
@@ -1101,39 +1102,94 @@ impl Client {
         // Convert conversation history to OpenAI message format
         // This includes user prompts, assistant responses, and tool results
         for msg in &self.history {
-            // Extract text content from all content blocks
-            //
-            // KNOWN LIMITATION: ToolUse and ToolResult blocks are not serialized to OpenAI format.
-            // This works for the current streaming use case where tool calls are handled via
-            // ContentBlock::ToolUse/ToolResult in the response stream, but means conversation
-            // history cannot be fully round-tripped through OpenAI format. To implement proper
-            // serialization:
-            // 1. When processing ContentBlock::ToolUse, populate tool_calls array
-            // 2. When processing ContentBlock::ToolResult, populate tool_call_id field
-            // 3. Handle the different message structures (assistant with tool_calls vs tool with tool_call_id)
-            let content = msg
-                .content
-                .iter()
-                .filter_map(|block| match block {
-                    ContentBlock::Text(text) => Some(text.text.clone()),
-                    _ => None, // Skip ToolUse and ToolResult blocks (see limitation above)
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
+            // Separate blocks by type to determine message structure
+            let mut text_blocks = Vec::new();
+            let mut tool_use_blocks = Vec::new();
+            let mut tool_result_blocks = Vec::new();
 
-            // Convert our MessageRole enum to OpenAI role string
-            messages.push(OpenAIMessage {
-                role: match msg.role {
+            for block in &msg.content {
+                match block {
+                    ContentBlock::Text(text) => text_blocks.push(text),
+                    ContentBlock::ToolUse(tool_use) => tool_use_blocks.push(tool_use),
+                    ContentBlock::ToolResult(tool_result) => tool_result_blocks.push(tool_result),
+                }
+            }
+
+            // Handle different message types based on content blocks
+            // Case 1: Message contains tool results (should be separate tool messages)
+            if !tool_result_blocks.is_empty() {
+                for tool_result in tool_result_blocks {
+                    // Serialize the tool result content as JSON string
+                    let content = serde_json::to_string(&tool_result.content)
+                        .unwrap_or_else(|e| {
+                            format!("{{\"error\": \"Failed to serialize: {}\"}}", e)
+                        });
+
+                    messages.push(OpenAIMessage {
+                        role: "tool".to_string(),
+                        content,
+                        tool_calls: None,
+                        tool_call_id: Some(tool_result.tool_use_id.clone()),
+                    });
+                }
+            }
+            // Case 2: Message contains tool use blocks (assistant with tool calls)
+            else if !tool_use_blocks.is_empty() {
+                // Build tool_calls array
+                let tool_calls: Vec<OpenAIToolCall> = tool_use_blocks
+                    .iter()
+                    .map(|tool_use| {
+                        // Serialize the input as a JSON string (OpenAI API requirement)
+                        let arguments = serde_json::to_string(&tool_use.input)
+                            .unwrap_or_else(|_| "{}".to_string());
+
+                        OpenAIToolCall {
+                            id: tool_use.id.clone(),
+                            call_type: "function".to_string(),
+                            function: OpenAIFunction {
+                                name: tool_use.name.clone(),
+                                arguments,
+                            },
+                        }
+                    })
+                    .collect();
+
+                // Extract any text content (some models include reasoning before tool calls)
+                let content = text_blocks
+                    .iter()
+                    .map(|t| t.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                messages.push(OpenAIMessage {
+                    role: "assistant".to_string(),
+                    content,
+                    tool_calls: Some(tool_calls),
+                    tool_call_id: None,
+                });
+            }
+            // Case 3: Message contains only text (normal message)
+            else {
+                let content = text_blocks
+                    .iter()
+                    .map(|t| t.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                let role_str = match msg.role {
                     MessageRole::System => "system",
                     MessageRole::User => "user",
                     MessageRole::Assistant => "assistant",
                     MessageRole::Tool => "tool",
-                }
-                .to_string(),
-                content,
-                tool_calls: None, // LIMITATION: Not populated from ToolUse blocks (see above)
-                tool_call_id: None, // LIMITATION: Not populated from ToolResult blocks (see above)
-            });
+                };
+
+                messages.push(OpenAIMessage {
+                    role: role_str.to_string(),
+                    content,
+                    tool_calls: None,
+                    tool_call_id: None,
+                });
+            }
         }
 
         // Convert tools to OpenAI format if any are registered
