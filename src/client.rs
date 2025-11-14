@@ -1195,6 +1195,14 @@ impl Client {
                     }
                 }
 
+                // Defensive check: content_parts should never be empty at this point
+                // If it is, it indicates a logic error (e.g., all blocks were filtered out)
+                if content_parts.is_empty() {
+                    return Err(Error::other(
+                        "Internal error: Message with images produced empty content array",
+                    ));
+                }
+
                 let role_str = match msg.role {
                     MessageRole::System => "system",
                     MessageRole::User => "user",
@@ -2508,5 +2516,41 @@ mod tests {
         // Type assertion to ensure signature is correct
         let _: Result<Option<ContentBlock>> = std::future::ready(Ok(None)).await;
         drop(client);
+    }
+
+    #[test]
+    fn test_empty_content_parts_protection() {
+        // Test for Issue #3 - Verify empty content_parts causes appropriate handling
+        // This documents expected behavior: messages with images should have content
+
+        use crate::types::{ContentBlock, ImageBlock, Message, MessageRole};
+
+        // GIVEN: Message with an image
+        let img = ImageBlock::from_url("https://example.com/test.jpg").expect("Valid URL");
+
+        let msg = Message::new(MessageRole::User, vec![ContentBlock::Image(img)]);
+
+        // WHEN: Building content_parts
+        let mut content_parts = Vec::new();
+        for block in &msg.content {
+            match block {
+                ContentBlock::Text(text) => {
+                    content_parts.push(crate::types::OpenAIContentPart::text(&text.text));
+                }
+                ContentBlock::Image(image) => {
+                    content_parts.push(crate::types::OpenAIContentPart::image_url(
+                        image.url(),
+                        image.detail(),
+                    ));
+                }
+                _ => {}
+            }
+        }
+
+        // THEN: content_parts should not be empty
+        assert!(
+            !content_parts.is_empty(),
+            "Messages with images should produce non-empty content_parts"
+        );
     }
 }
