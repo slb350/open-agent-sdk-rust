@@ -8,8 +8,8 @@ use open_agent::{ImageBlock, OpenAIContentPart};
 #[test]
 fn test_from_image_requires_validated_imageblock() {
     // Create a validated ImageBlock (will pass validation checks)
-    let image_block = ImageBlock::from_url("https://example.com/image.jpg")
-        .expect("Valid HTTPS URL should pass");
+    let image_block =
+        ImageBlock::from_url("https://example.com/image.jpg").expect("Valid HTTPS URL should pass");
 
     // Construct OpenAIContentPart from validated ImageBlock
     let content_part = OpenAIContentPart::from_image(&image_block);
@@ -46,8 +46,8 @@ fn test_file_uri_cannot_bypass_validation() {
 fn test_data_uri_with_validated_base64() {
     // Create a validated ImageBlock from base64 (will pass validation)
     let base64_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-    let image_block = ImageBlock::from_base64(base64_data, "image/png")
-        .expect("Valid base64 should pass");
+    let image_block =
+        ImageBlock::from_base64(base64_data, "image/png").expect("Valid base64 should pass");
 
     // Construct OpenAIContentPart from validated ImageBlock
     let content_part = OpenAIContentPart::from_image(&image_block);

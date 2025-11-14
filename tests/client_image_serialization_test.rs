@@ -4,7 +4,9 @@
 //! throughout the message lifecycle, ensuring validation is preserved and
 //! images are correctly stored in history.
 
-use open_agent::{AgentOptions, Client, ContentBlock, ImageBlock, ImageDetail, Message, MessageRole};
+use open_agent::{
+    AgentOptions, Client, ContentBlock, ImageBlock, ImageDetail, Message, MessageRole,
+};
 
 #[test]
 fn test_client_preserves_http_image_url() {
@@ -19,8 +21,7 @@ fn test_client_preserves_http_image_url() {
 
     // Create a validated ImageBlock with HTTP URL
     let image_url = "https://example.com/test.jpg";
-    let image = ImageBlock::from_url(image_url)
-        .expect("Valid HTTPS URL");
+    let image = ImageBlock::from_url(image_url).expect("Valid HTTPS URL");
     let msg = Message::new(
         MessageRole::User,
         vec![
@@ -62,12 +63,8 @@ fn test_client_preserves_base64_data_uri() {
 
     // Create a validated ImageBlock from base64
     let base64_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-    let image = ImageBlock::from_base64(base64_data, "image/png")
-        .expect("Valid base64");
-    let msg = Message::new(
-        MessageRole::User,
-        vec![ContentBlock::Image(image)],
-    );
+    let image = ImageBlock::from_base64(base64_data, "image/png").expect("Valid base64");
+    let msg = Message::new(MessageRole::User, vec![ContentBlock::Image(image)]);
     client.history_mut().push(msg);
 
     // WHEN: We retrieve the message from history
@@ -85,7 +82,10 @@ fn test_client_preserves_base64_data_uri() {
                 url
             );
             // Verify the base64 data is preserved in the URL
-            assert!(url.contains(base64_data), "Should contain original base64 data");
+            assert!(
+                url.contains(base64_data),
+                "Should contain original base64 data"
+            );
         }
         _ => panic!("Expected Image content block"),
     }
@@ -114,10 +114,7 @@ fn test_client_preserves_image_detail_level() {
             .expect("Valid URL")
             .with_detail(*detail);
 
-        let msg = Message::new(
-            MessageRole::User,
-            vec![ContentBlock::Image(image)],
-        );
+        let msg = Message::new(MessageRole::User, vec![ContentBlock::Image(image)]);
         client.history_mut().push(msg);
     }
 
@@ -166,33 +163,53 @@ fn test_client_preserves_validation_in_conversation() {
     // Add assistant response (text only)
     client.history_mut().push(Message::new(
         MessageRole::Assistant,
-        vec![ContentBlock::Text(open_agent::TextBlock::new("I see the image"))],
+        vec![ContentBlock::Text(open_agent::TextBlock::new(
+            "I see the image",
+        ))],
     ));
 
     // Add another user message (text only)
     client.history_mut().push(Message::new(
         MessageRole::User,
-        vec![ContentBlock::Text(open_agent::TextBlock::new("Can you describe it?"))],
+        vec![ContentBlock::Text(open_agent::TextBlock::new(
+            "Can you describe it?",
+        ))],
     ));
 
     // WHEN: We retrieve all messages from history
     // THEN: All messages should be preserved correctly
-    assert_eq!(client.history().len(), 3, "Should have 3 messages in history");
+    assert_eq!(
+        client.history().len(),
+        3,
+        "Should have 3 messages in history"
+    );
 
     // First message should have text + image with validated URL
     let user_msg_1 = &client.history()[0];
-    assert_eq!(user_msg_1.content.len(), 2, "First message should have 2 blocks");
+    assert_eq!(
+        user_msg_1.content.len(),
+        2,
+        "First message should have 2 blocks"
+    );
     match &user_msg_1.content[1] {
         ContentBlock::Image(img) => {
             assert_eq!(img.url(), image_url, "Image URL should be preserved");
-            assert_eq!(img.detail(), ImageDetail::High, "Detail level should be preserved");
+            assert_eq!(
+                img.detail(),
+                ImageDetail::High,
+                "Detail level should be preserved"
+            );
         }
         _ => panic!("Expected Image content block"),
     }
 
     // Second message should be text-only assistant response
     let assistant_msg = &client.history()[1];
-    assert_eq!(assistant_msg.content.len(), 1, "Assistant message should have 1 block");
+    assert_eq!(
+        assistant_msg.content.len(),
+        1,
+        "Assistant message should have 1 block"
+    );
     match &assistant_msg.content[0] {
         ContentBlock::Text(text) => {
             assert_eq!(text.text, "I see the image");
@@ -202,7 +219,11 @@ fn test_client_preserves_validation_in_conversation() {
 
     // Third message should be text-only user message
     let user_msg_2 = &client.history()[2];
-    assert_eq!(user_msg_2.content.len(), 1, "Second user message should have 1 block");
+    assert_eq!(
+        user_msg_2.content.len(),
+        1,
+        "Second user message should have 1 block"
+    );
     match &user_msg_2.content[0] {
         ContentBlock::Text(text) => {
             assert_eq!(text.text, "Can you describe it?");

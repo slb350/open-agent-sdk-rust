@@ -1126,9 +1126,10 @@ impl Client {
             if !tool_result_blocks.is_empty() {
                 for tool_result in tool_result_blocks {
                     // Serialize the tool result content as JSON string
-                    let content = serde_json::to_string(tool_result.content()).unwrap_or_else(|e| {
-                        format!("{{\"error\": \"Failed to serialize: {}\"}}", e)
-                    });
+                    let content =
+                        serde_json::to_string(tool_result.content()).unwrap_or_else(|e| {
+                            format!("{{\"error\": \"Failed to serialize: {}\"}}", e)
+                        });
 
                     messages.push(OpenAIMessage {
                         role: "tool".to_string(),
@@ -1212,8 +1213,7 @@ impl Client {
                             };
                             log::debug!("  - Image: {} (detail: {})", url_display, detail_str);
 
-                            content_parts
-                                .push(OpenAIContentPart::from_image(image));
+                            content_parts.push(OpenAIContentPart::from_image(image));
                         }
                         ContentBlock::ToolUse(_) | ContentBlock::ToolResult(_) => {}
                     }
