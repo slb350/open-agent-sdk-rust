@@ -32,7 +32,7 @@ use crate::types::Message;
 /// Estimate token count for message list
 ///
 /// Uses character-based approximation (1 token ≈ 4 characters).
-/// For images, uses GPT-4o Vision API token costs adjusted for different
+/// For images, uses OpenAI Vision API token costs adjusted for different
 /// detail levels.
 ///
 /// # Arguments
@@ -50,7 +50,7 @@ use crate::types::Message;
 /// - Llama, Qwen, Mistral: ~70-85% accurate
 /// - Always include 10-20% safety margin when checking limits
 ///
-/// Image token costs are based on GPT-4o and may differ for local models.
+/// Image token costs are based on OpenAI's Vision API and may differ significantly for local models.
 ///
 /// For more accurate estimation, consider using tiktoken bindings
 /// (not included to keep dependencies minimal).
@@ -94,8 +94,8 @@ pub fn estimate_tokens(messages: &[Message]) -> usize {
                     total_chars += text.text.len();
                 }
                 crate::types::ContentBlock::Image(image) => {
-                    // Token estimates based on GPT-4o Vision API
-                    // Local models may have different token costs
+                    // Token estimates based on OpenAI Vision API
+                    // Local models may have significantly different token costs
                     use crate::types::ImageDetail;
                     let token_estimate = match image.detail() {
                         ImageDetail::Low => 85 * 4,   // Fixed ~85 tokens (512x512 max)

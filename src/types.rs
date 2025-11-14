@@ -1342,17 +1342,17 @@ impl ToolResultBlock {
 /// Image detail level for vision API calls.
 ///
 /// Controls the resolution and token cost of image processing.
-/// Token costs are based on GPT-4o and may differ for local models
-/// (llama.cpp, Ollama, vLLM).
+/// Token costs are based on OpenAI's Vision API and may differ significantly
+/// for local models (llama.cpp, Ollama, vLLM).
 ///
-/// # Token Costs (GPT-4o)
+/// # Token Costs (OpenAI Vision API)
 ///
-/// - `Low`: Fixed ~85 tokens on GPT-4o, 512x512 resolution (cost-effective)
-/// - `High`: Variable tokens on GPT-4o based on dimensions (170 tokens per 512px tile + 85 base, for detailed analysis)
+/// - `Low`: Fixed ~85 tokens, 512x512 resolution (cost-effective)
+/// - `High`: Variable tokens based on dimensions (170 tokens per 512px tile + 85 base, for detailed analysis)
 /// - `Auto`: Model decides based on image characteristics (balanced default)
 ///
-/// **Note:** Local models may have different token costs. These values are
-/// approximations based on GPT-4o's Vision API.
+/// **Note:** Local models may have very different token costs. These values are
+/// approximations based on OpenAI's Vision API.
 ///
 /// # Examples
 ///
@@ -1774,9 +1774,9 @@ impl Message {
     /// Creates a user message with text and an image with specified detail level.
     ///
     /// Use this when you need control over the image detail level for token cost
-    /// management. On GPT-4o: `ImageDetail::Low` uses ~85 tokens, `ImageDetail::High`
-    /// uses more tokens based on image dimensions, and `ImageDetail::Auto` lets the
-    /// model decide. Local models may have different token costs.
+    /// management. On OpenAI's Vision API: `ImageDetail::Low` uses ~85 tokens,
+    /// `ImageDetail::High` uses more tokens based on image dimensions, and
+    /// `ImageDetail::Auto` lets the model decide. Local models may have very different token costs.
     ///
     /// # Arguments
     ///

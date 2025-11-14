@@ -86,12 +86,12 @@ let msg = Message::user_with_base64_image(
 
 #### Token Cost Management
 
-Images consume tokens based on detail level (GPT-4o):
-- **Low detail**: ~85 tokens on GPT-4o (cost-effective, suitable for OCR, object detection)
-- **High detail**: Variable tokens on GPT-4o based on dimensions (detailed analysis, fine text)
+Images consume tokens based on detail level (OpenAI Vision API):
+- **Low detail**: ~85 tokens (cost-effective, suitable for OCR, object detection)
+- **High detail**: Variable tokens based on dimensions (detailed analysis, fine text)
 - **Auto detail**: Model decides based on content (balanced default)
 
-**Note:** Token costs may vary on local models (llama.cpp, Ollama, etc.)
+**Note:** Token costs are based on OpenAI's Vision API and may vary significantly on local models (llama.cpp, Ollama, etc.)
 
 #### Documentation
 
