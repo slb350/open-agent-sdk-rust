@@ -1443,6 +1443,22 @@ impl ImageBlock {
             return Err(crate::Error::invalid_input("Image URL cannot be empty"));
         }
 
+        // Check for control characters in URL
+        if url.contains(char::is_control) {
+            return Err(crate::Error::invalid_input(
+                "Image URL contains invalid control characters",
+            ));
+        }
+
+        // Warn about very long URLs (>2000 chars)
+        if url.len() > 2000 {
+            eprintln!(
+                "WARNING: Very long image URL ({} chars). \
+                 Some APIs may have URL length limits.",
+                url.len()
+            );
+        }
+
         // Validate URL scheme
         if url.starts_with("http://") || url.starts_with("https://") {
             // Valid HTTP/HTTPS URL
@@ -1459,17 +1475,49 @@ impl ImageBlock {
             }
 
             // Extract MIME type from data:MIME;base64,DATA
-            if let Some(semicolon_pos) = mime_part.find(';') {
-                let mime_type = &mime_part[..semicolon_pos];
-                if mime_type.is_empty() || !mime_type.starts_with("image/") {
-                    return Err(crate::Error::invalid_input(
-                        "Data URI MIME type must start with 'image/'",
-                    ));
-                }
+            let mime_type = if let Some(semicolon_pos) = mime_part.find(';') {
+                &mime_part[..semicolon_pos]
             } else {
                 return Err(crate::Error::invalid_input(
                     "Malformed data URI: missing MIME type",
                 ));
+            };
+
+            if mime_type.is_empty() || !mime_type.starts_with("image/") {
+                return Err(crate::Error::invalid_input(
+                    "Data URI MIME type must start with 'image/'",
+                ));
+            }
+
+            // Extract and validate base64 data portion
+            if let Some(base64_start_pos) = url.find(";base64,") {
+                let base64_data = &url[base64_start_pos + 8..]; // Skip ";base64,"
+
+                // Validate base64 data using same rules as from_base64()
+                // Check character set
+                if !base64_data
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '+' || c == '/' || c == '=')
+                {
+                    return Err(crate::Error::invalid_input(
+                        "Data URI base64 data contains invalid characters. Valid characters: A-Z, a-z, 0-9, +, /, =",
+                    ));
+                }
+
+                // Check length (must be multiple of 4)
+                if base64_data.len() % 4 != 0 {
+                    return Err(crate::Error::invalid_input(
+                        "Data URI base64 data has invalid length (must be multiple of 4)",
+                    ));
+                }
+
+                // Validate padding
+                let equals_count = base64_data.chars().filter(|c| *c == '=').count();
+                if equals_count > 2 {
+                    return Err(crate::Error::invalid_input(
+                        "Data URI base64 data has invalid padding (max 2 '=' characters allowed)",
+                    ));
+                }
             }
 
             Ok(Self {
@@ -3068,6 +3116,94 @@ mod tests {
         assert!(result.is_err());
         // Should return InvalidInput error for malformed data URI
         assert!(matches!(result.unwrap_err(), crate::Error::InvalidInput(_)));
+    }
+
+    // Phase 2: Enhanced URL validation tests (RED)
+
+    #[test]
+    fn test_from_url_rejects_control_characters() {
+        // Should reject URLs with control characters
+        let invalid_urls = [
+            "https://example.com\n/image.jpg", // newline
+            "https://example.com\t/image.jpg", // tab
+            "https://example.com\0/image.jpg", // null
+            "https://example.com\r/image.jpg", // carriage return
+        ];
+
+        for url in &invalid_urls {
+            let result = ImageBlock::from_url(*url);
+            assert!(
+                result.is_err(),
+                "Should reject URL with control characters: {:?}",
+                url
+            );
+            let err = result.unwrap_err();
+            assert!(
+                err.to_string().contains("control") || err.to_string().contains("character"),
+                "Error should mention control characters, got: {}",
+                err
+            );
+        }
+    }
+
+    #[test]
+    fn test_from_url_warns_very_long_url() {
+        // Should warn (but accept) very long URLs (>2000 chars)
+        // 3000-char URL
+        let long_url = format!("https://example.com/{}", "a".repeat(2980));
+
+        // Should succeed but log a warning
+        let result = ImageBlock::from_url(&long_url);
+        assert!(result.is_ok(), "Should accept long URL (with warning)");
+
+        // Verify the URL was stored
+        let block = result.unwrap();
+        assert_eq!(block.url().len(), 3000);
+    }
+
+    #[test]
+    fn test_from_url_validates_data_uri_base64() {
+        // Should validate base64 portion of data URIs
+        let invalid_data_uris = [
+            "data:image/png;base64,hello world", // spaces in base64
+            "data:image/png;base64,@@@",         // invalid chars
+            "data:image/png;base64,ABC",         // invalid length (not divisible by 4)
+        ];
+
+        for uri in &invalid_data_uris {
+            let result = ImageBlock::from_url(*uri);
+            assert!(
+                result.is_err(),
+                "Should reject data URI with invalid base64: {}",
+                uri
+            );
+        }
+    }
+
+    #[test]
+    fn test_from_url_rejects_javascript_scheme() {
+        // Should explicitly reject javascript: scheme (XSS risk)
+        let result = ImageBlock::from_url("javascript:alert(1)");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("http") || err.to_string().contains("scheme"),
+            "Error should mention scheme requirements, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_from_url_rejects_file_scheme() {
+        // Should reject file: scheme (security risk)
+        let result = ImageBlock::from_url("file:///etc/passwd");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("http") || err.to_string().contains("scheme"),
+            "Error should mention scheme requirements, got: {}",
+            err
+        );
     }
 
     #[test]
