@@ -2328,8 +2328,8 @@ impl Client {
         let result_block = ToolResultBlock::new(tool_use_id, content);
 
         // Add to history as a tool message
-        // Note: Currently using a simplified representation with TextBlock
-        // TODO: Properly serialize ToolResultBlock for OpenAI format
+        // Note: ToolResultBlock is properly serialized in build_api_request()
+        // as a separate message with role="tool" and tool_call_id set
         let serialized = serde_json::to_string(&result_block.content)
             .map_err(|e| Error::config(format!("Failed to serialize tool result: {}", e)))?;
 

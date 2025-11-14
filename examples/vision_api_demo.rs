@@ -178,8 +178,7 @@ let msg = Message::user_with_image(
 
 // Add to history and send
 client.history_mut().push(msg);
-// Note: Current API requires using send() with text
-// Future enhancement: client.send_message(msg)?
+// Then call client.send() with your follow-up prompt
 "#
     );
 
