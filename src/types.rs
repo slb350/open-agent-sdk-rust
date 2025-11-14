@@ -1642,6 +1642,112 @@ impl Message {
             content,
         }
     }
+
+    /// Creates a user message with text and an image from a URL.
+    ///
+    /// This is a convenience method for the common pattern of sending text with
+    /// an image. The image uses `ImageDetail::Auto` by default. For more control
+    /// over detail level, use [`user_with_image_detail()`](Message::user_with_image_detail).
+    ///
+    /// # Arguments
+    ///
+    /// * `text` - The text prompt
+    /// * `image_url` - URL of the image (http/https or data URI)
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use open_agent::Message;
+    ///
+    /// let msg = Message::user_with_image(
+    ///     "What's in this image?",
+    ///     "https://example.com/photo.jpg"
+    /// );
+    /// ```
+    pub fn user_with_image(text: impl Into<String>, image_url: impl Into<String>) -> Self {
+        Self {
+            role: MessageRole::User,
+            content: vec![
+                ContentBlock::Text(TextBlock::new(text)),
+                ContentBlock::Image(ImageBlock::from_url(image_url)),
+            ],
+        }
+    }
+
+    /// Creates a user message with text and an image with specified detail level.
+    ///
+    /// Use this when you need control over the image detail level for token cost
+    /// management. `ImageDetail::Low` uses ~85 tokens, `ImageDetail::High` uses
+    /// more tokens based on image dimensions, and `ImageDetail::Auto` lets the
+    /// model decide.
+    ///
+    /// # Arguments
+    ///
+    /// * `text` - The text prompt
+    /// * `image_url` - URL of the image (http/https or data URI)
+    /// * `detail` - Detail level (Low, High, or Auto)
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use open_agent::{Message, ImageDetail};
+    ///
+    /// let msg = Message::user_with_image_detail(
+    ///     "Analyze this diagram in detail",
+    ///     "https://example.com/diagram.png",
+    ///     ImageDetail::High
+    /// );
+    /// ```
+    pub fn user_with_image_detail(
+        text: impl Into<String>,
+        image_url: impl Into<String>,
+        detail: ImageDetail,
+    ) -> Self {
+        Self {
+            role: MessageRole::User,
+            content: vec![
+                ContentBlock::Text(TextBlock::new(text)),
+                ContentBlock::Image(ImageBlock::from_url(image_url).with_detail(detail)),
+            ],
+        }
+    }
+
+    /// Creates a user message with text and a base64-encoded image.
+    ///
+    /// This is useful when you have image data in memory and want to send it
+    /// without uploading to a URL first. The image will be encoded as a data URI.
+    ///
+    /// # Arguments
+    ///
+    /// * `text` - The text prompt
+    /// * `base64_data` - Base64-encoded image data
+    /// * `mime_type` - MIME type (e.g., "image/png", "image/jpeg")
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use open_agent::Message;
+    ///
+    /// let base64_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ...";
+    /// let msg = Message::user_with_base64_image(
+    ///     "What's this image?",
+    ///     base64_data,
+    ///     "image/png"
+    /// );
+    /// ```
+    pub fn user_with_base64_image(
+        text: impl Into<String>,
+        base64_data: impl AsRef<str>,
+        mime_type: impl AsRef<str>,
+    ) -> Self {
+        Self {
+            role: MessageRole::User,
+            content: vec![
+                ContentBlock::Text(TextBlock::new(text)),
+                ContentBlock::Image(ImageBlock::from_base64(base64_data, mime_type)),
+            ],
+        }
+    }
 }
 
 /// OpenAI API message format for serialization.
@@ -2272,6 +2378,61 @@ mod tests {
         let msg = Message::assistant(content);
         assert!(matches!(msg.role, MessageRole::Assistant));
         assert_eq!(msg.content.len(), 1);
+    }
+
+    #[test]
+    fn test_message_user_with_image() {
+        let msg =
+            Message::user_with_image("What's in this image?", "https://example.com/image.jpg");
+        assert!(matches!(msg.role, MessageRole::User));
+        assert_eq!(msg.content.len(), 2);
+
+        // Should have text first, then image
+        match &msg.content[0] {
+            ContentBlock::Text(text) => assert_eq!(text.text, "What's in this image?"),
+            _ => panic!("Expected TextBlock at position 0"),
+        }
+        match &msg.content[1] {
+            ContentBlock::Image(image) => {
+                assert_eq!(image.url(), "https://example.com/image.jpg");
+                assert_eq!(image.detail(), ImageDetail::Auto);
+            }
+            _ => panic!("Expected ImageBlock at position 1"),
+        }
+    }
+
+    #[test]
+    fn test_message_user_with_image_and_detail() {
+        let msg = Message::user_with_image_detail(
+            "Analyze this in detail",
+            "https://example.com/diagram.png",
+            ImageDetail::High,
+        );
+        assert!(matches!(msg.role, MessageRole::User));
+        assert_eq!(msg.content.len(), 2);
+
+        match &msg.content[1] {
+            ContentBlock::Image(image) => {
+                assert_eq!(image.detail(), ImageDetail::High);
+            }
+            _ => panic!("Expected ImageBlock"),
+        }
+    }
+
+    #[test]
+    fn test_message_user_with_base64_image() {
+        let base64_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ";
+        let msg = Message::user_with_base64_image("What's this?", base64_data, "image/png");
+        assert!(matches!(msg.role, MessageRole::User));
+        assert_eq!(msg.content.len(), 2);
+
+        match &msg.content[1] {
+            ContentBlock::Image(image) => {
+                assert!(image.url().starts_with("data:image/png;base64,"));
+                assert!(image.url().contains(base64_data));
+            }
+            _ => panic!("Expected ImageBlock"),
+        }
     }
 
     #[test]
