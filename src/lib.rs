@@ -193,8 +193,9 @@ pub use tools::{Tool, ToolBuilder, tool};
 // --- Core Types ---
 
 pub use types::{
-    AgentOptions, AgentOptionsBuilder, BaseUrl, ContentBlock, Message, MessageRole, ModelName,
-    Temperature, TextBlock, ToolResultBlock, ToolUseBlock,
+    AgentOptions, AgentOptionsBuilder, BaseUrl, ContentBlock, ImageBlock, ImageDetail, Message,
+    MessageRole, ModelName, OpenAIContent, OpenAIContentPart, OpenAIImageUrl, Temperature,
+    TextBlock, ToolResultBlock, ToolUseBlock,
 };
 
 // ============================================================================

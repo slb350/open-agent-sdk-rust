@@ -313,8 +313,8 @@
 //! ```
 
 use crate::types::{
-    AgentOptions, ContentBlock, Message, MessageRole, OpenAIFunction, OpenAIMessage, OpenAIRequest,
-    OpenAIToolCall, TextBlock,
+    AgentOptions, ContentBlock, Message, MessageRole, OpenAIContent, OpenAIFunction, OpenAIMessage,
+    OpenAIRequest, OpenAIToolCall, TextBlock,
 };
 use crate::utils::{ToolCallAggregator, parse_sse_stream};
 use crate::{Error, Result};
@@ -537,7 +537,7 @@ pub async fn query(prompt: &str, options: &AgentOptions) -> Result<ContentStream
     if !options.system_prompt().is_empty() {
         messages.push(OpenAIMessage {
             role: "system".to_string(),
-            content: options.system_prompt().to_string(),
+            content: Some(OpenAIContent::Text(options.system_prompt().to_string())),
             tool_calls: None,
             tool_call_id: None,
         });
@@ -547,7 +547,7 @@ pub async fn query(prompt: &str, options: &AgentOptions) -> Result<ContentStream
     // This is the actual query from the user
     messages.push(OpenAIMessage {
         role: "user".to_string(),
-        content: prompt.to_string(),
+        content: Some(OpenAIContent::Text(prompt.to_string())),
         tool_calls: None,
         tool_call_id: None,
     });
@@ -1093,7 +1093,9 @@ impl Client {
         if !self.options.system_prompt().is_empty() {
             messages.push(OpenAIMessage {
                 role: "system".to_string(),
-                content: self.options.system_prompt().to_string(),
+                content: Some(OpenAIContent::Text(
+                    self.options.system_prompt().to_string(),
+                )),
                 tool_calls: None,
                 tool_call_id: None,
             });
@@ -1110,6 +1112,10 @@ impl Client {
             for block in &msg.content {
                 match block {
                     ContentBlock::Text(text) => text_blocks.push(text),
+                    ContentBlock::Image(_image) => {
+                        // Image handling will be implemented in Phase 2
+                        // For now, just ignore images to avoid compilation errors
+                    }
                     ContentBlock::ToolUse(tool_use) => tool_use_blocks.push(tool_use),
                     ContentBlock::ToolResult(tool_result) => tool_result_blocks.push(tool_result),
                 }
@@ -1126,7 +1132,7 @@ impl Client {
 
                     messages.push(OpenAIMessage {
                         role: "tool".to_string(),
-                        content,
+                        content: Some(OpenAIContent::Text(content)),
                         tool_calls: None,
                         tool_call_id: Some(tool_result.tool_use_id.clone()),
                     });
@@ -1154,11 +1160,16 @@ impl Client {
                     .collect();
 
                 // Extract any text content (some models include reasoning before tool calls)
-                let content = text_blocks
-                    .iter()
-                    .map(|t| t.text.as_str())
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                let content = if !text_blocks.is_empty() {
+                    let text = text_blocks
+                        .iter()
+                        .map(|t| t.text.as_str())
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    Some(OpenAIContent::Text(text))
+                } else {
+                    None
+                };
 
                 messages.push(OpenAIMessage {
                     role: "assistant".to_string(),
@@ -1184,7 +1195,7 @@ impl Client {
 
                 messages.push(OpenAIMessage {
                     role: role_str.to_string(),
-                    content,
+                    content: Some(OpenAIContent::Text(content)),
                     tool_calls: None,
                     tool_call_id: None,
                 });

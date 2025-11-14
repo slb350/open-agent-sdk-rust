@@ -89,6 +89,13 @@ pub fn estimate_tokens(messages: &[Message]) -> usize {
                 crate::types::ContentBlock::Text(text) => {
                     total_chars += text.text.len();
                 }
+                crate::types::ContentBlock::Image(image) => {
+                    // Images add significant overhead for vision models
+                    // URL length + estimated token cost (low: ~85, high: ~170+)
+                    total_chars += image.url().len();
+                    // Add estimated token overhead (conservative estimate)
+                    total_chars += 200; // Rough token estimate
+                }
                 crate::types::ContentBlock::ToolUse(tool) => {
                     // Tool calls add significant overhead
                     total_chars += tool.name.len();

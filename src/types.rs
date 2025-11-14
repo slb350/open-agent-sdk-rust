@@ -1131,18 +1131,23 @@ pub enum MessageRole {
 /// # Block Types
 ///
 /// - [`Text`](ContentBlock::Text): Simple text content
+/// - [`Image`](ContentBlock::Image): Image content (URL or base64)
 /// - [`ToolUse`](ContentBlock::ToolUse): Request from model to execute a tool
 /// - [`ToolResult`](ContentBlock::ToolResult): Result of tool execution
 ///
 /// # Usage
 ///
-/// Messages can contain multiple blocks. For example, an assistant message
-/// might include text explaining its reasoning followed by a tool use request.
+/// Messages can contain multiple blocks. For example, a user message might
+/// include text and an image, or an assistant message might include text
+/// followed by a tool use request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
     /// Text content block containing a string message.
     Text(TextBlock),
+
+    /// Image content block for vision-capable models.
+    Image(ImageBlock),
 
     /// Tool use request from the model to execute a function.
     ToolUse(ToolUseBlock),
@@ -1331,6 +1336,146 @@ impl ToolResultBlock {
             tool_use_id: tool_use_id.into(),
             content,
         }
+    }
+}
+
+/// Image detail level for vision API calls.
+///
+/// Controls the resolution and token cost of image processing.
+///
+/// # Token Costs (gpt-4o)
+///
+/// - `Low`: Fixed 85 tokens, 512x512 resolution
+/// - `High`: Variable tokens based on dimensions (170 tokens per 512px tile + 85 base)
+/// - `Auto`: Model decides based on image characteristics (default)
+///
+/// # Examples
+///
+/// ```
+/// use open_agent::ImageDetail;
+///
+/// let detail = ImageDetail::High;
+/// assert_eq!(detail.to_string(), "high");
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[derive(Default)]
+pub enum ImageDetail {
+    /// Low resolution (512x512), fixed 85 tokens
+    Low,
+    /// High resolution, variable tokens based on dimensions
+    High,
+    /// Automatic selection (default)
+    #[default]
+    Auto,
+}
+
+
+impl std::fmt::Display for ImageDetail {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ImageDetail::Low => write!(f, "low"),
+            ImageDetail::High => write!(f, "high"),
+            ImageDetail::Auto => write!(f, "auto"),
+        }
+    }
+}
+
+/// Image content block for vision-capable models.
+///
+/// Supports both URL-based images and base64-encoded images.
+///
+/// # Examples
+///
+/// ```
+/// use open_agent::{ImageBlock, ImageDetail};
+///
+/// // From URL
+/// let image = ImageBlock::from_url("https://example.com/image.jpg");
+///
+/// // From base64
+/// let image = ImageBlock::from_base64("iVBORw0KGgo...", "image/png");
+///
+/// // With detail level
+/// let image = ImageBlock::from_url("https://example.com/image.jpg")
+///     .with_detail(ImageDetail::High);
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImageBlock {
+    url: String,
+    #[serde(default)]
+    detail: ImageDetail,
+}
+
+impl ImageBlock {
+    /// Creates a new image block from a URL.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use open_agent::ImageBlock;
+    ///
+    /// let image = ImageBlock::from_url("https://example.com/cat.jpg");
+    /// assert_eq!(image.url(), "https://example.com/cat.jpg");
+    /// ```
+    pub fn from_url(url: impl Into<String>) -> Self {
+        Self {
+            url: url.into(),
+            detail: ImageDetail::default(),
+        }
+    }
+
+    /// Creates a new image block from base64-encoded data.
+    ///
+    /// # Arguments
+    ///
+    /// * `base64_data` - The base64-encoded image data
+    /// * `mime_type` - The MIME type (e.g., "image/jpeg", "image/png")
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use open_agent::ImageBlock;
+    ///
+    /// let base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    /// let image = ImageBlock::from_base64(base64, "image/png");
+    /// assert!(image.url().starts_with("data:image/png;base64,"));
+    /// ```
+    pub fn from_base64(base64_data: impl AsRef<str>, mime_type: impl AsRef<str>) -> Self {
+        let url = format!(
+            "data:{};base64,{}",
+            mime_type.as_ref(),
+            base64_data.as_ref()
+        );
+        Self {
+            url,
+            detail: ImageDetail::default(),
+        }
+    }
+
+    /// Sets the image detail level.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use open_agent::{ImageBlock, ImageDetail};
+    ///
+    /// let image = ImageBlock::from_url("https://example.com/image.jpg")
+    ///     .with_detail(ImageDetail::High);
+    /// ```
+    pub fn with_detail(mut self, detail: ImageDetail) -> Self {
+        self.detail = detail;
+        self
+    }
+
+    /// Returns the image URL (or data URI for base64 images).
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    /// Returns the image detail level.
+    pub fn detail(&self) -> ImageDetail {
+        self.detail
     }
 }
 
@@ -1523,17 +1668,81 @@ impl Message {
 /// This type is typically created by the SDK internally when converting
 /// from [`Message`] to API format. Users rarely need to construct these
 /// directly.
+///
+/// # OpenAI Content Format
+///
+/// OpenAI content format supporting both string and array.
+///
+/// For backward compatibility, text-only messages use string format.
+/// Messages with images use array format with multiple content parts.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum OpenAIContent {
+    /// Simple text string (backward compatible)
+    Text(String),
+    /// Array of content parts (text and/or images)
+    Parts(Vec<OpenAIContentPart>),
+}
+
+/// A single content part in an OpenAI message.
+///
+/// Can be either text or an image URL.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenAIContentPart {
+    /// Type of content: "text" or "image_url"
+    #[serde(rename = "type")]
+    pub part_type: String,
+
+    /// Text content (only present if type is "text")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+
+    /// Image URL content (only present if type is "image_url")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_url: Option<OpenAIImageUrl>,
+}
+
+impl OpenAIContentPart {
+    /// Creates a text content part.
+    pub fn text(text: impl Into<String>) -> Self {
+        Self {
+            part_type: "text".to_string(),
+            text: Some(text.into()),
+            image_url: None,
+        }
+    }
+
+    /// Creates an image URL content part.
+    pub fn image_url(url: impl Into<String>, detail: ImageDetail) -> Self {
+        Self {
+            part_type: "image_url".to_string(),
+            text: None,
+            image_url: Some(OpenAIImageUrl {
+                url: url.into(),
+                detail: Some(detail.to_string()),
+            }),
+        }
+    }
+}
+
+/// OpenAI image URL structure.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenAIImageUrl {
+    /// Image URL or data URI
+    pub url: String,
+    /// Detail level: "low", "high", or "auto"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpenAIMessage {
     /// Message role as a string ("system", "user", "assistant", "tool").
     pub role: String,
 
-    /// Text content of the message.
-    ///
-    /// For assistant messages with tool calls, this may be empty or contain
-    /// explanatory text. For tool result messages, this contains the
-    /// stringified tool output.
-    pub content: String,
+    /// Message content (string for text-only, array for text+images).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<OpenAIContent>,
 
     /// Tool calls requested by the assistant (assistant messages only).
     ///
@@ -2115,7 +2324,7 @@ mod tests {
             model: "gpt-3.5".to_string(),
             messages: vec![OpenAIMessage {
                 role: "user".to_string(),
-                content: "Hello".to_string(),
+                content: Some(OpenAIContent::Text("Hello".to_string())),
                 tool_calls: None,
                 tool_call_id: None,
             }],
@@ -2310,5 +2519,94 @@ mod tests {
         assert!(options.auto_execute_tools());
         assert_eq!(options.max_tool_iterations(), 10);
         assert_eq!(options.tools().len(), 0);
+    }
+
+    // ========================================================================
+    // Image Support Tests (Phase 1 - TDD RED)
+    // ========================================================================
+
+    #[test]
+    fn test_image_block_from_url() {
+        // Should create ImageBlock from URL
+        let block = ImageBlock::from_url("https://example.com/image.jpg");
+        assert_eq!(block.url(), "https://example.com/image.jpg");
+        assert!(matches!(block.detail(), ImageDetail::Auto));
+    }
+
+    #[test]
+    fn test_image_block_from_base64() {
+        // Should create ImageBlock from base64
+        let block = ImageBlock::from_base64("abc123", "image/jpeg");
+        assert!(block.url().starts_with("data:image/jpeg;base64,"));
+        assert!(matches!(block.detail(), ImageDetail::Auto));
+    }
+
+    #[test]
+    fn test_image_block_with_detail() {
+        // Should set detail level
+        let block =
+            ImageBlock::from_url("https://example.com/image.jpg").with_detail(ImageDetail::High);
+        assert!(matches!(block.detail(), ImageDetail::High));
+    }
+
+    #[test]
+    fn test_image_detail_serialization() {
+        // Should serialize ImageDetail to correct strings
+        let json = serde_json::to_string(&ImageDetail::Low).unwrap();
+        assert_eq!(json, "\"low\"");
+
+        let json = serde_json::to_string(&ImageDetail::High).unwrap();
+        assert_eq!(json, "\"high\"");
+
+        let json = serde_json::to_string(&ImageDetail::Auto).unwrap();
+        assert_eq!(json, "\"auto\"");
+    }
+
+    #[test]
+    fn test_content_block_image_variant() {
+        // Should add Image variant to ContentBlock
+        let image = ImageBlock::from_url("https://example.com/image.jpg");
+        let block = ContentBlock::Image(image);
+
+        match block {
+            ContentBlock::Image(img) => {
+                assert_eq!(img.url(), "https://example.com/image.jpg");
+            }
+            _ => panic!("Expected Image variant"),
+        }
+    }
+
+    #[test]
+    fn test_openai_content_text_format() {
+        // Should serialize text-only as string (backward compat)
+        let content = OpenAIContent::Text("Hello".to_string());
+        let json = serde_json::to_value(&content).unwrap();
+        assert_eq!(json, serde_json::json!("Hello"));
+    }
+
+    #[test]
+    fn test_openai_content_parts_format() {
+        // Should serialize mixed content as array
+        let parts = vec![
+            OpenAIContentPart::text("What's in this image?"),
+            OpenAIContentPart::image_url("https://example.com/img.jpg", ImageDetail::High),
+        ];
+        let content = OpenAIContent::Parts(parts);
+        let json = serde_json::to_value(&content).unwrap();
+
+        assert!(json.is_array());
+        assert_eq!(json[0]["type"], "text");
+        assert_eq!(json[0]["text"], "What's in this image?");
+        assert_eq!(json[1]["type"], "image_url");
+        assert_eq!(json[1]["image_url"]["url"], "https://example.com/img.jpg");
+        assert_eq!(json[1]["image_url"]["detail"], "high");
+    }
+
+    #[test]
+    fn test_image_detail_display() {
+        // Should convert ImageDetail to string
+        assert_eq!(ImageDetail::Low.to_string(), "low");
+        assert_eq!(ImageDetail::High.to_string(), "high");
+        assert_eq!(ImageDetail::Auto.to_string(), "auto");
     }
 }
