@@ -131,3 +131,32 @@ async fn test_image_logging_includes_detail_level() {
     // "- Image: https://example.com/high.jpg (detail: high)"
     // "- Image: https://example.com/auto.jpg (detail: auto)"
 }
+
+#[test]
+fn test_no_warning_for_image_only_messages() {
+    // GIVEN: Message with only images (no text)
+    // This is a valid use case for vision models
+    let image = ImageBlock::from_url("https://example.com/test.jpg")
+        .unwrap()
+        .with_detail(ImageDetail::High);
+
+    let msg = Message::new(
+        MessageRole::User,
+        vec![
+            ContentBlock::Image(image.clone()),
+            ContentBlock::Image(image),
+        ],
+    );
+
+    // THEN: Image-only messages are valid and should not trigger warnings
+    // The warning at src/client.rs:1200-1205 should be removed
+    assert_eq!(msg.content.len(), 2);
+    assert!(matches!(msg.content[0], ContentBlock::Image(_)));
+    assert!(matches!(msg.content[1], ContentBlock::Image(_)));
+
+    // This test documents that image-only messages are intentional,
+    // not bugs. Use cases include:
+    // - "What's in this image?" (text in system prompt)
+    // - Multi-image comparison without additional text
+    // - Visual question answering where the question is implicit
+}

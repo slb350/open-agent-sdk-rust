@@ -1196,14 +1196,6 @@ impl Client {
                 for block in &msg.content {
                     match block {
                         ContentBlock::Text(text) => {
-                            // Warn about empty text blocks (but still include them)
-                            if text.text.trim().is_empty() {
-                                eprintln!(
-                                    "WARNING: Empty text block in message (role: {:?}). \
-                                     This may indicate a bug in message construction.",
-                                    msg.role
-                                );
-                            }
                             content_parts.push(OpenAIContentPart::text(&text.text));
                         }
                         ContentBlock::Image(image) => {
