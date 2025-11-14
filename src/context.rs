@@ -32,6 +32,8 @@ use crate::types::Message;
 /// Estimate token count for message list
 ///
 /// Uses character-based approximation (1 token ≈ 4 characters).
+/// For images, uses GPT-4o Vision API token costs adjusted for different
+/// detail levels.
 ///
 /// # Arguments
 ///
@@ -47,6 +49,8 @@ use crate::types::Message;
 /// - GPT models: ~70-85% accurate (different tokenizers)
 /// - Llama, Qwen, Mistral: ~70-85% accurate
 /// - Always include 10-20% safety margin when checking limits
+///
+/// Image token costs are based on GPT-4o and may differ for local models.
 ///
 /// For more accurate estimation, consider using tiktoken bindings
 /// (not included to keep dependencies minimal).
@@ -90,11 +94,15 @@ pub fn estimate_tokens(messages: &[Message]) -> usize {
                     total_chars += text.text.len();
                 }
                 crate::types::ContentBlock::Image(image) => {
-                    // Images add significant overhead for vision models
-                    // URL length + estimated token cost (low: ~85, high: ~170+)
-                    total_chars += image.url().len();
-                    // Add estimated token overhead (conservative estimate)
-                    total_chars += 200; // Rough token estimate
+                    // Token estimates based on GPT-4o Vision API
+                    // Local models may have different token costs
+                    use crate::types::ImageDetail;
+                    let token_estimate = match image.detail() {
+                        ImageDetail::Low => 85 * 4,   // Fixed ~85 tokens (512x512 max)
+                        ImageDetail::High => 300 * 4, // Conservative upper bound (variable based on dimensions)
+                        ImageDetail::Auto => 200 * 4, // Middle ground default
+                    };
+                    total_chars += token_estimate;
                 }
                 crate::types::ContentBlock::ToolUse(tool) => {
                     // Tool calls add significant overhead
@@ -301,5 +309,59 @@ mod tests {
 
         // Should exceed 90% of 200
         assert!(is_approaching_limit(&messages, 200, 0.9));
+    }
+
+    #[test]
+    fn test_estimate_tokens_image_detail_low() {
+        use crate::types::{ImageBlock, ImageDetail};
+
+        let img = ImageBlock::from_url("https://example.com/img.jpg")
+            .unwrap()
+            .with_detail(ImageDetail::Low);
+        let msg = Message::new(MessageRole::User, vec![ContentBlock::Image(img)]);
+
+        let token_count = estimate_tokens(&[msg]);
+        // Low detail: ~85 tokens * 4 chars/token = 340 chars
+        assert!(
+            (75..=95).contains(&token_count),
+            "Low detail should be ~85 tokens, got {}",
+            token_count
+        );
+    }
+
+    #[test]
+    fn test_estimate_tokens_image_detail_high() {
+        use crate::types::{ImageBlock, ImageDetail};
+
+        let img = ImageBlock::from_url("https://example.com/img.jpg")
+            .unwrap()
+            .with_detail(ImageDetail::High);
+        let msg = Message::new(MessageRole::User, vec![ContentBlock::Image(img)]);
+
+        let token_count = estimate_tokens(&[msg]);
+        // High detail: ~300 tokens * 4 chars/token = 1200 chars (conservative)
+        assert!(
+            token_count >= 250,
+            "High detail should be ~300+ tokens, got {}",
+            token_count
+        );
+    }
+
+    #[test]
+    fn test_estimate_tokens_image_detail_auto() {
+        use crate::types::{ImageBlock, ImageDetail};
+
+        let img = ImageBlock::from_url("https://example.com/img.jpg")
+            .unwrap()
+            .with_detail(ImageDetail::Auto);
+        let msg = Message::new(MessageRole::User, vec![ContentBlock::Image(img)]);
+
+        let token_count = estimate_tokens(&[msg]);
+        // Auto detail: ~200 tokens * 4 chars/token = 800 chars (middle ground)
+        assert!(
+            (150..=250).contains(&token_count),
+            "Auto detail should be ~200 tokens, got {}",
+            token_count
+        );
     }
 }
