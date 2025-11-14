@@ -169,7 +169,9 @@ async fn concurrent_example() -> Result<(), Box<dyn std::error::Error>> {
             }
             Ok(None) => break,
             Err(e) => return Err(e.into()),
-            _ => {}
+            Ok(Some(
+                ContentBlock::ToolUse(_) | ContentBlock::ToolResult(_) | ContentBlock::Image(_),
+            )) => {}
         }
     }
 

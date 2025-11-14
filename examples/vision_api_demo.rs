@@ -149,7 +149,7 @@ fn main() {
                 &t.text[..30.min(t.text.len())]
             ),
             ContentBlock::Image(_) => println!("  - Block {}: Image", i),
-            _ => {}
+            ContentBlock::ToolUse(_) | ContentBlock::ToolResult(_) => {}
         }
     }
     println!();

@@ -239,7 +239,7 @@
 //!         ContentBlock::Text(text) => {
 //!             println!("Response: {}", text.text);
 //!         }
-//!         _ => {}
+//!         ContentBlock::ToolUse(_) | ContentBlock::ToolResult(_) => {}
 //!     }
 //! }
 //! # Ok(())
@@ -445,7 +445,7 @@ pub type ContentStream = Pin<Box<dyn Stream<Item = Result<ContentBlock>> + Send>
 ///             open_agent::ContentBlock::Text(text) => {
 ///                 print!("{}", text.text);
 ///             }
-///             _ => {}
+///             ContentBlock::ToolUse(_) | ContentBlock::ToolResult(_) => {}
 ///         }
 ///     }
 ///
@@ -484,7 +484,7 @@ pub type ContentStream = Pin<Box<dyn Stream<Item = Result<ContentBlock>> + Send>
 ///             // the conversation. For automatic execution, use Client.
 ///         }
 ///         ContentBlock::Text(text) => print!("{}", text.text),
-///         _ => {}
+///         ContentBlock::ToolUse(_) | ContentBlock::ToolResult(_) => {}
 ///     }
 /// }
 /// # Ok(())
@@ -757,7 +757,7 @@ pub async fn query(prompt: &str, options: &AgentOptions) -> Result<ContentStream
 ///         ContentBlock::Text(text) => {
 ///             println!("{}", text.text); // "The result is 4."
 ///         }
-///         _ => {}
+///         ContentBlock::ToolUse(_) | ContentBlock::ToolResult(_) => {}
 ///     }
 /// }
 /// # Ok(())
@@ -1191,7 +1191,7 @@ impl Client {
                             content_parts
                                 .push(OpenAIContentPart::image_url(image.url(), image.detail()));
                         }
-                        _ => {}
+                        ContentBlock::ToolUse(_) | ContentBlock::ToolResult(_) => {}
                     }
                 }
 
@@ -1527,7 +1527,7 @@ impl Client {
                 match block {
                     ContentBlock::Text(_) => text_blocks.push(block),
                     ContentBlock::ToolUse(_) => tool_blocks.push(block),
-                    _ => {} // Ignore ToolResult and other variants
+                    ContentBlock::ToolResult(_) | ContentBlock::Image(_) => {} // Ignore ToolResult and Image variants
                 }
             }
 
@@ -1757,7 +1757,7 @@ impl Client {
     /// while let Some(block) = client.receive().await? {
     ///     match block {
     ///         ContentBlock::Text(text) => print!("{}", text.text),
-    ///         _ => {}
+    ///         ContentBlock::ToolUse(_) | ContentBlock::ToolResult(_) => {}
     ///     }
     /// }
     /// # Ok(())
@@ -1788,7 +1788,7 @@ impl Client {
     ///             client.add_tool_result(&tool_use.id, result)?;
     ///             client.send("").await?;
     ///         }
-    ///         _ => {}
+    ///         ContentBlock::ToolUse(_) | ContentBlock::ToolResult(_) => {}
     ///     }
     /// }
     /// # Ok(())
@@ -2220,7 +2220,7 @@ impl Client {
     ///         ContentBlock::Text(text) => {
     ///             println!("{}", text.text);
     ///         }
-    ///         _ => {}
+    ///         ContentBlock::ToolUse(_) | ContentBlock::ToolResult(_) => {}
     ///     }
     /// }
     /// # Ok(())
@@ -2543,7 +2543,7 @@ mod tests {
                         image.detail(),
                     ));
                 }
-                _ => {}
+                ContentBlock::ToolUse(_) | ContentBlock::ToolResult(_) => {}
             }
         }
 
