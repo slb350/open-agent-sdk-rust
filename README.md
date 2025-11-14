@@ -53,7 +53,7 @@ Open Agent SDK (Rust) provides a clean, streaming API for working with OpenAI-co
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.1.0"
+open-agent-sdk = "0.6.0"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -118,9 +118,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Assistant: {}", text.text);
             }
             ContentBlock::ToolUse(tool_use) => {
-                println!("Tool used: {}", tool_use.name);
+                println!("Tool used: {}", tool_use.name());
                 // Execute tool and add result
-                // client.add_tool_result(&tool_use.id, result, Some(&tool_use.name));
+                // client.add_tool_result(tool_use.id(), result)?;
             }
             _ => {}
         }
@@ -198,10 +198,10 @@ while let Some(block) = client.receive().await {
     match block? {
         ContentBlock::ToolUse(tool_use) => {
             // You execute the tool manually
-            let result = add_tool.execute(tool_use.input).await?;
+            let result = add_tool.execute(tool_use.input()).await?;
 
             // Return result to agent
-            client.add_tool_result(&tool_use.id, result, Some(&tool_use.name));
+            client.add_tool_result(tool_use.id(), result)?;
 
             // Continue conversation
             client.send("").await?;
@@ -853,6 +853,7 @@ open-agent-sdk-rust/
 - `simple_query.rs` – Minimal streaming query (simplest quickstart)
 - `calculator_tools.rs` – Manual tool execution pattern
 - `auto_execution_demo.rs` – Automatic tool execution pattern
+- `vision_example.rs` – Multimodal image support (URLs, local files, base64)
 - `hooks_example.rs` – Lifecycle hooks patterns (security gates, audit logging)
 - `context_management.rs` – Manual history management patterns
 - `interrupt_demo.rs` – Interrupt capability patterns (timeout, conditional, concurrent)
@@ -879,11 +880,15 @@ cargo test test_agent_options_builder
 
 **Test Coverage:**
 
-- 57 unit tests across 10 modules
-- 28 integration tests
-  - 6 hooks integration tests
-  - 13 auto-execution tests
-  - 9 advanced integration tests
+- 110 unit tests across 10 modules
+- 61 integration tests
+  - Hooks integration tests
+  - Auto-execution tests
+  - Image serialization tests
+  - Defensive validation tests
+  - Backward compatibility tests
+  - Advanced integration tests
+- 151 doctests
 
 ## Requirements
 
@@ -905,6 +910,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.1.0 Published - 100% feature parity with Python SDK, production-ready
+**Status**: v0.6.0 Published - Multimodal image support, production-ready with comprehensive testing
 
 Star this repo if you're building AI agents with local models in Rust!
