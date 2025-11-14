@@ -1160,6 +1160,7 @@ impl Client {
                     .collect();
 
                 // Extract any text content (some models include reasoning before tool calls)
+                // Note: OpenAI API requires content field even if empty when tool_calls present
                 let content = if !text_blocks.is_empty() {
                     let text = text_blocks
                         .iter()
@@ -1168,7 +1169,8 @@ impl Client {
                         .join("\n");
                     Some(OpenAIContent::Text(text))
                 } else {
-                    None
+                    // Empty string satisfies OpenAI API schema (content is required)
+                    Some(OpenAIContent::Text(String::new()))
                 };
 
                 messages.push(OpenAIMessage {
