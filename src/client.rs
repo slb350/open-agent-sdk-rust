@@ -239,7 +239,7 @@
 //!         ContentBlock::Text(text) => {
 //!             println!("Response: {}", text.text);
 //!         }
-//!         ContentBlock::ToolUse(_) | ContentBlock::ToolResult(_) => {}
+//!         ContentBlock::ToolResult(_) | ContentBlock::Image(_) => {}
 //!     }
 //! }
 //! # Ok(())
