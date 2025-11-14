@@ -1891,41 +1891,53 @@ pub enum OpenAIContent {
 
 /// A single content part in an OpenAI message.
 ///
-/// Can be either text or an image URL.
+/// Can be either text or an image URL. This is a tagged enum that prevents
+/// invalid states (e.g., having both text and image_url, or neither).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OpenAIContentPart {
-    /// Type of content: "text" or "image_url"
-    #[serde(rename = "type")]
-    pub part_type: String,
-
-    /// Text content (only present if type is "text")
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub text: Option<String>,
-
-    /// Image URL content (only present if type is "image_url")
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub image_url: Option<OpenAIImageUrl>,
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAIContentPart {
+    /// Text content part
+    Text {
+        /// The text content
+        text: String,
+    },
+    /// Image URL content part
+    #[serde(rename = "image_url")]
+    ImageUrl {
+        /// The image URL details
+        image_url: OpenAIImageUrl,
+    },
 }
 
 impl OpenAIContentPart {
     /// Creates a text content part.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use open_agent::types::OpenAIContentPart;
+    ///
+    /// let part = OpenAIContentPart::text("Hello world");
+    /// ```
     pub fn text(text: impl Into<String>) -> Self {
-        Self {
-            part_type: "text".to_string(),
-            text: Some(text.into()),
-            image_url: None,
-        }
+        Self::Text { text: text.into() }
     }
 
     /// Creates an image URL content part.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use open_agent::{types::OpenAIContentPart, ImageDetail};
+    ///
+    /// let part = OpenAIContentPart::image_url("https://example.com/img.jpg", ImageDetail::High);
+    /// ```
     pub fn image_url(url: impl Into<String>, detail: ImageDetail) -> Self {
-        Self {
-            part_type: "image_url".to_string(),
-            text: None,
-            image_url: Some(OpenAIImageUrl {
+        Self::ImageUrl {
+            image_url: OpenAIImageUrl {
                 url: url.into(),
                 detail: Some(detail.to_string()),
-            }),
+            },
         }
     }
 }
@@ -2864,6 +2876,66 @@ mod tests {
         assert_eq!(json[1]["type"], "image_url");
         assert_eq!(json[1]["image_url"]["url"], "https://example.com/img.jpg");
         assert_eq!(json[1]["image_url"]["detail"], "high");
+    }
+
+    // ========================================================================
+    // OpenAIContentPart Enum Tests (Phase 4 - PR #3 Fixes)
+    // ========================================================================
+
+    #[test]
+    fn test_openai_content_part_text_serialization() {
+        // RED: Test that text variant serializes correctly with enum
+        let part = OpenAIContentPart::text("Hello world");
+        let json = serde_json::to_value(&part).unwrap();
+
+        // Should have type field with value "text"
+        assert_eq!(json["type"], "text");
+        assert_eq!(json["text"], "Hello world");
+        // Should not have image_url field
+        assert!(json.get("image_url").is_none());
+    }
+
+    #[test]
+    fn test_openai_content_part_image_serialization() {
+        // RED: Test that image_url variant serializes correctly with enum
+        let part = OpenAIContentPart::image_url("https://example.com/img.jpg", ImageDetail::Low);
+        let json = serde_json::to_value(&part).unwrap();
+
+        // Should have type field with value "image_url"
+        assert_eq!(json["type"], "image_url");
+        assert_eq!(json["image_url"]["url"], "https://example.com/img.jpg");
+        assert_eq!(json["image_url"]["detail"], "low");
+        // Should not have text field
+        assert!(json.get("text").is_none());
+    }
+
+    #[test]
+    fn test_openai_content_part_enum_exhaustiveness() {
+        // RED: Test that enum prevents invalid states
+        // With tagged enum, it should be impossible to create a part with both text and image_url
+        // or a part with neither. This test documents expected enum behavior.
+
+        let text_part = OpenAIContentPart::text("test");
+        let image_part = OpenAIContentPart::image_url("url", ImageDetail::Auto);
+
+        // Pattern matching should be exhaustive
+        match text_part {
+            OpenAIContentPart::Text { .. } => {
+                // Expected for text part
+            }
+            OpenAIContentPart::ImageUrl { .. } => {
+                panic!("Text part should not match ImageUrl variant");
+            }
+        }
+
+        match image_part {
+            OpenAIContentPart::Text { .. } => {
+                panic!("Image part should not match Text variant");
+            }
+            OpenAIContentPart::ImageUrl { .. } => {
+                // Expected for image part
+            }
+        }
     }
 
     #[test]
