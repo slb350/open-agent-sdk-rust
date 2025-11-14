@@ -199,8 +199,8 @@ pub use tools::{Tool, ToolBuilder, tool};
 
 pub use types::{
     AgentOptions, AgentOptionsBuilder, BaseUrl, ContentBlock, ImageBlock, ImageDetail, Message,
-    MessageRole, ModelName, OpenAIContent, OpenAIContentPart, Temperature,
-    TextBlock, ToolResultBlock, ToolUseBlock,
+    MessageRole, ModelName, OpenAIContent, OpenAIContentPart, Temperature, TextBlock,
+    ToolResultBlock, ToolUseBlock,
 };
 
 // ============================================================================
