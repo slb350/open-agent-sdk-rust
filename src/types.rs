@@ -1423,8 +1423,14 @@ impl ImageBlock {
     ///
     /// Returns `Error::InvalidInput` if:
     /// - URL is empty
+    /// - URL contains control characters (newline, tab, null, etc.)
     /// - URL scheme is not `http://`, `https://`, or `data:`
     /// - Data URI is malformed (missing MIME type or base64 encoding)
+    /// - Data URI base64 portion has invalid characters, length, or padding
+    ///
+    /// # Warnings
+    ///
+    /// - Logs a warning to stderr if URL exceeds 2000 characters
     ///
     /// # Example
     ///
@@ -1542,8 +1548,16 @@ impl ImageBlock {
     ///
     /// Returns `Error::InvalidInput` if:
     /// - Base64 data is empty
+    /// - Base64 contains invalid characters (only A-Z, a-z, 0-9, +, /, = allowed)
+    /// - Base64 length is not a multiple of 4
+    /// - Base64 has invalid padding (more than 2 '=' characters or not at end)
     /// - MIME type is empty
     /// - MIME type does not start with "image/"
+    /// - MIME type contains injection characters (;, \\n, \\r, ,)
+    ///
+    /// # Warnings
+    ///
+    /// - Logs a warning to stderr if base64 data exceeds 10MB (~7.5MB decoded)
     ///
     /// # Example
     ///
@@ -2918,7 +2932,7 @@ mod tests {
     #[test]
     fn test_image_block_from_base64() {
         // Should create ImageBlock from base64
-        let block = ImageBlock::from_base64("abc123", "image/jpeg").unwrap();
+        let block = ImageBlock::from_base64("iVBORw0KGgoAAAA=", "image/jpeg").unwrap();
         assert!(block.url().starts_with("data:image/jpeg;base64,"));
         assert!(matches!(block.detail(), ImageDetail::Auto));
     }
@@ -3237,7 +3251,7 @@ mod tests {
     #[test]
     fn test_image_block_from_base64_accepts_all_image_types() {
         // Should accept all common image MIME types
-        let base64 = "validdata";
+        let base64 = "iVBORw0KGgo="; // Valid base64 (length multiple of 4)
         let mime_types = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
         for mime in &mime_types {

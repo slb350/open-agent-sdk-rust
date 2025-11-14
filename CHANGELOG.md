@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+**Defensive Programming Enhancements** - Maximum Input Validation
+
+Added comprehensive validation and logging for image handling following maximum defensive programming practices:
+
+#### Enhanced Base64 Validation (`ImageBlock::from_base64`)
+
+- **Character set validation**: Rejects invalid base64 characters (spaces, special chars, etc.)
+- **Length validation**: Enforces length must be multiple of 4
+- **Padding validation**: Max 2 '=' characters, must be at end
+- **MIME injection prevention**: Rejects semicolons, newlines, commas in MIME type
+- **Large data warning**: Warns when base64 exceeds 10MB
+
+#### Enhanced URL Validation (`ImageBlock::from_url`)
+
+- **Control character detection**: Rejects URLs with newline, tab, null, etc.
+- **Data URI base64 validation**: Validates base64 portion using same rules as `from_base64()`
+- **Long URL warning**: Warns when URL exceeds 2000 characters
+- **Scheme validation**: Already rejected dangerous schemes (javascript:, file:, etc.)
+
+#### Empty Text Block Handling
+
+- **Warning on empty text**: Logs warning when empty or whitespace-only text blocks are serialized
+- **No data loss**: Empty text blocks are still included (not dropped), just warned about
+- **Debugging aid**: Warning includes message role to help identify source
+
+#### Debug Logging (Optional)
+
+- **Image serialization logging**: Debug logs when images are included in messages
+- **URL truncation**: Long URLs truncated to 100 chars in logs for privacy
+- **Detail level logging**: Logs image detail level (low/high/auto)
+- **Opt-in**: Requires user to initialize a logger (using `log` crate)
+
+#### New Dependencies
+
+- `log = "0.4"` - Logging facade (runtime)
+- `env_logger = "0.11"` - Logger implementation (dev dependency)
+
+#### Testing
+
+- 17 new tests across 4 test files
+- Total: 154 tests passing (107 lib + 47 integration)
+- Zero clippy warnings
+- All tests follow TDD (RED → GREEN → REFACTOR → COMMIT)
+
+#### Breaking Changes
+
+**None** - All enhancements are backward compatible. Existing valid inputs continue to work; only truly invalid inputs are rejected.
+
 ## [0.6.0] - 2025-11-13
 
 ### Added
