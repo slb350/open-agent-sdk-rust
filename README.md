@@ -254,13 +254,17 @@ let msg = Message::user_with_image_detail(
 
 ### Token Cost Management
 
-Control image processing costs using `ImageDetail` levels (based on OpenAI Vision API):
+Control image processing costs using `ImageDetail` levels:
 
-- **`ImageDetail::Low`** - Fixed ~85 tokens (cost-effective for OCR, object detection)
-- **`ImageDetail::High`** - Variable tokens based on dimensions (detailed analysis, fine text)
+- **`ImageDetail::Low`** - Lower resolution (typically more cost-effective)
+- **`ImageDetail::High`** - Higher resolution (typically more detailed analysis)
 - **`ImageDetail::Auto`** - Model decides (balanced default)
 
-**Note:** Token costs are based on OpenAI's Vision API and may vary significantly on local models (llama.cpp, Ollama).
+**⚠️ Token Costs Vary by Model:**
+
+OpenAI's Vision API uses ~85 tokens (Low) and variable tokens based on dimensions (High), but **local models may have completely different token costs**—or no token costs for images at all. The `ImageDetail` setting may even be ignored by some models.
+
+**Always benchmark your specific model** instead of relying on OpenAI's published values for capacity planning.
 
 ### Complex Multi-Image Messages
 

@@ -138,12 +138,19 @@ let msg = Message::user_with_base64_image(
 
 #### Token Cost Management
 
-Images consume tokens based on detail level (OpenAI Vision API):
-- **Low detail**: ~85 tokens (cost-effective, suitable for OCR, object detection)
-- **High detail**: Variable tokens based on dimensions (detailed analysis, fine text)
-- **Auto detail**: Model decides based on content (balanced default)
+`ImageDetail` enum allows control of image processing resolution:
+- **Low**: Lower resolution processing
+- **High**: Higher resolution processing
+- **Auto**: Model decides (default)
 
-**Note:** Token costs are based on OpenAI's Vision API and may vary significantly on local models (llama.cpp, Ollama, etc.)
+**⚠️ Token Costs Vary Significantly by Model:**
+
+OpenAI's Vision API reference values (~85 tokens for Low, variable for High) **do not apply** to most local models. Local models (llama.cpp, Ollama, vLLM) may:
+- Calculate tokens completely differently
+- Not charge tokens for images at all
+- Ignore the `ImageDetail` setting entirely
+
+**Always benchmark your specific model** - do not rely on OpenAI's values for context window planning.
 
 #### Documentation
 

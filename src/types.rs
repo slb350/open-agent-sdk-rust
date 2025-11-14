@@ -1342,17 +1342,22 @@ impl ToolResultBlock {
 /// Image detail level for vision API calls.
 ///
 /// Controls the resolution and token cost of image processing.
-/// Token costs are based on OpenAI's Vision API and may differ significantly
-/// for local models (llama.cpp, Ollama, vLLM).
 ///
-/// # Token Costs (OpenAI Vision API)
+/// # Token Costs Vary by Model ⚠️
 ///
-/// - `Low`: Fixed ~85 tokens, 512x512 resolution (cost-effective)
-/// - `High`: Variable tokens based on dimensions (170 tokens per 512px tile + 85 base, for detailed analysis)
-/// - `Auto`: Model decides based on image characteristics (balanced default)
+/// **OpenAI Vision API** (reference values):
+/// - `Low`: ~85 tokens (512x512 max resolution)
+/// - `High`: Variable tokens based on image dimensions
+/// - `Auto`: Model decides (balanced default)
 ///
-/// **Note:** Local models may have very different token costs. These values are
-/// approximations based on OpenAI's Vision API.
+/// **Local models** (llama.cpp, Ollama, vLLM):
+/// - May have **completely different** token calculations
+/// - Some models don't charge tokens for images at all
+/// - The `ImageDetail` setting may be ignored entirely
+///
+/// **Recommendation:** Always benchmark your specific model to understand
+/// actual token consumption. Do not rely on OpenAI's values for capacity planning
+/// with local models.
 ///
 /// # Examples
 ///
