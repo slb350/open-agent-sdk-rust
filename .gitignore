@@ -35,6 +35,7 @@
 *.log
 
 # Local development documentation (not committed to repo)
+AGENTS.md
 CLAUDE.md
 DEVELOPMENT.md
 plan.md
