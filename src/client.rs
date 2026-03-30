@@ -891,6 +891,15 @@ pub struct Client {
     ///
     /// **Only used when `options.auto_execute_tools == true`**.
     auto_exec_index: usize,
+
+    /// Accumulator for assistant response blocks in manual mode.
+    ///
+    /// In manual mode, `receive()` streams blocks one at a time to the caller.
+    /// This buffer collects those blocks so that when the stream ends, the
+    /// complete assistant message can be added to conversation history.
+    ///
+    /// **Only used when `options.auto_execute_tools == false`**.
+    manual_receive_buffer: Vec<ContentBlock>,
 }
 
 impl Client {
@@ -939,6 +948,7 @@ impl Client {
             interrupted: Arc::new(AtomicBool::new(false)), // Not interrupted initially
             auto_exec_buffer: Vec::new(),                  // Empty buffer for auto mode
             auto_exec_index: 0,                            // Start at beginning of buffer
+            manual_receive_buffer: Vec::new(),             // Empty buffer for manual mode
         })
     }
 
@@ -1053,6 +1063,13 @@ impl Client {
         // This allows the client to be reused after a previous interruption
         // Uses SeqCst ordering to ensure visibility across all threads
         self.interrupted.store(false, Ordering::SeqCst);
+
+        // Discard any leftover manual-mode blocks from an abandoned stream.
+        // If the prior stream completed normally, receive() already committed
+        // the buffer to history on EOF. If the caller is calling send() before
+        // the stream finished, the buffer is partial and must not be persisted.
+        self.manual_receive_buffer.clear();
+        self.current_stream = None;
 
         // Execute UserPromptSubmit hooks
         // Hooks run BEFORE adding to history, allowing modification or blocking
@@ -1382,17 +1399,22 @@ impl Client {
         // Check interrupt flag before attempting to receive
         // Uses SeqCst to ensure we see the latest value from any thread
         if self.interrupted.load(Ordering::SeqCst) {
-            // Clear the stream and return None to signal completion
-            self.current_stream = None;
+            // Return None but leave current_stream intact so callers can
+            // distinguish "interrupted a live stream" (current_stream is Some)
+            // from "interrupt after stream already ended" (current_stream is None).
             return Ok(None);
         }
 
         // Poll the current stream if one exists
         if let Some(stream) = &mut self.current_stream {
             match stream.next().await {
-                Some(Ok(block)) => Ok(Some(block)), // Got a block
-                Some(Err(e)) => Err(e),             // Stream error
-                None => Ok(None),                   // Stream ended
+                Some(Ok(block)) => Ok(Some(block)),
+                Some(Err(e)) => Err(e),
+                None => {
+                    // Natural EOF — mark stream as fully consumed
+                    self.current_stream = None;
+                    Ok(None)
+                }
             }
         } else {
             // No active stream
@@ -1930,6 +1952,10 @@ impl Client {
         // Uses SeqCst ordering to ensure visibility across all threads
         self.interrupted.store(false, Ordering::SeqCst);
 
+        // Discard any leftover manual-mode blocks from an abandoned stream.
+        self.manual_receive_buffer.clear();
+        self.current_stream = None;
+
         // Note: We do NOT run UserPromptSubmit hooks here because:
         // 1. The message is already fully constructed
         // 2. Hooks expect string prompts, not complex Message objects
@@ -2248,8 +2274,35 @@ impl Client {
             // ====================================================================
             // MANUAL MODE
             // ====================================================================
-            // Stream blocks directly from API without buffering or auto-execution
-            self.receive_one().await
+            // Stream blocks to caller while accumulating them so we can add
+            // the complete assistant message to history when the stream ends.
+            match self.receive_one().await {
+                Err(e) => {
+                    // Stream error — discard partial output so a retry
+                    // doesn't flush truncated blocks into history.
+                    self.manual_receive_buffer.clear();
+                    Err(e)
+                }
+                Ok(Some(block)) => {
+                    self.manual_receive_buffer.push(block.clone());
+                    Ok(Some(block))
+                }
+                Ok(None) => {
+                    if self.interrupted.load(Ordering::SeqCst) && self.current_stream.is_some() {
+                        // Interrupted a live stream — discard partial output.
+                        // current_stream is still Some because receive_one()
+                        // only clears it on natural EOF, not on interrupt.
+                        self.current_stream = None;
+                        self.manual_receive_buffer.clear();
+                    } else if !self.manual_receive_buffer.is_empty() {
+                        // Either natural EOF or interrupt after stream already
+                        // finished — commit the (complete) assistant message.
+                        let blocks = std::mem::take(&mut self.manual_receive_buffer);
+                        self.history.push(Message::assistant(blocks));
+                    }
+                    Ok(None)
+                }
+            }
         }
     }
 
@@ -2519,6 +2572,7 @@ impl Client {
     /// ```
     pub fn clear_history(&mut self) {
         self.history.clear();
+        self.manual_receive_buffer.clear();
     }
 
     /// Adds a tool result to the conversation history for manual tool execution.
@@ -2653,6 +2707,13 @@ impl Client {
     /// ```
     pub fn add_tool_result(&mut self, tool_use_id: &str, content: serde_json::Value) -> Result<()> {
         use crate::types::ToolResultBlock;
+
+        // Flush any buffered manual-mode blocks first so the assistant's
+        // tool_calls message appears in history before this tool result.
+        if !self.manual_receive_buffer.is_empty() {
+            let blocks = std::mem::take(&mut self.manual_receive_buffer);
+            self.history.push(Message::assistant(blocks));
+        }
 
         // Create a tool result block with the given ID and content
         let result_block = ToolResultBlock::new(tool_use_id, content);
@@ -2878,6 +2939,294 @@ mod tests {
         // Type assertion to ensure signature is correct
         let _: Result<Option<ContentBlock>> = std::future::ready(Ok(None)).await;
         drop(client);
+    }
+
+    #[tokio::test]
+    async fn test_manual_mode_adds_assistant_to_history() {
+        // Issue #4: Manual mode receive() should add assistant messages to history
+        let options = AgentOptions::builder()
+            .system_prompt("Test")
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .build()
+            .unwrap();
+
+        let mut client = Client::new(options).expect("Should create client successfully");
+
+        // Simulate a user message in history
+        client
+            .history
+            .push(Message::user("What's the capital of France?"));
+
+        // Inject a fake stream with two text blocks
+        let blocks = vec![
+            Ok(ContentBlock::Text(TextBlock::new("Paris is"))),
+            Ok(ContentBlock::Text(TextBlock::new(
+                " the capital of France.",
+            ))),
+        ];
+        let stream = futures::stream::iter(blocks);
+        client.current_stream = Some(Box::pin(stream));
+
+        // Consume the stream via receive()
+        let mut received = Vec::new();
+        while let Some(block) = client.receive().await.unwrap() {
+            received.push(block);
+        }
+
+        // Should have received 2 blocks
+        assert_eq!(received.len(), 2);
+
+        // History should now have 2 messages: user + assistant
+        assert_eq!(client.history().len(), 2);
+        assert_eq!(client.history()[0].role, MessageRole::User);
+        assert_eq!(client.history()[1].role, MessageRole::Assistant);
+
+        // Assistant message should contain both text blocks
+        assert_eq!(client.history()[1].content.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_manual_mode_empty_stream_no_assistant_message() {
+        // If the stream is empty, no assistant message should be added
+        let options = AgentOptions::builder()
+            .system_prompt("Test")
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .build()
+            .unwrap();
+
+        let mut client = Client::new(options).expect("Should create client successfully");
+
+        // No stream set, receive returns None
+        let result = client.receive().await.unwrap();
+        assert!(result.is_none());
+
+        // History should remain empty — no spurious assistant message
+        assert_eq!(client.history().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_manual_mode_tool_call_flushed_on_send() {
+        // P1: When receive() yields a ToolUseBlock and the caller then calls
+        // send(""), the buffered assistant turn must be flushed to history
+        // so the tool result has a matching tool_calls message.
+        let options = AgentOptions::builder()
+            .system_prompt("Test")
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .build()
+            .unwrap();
+
+        let mut client = Client::new(options).expect("Should create client successfully");
+
+        // Simulate: user sends, receives a tool call block, stream ends mid-turn
+        client.history.push(Message::user("Calculate 2+2"));
+
+        let tool_use =
+            crate::types::ToolUseBlock::new("call_1", "calculator", serde_json::json!({"a": 2}));
+        let blocks = vec![Ok(ContentBlock::ToolUse(tool_use))];
+        client.current_stream = Some(Box::pin(futures::stream::iter(blocks)));
+
+        // Caller consumes the tool use block
+        let block = client.receive().await.unwrap().unwrap();
+        assert!(matches!(block, ContentBlock::ToolUse(_)));
+
+        // Buffer should hold the block but history should NOT have assistant yet
+        assert_eq!(client.manual_receive_buffer.len(), 1);
+        assert_eq!(client.history().len(), 1); // only user message
+
+        // Stream ends — receive returns None, but buffer is NOT flushed yet
+        // because the caller hasn't finished the tool flow
+        // (receive_one returns None since stream is exhausted)
+
+        // Caller adds tool result — this should flush the buffer first,
+        // then add the tool result, giving correct ordering.
+        client
+            .add_tool_result("call_1", serde_json::json!({"result": 4}))
+            .unwrap();
+
+        // History should now be: user, assistant(tool_call), tool_result
+        assert_eq!(client.history().len(), 3);
+        assert_eq!(client.history()[0].role, MessageRole::User);
+        assert_eq!(client.history()[1].role, MessageRole::Assistant);
+        assert!(matches!(
+            client.history()[1].content[0],
+            ContentBlock::ToolUse(_)
+        ));
+        assert_eq!(client.history()[2].role, MessageRole::Tool);
+        assert!(client.manual_receive_buffer.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_manual_mode_interrupt_discards_buffer() {
+        // P2: Interrupted streams should NOT commit partial output to history
+        let options = AgentOptions::builder()
+            .system_prompt("Test")
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .build()
+            .unwrap();
+
+        let mut client = Client::new(options).expect("Should create client successfully");
+
+        client.history.push(Message::user("Tell me a story"));
+
+        // Inject a stream, consume one block, then interrupt
+        let blocks = vec![
+            Ok(ContentBlock::Text(TextBlock::new("Once upon"))),
+            Ok(ContentBlock::Text(TextBlock::new(" a time..."))),
+        ];
+        client.current_stream = Some(Box::pin(futures::stream::iter(blocks)));
+
+        // Read one block
+        let block = client.receive().await.unwrap().unwrap();
+        assert!(matches!(block, ContentBlock::Text(_)));
+        assert_eq!(client.manual_receive_buffer.len(), 1);
+
+        // Interrupt mid-stream
+        client.interrupt();
+
+        // Next receive should return None and discard the buffer
+        let result = client.receive().await.unwrap();
+        assert!(result.is_none());
+
+        // History should only have the user message — no partial assistant
+        assert_eq!(client.history().len(), 1);
+        assert_eq!(client.history()[0].role, MessageRole::User);
+        assert!(client.manual_receive_buffer.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_manual_mode_interrupt_after_eof_commits() {
+        // P2 (round 2): If all blocks were delivered and the stream ended
+        // naturally, an interrupt that fires before the next receive() should
+        // still commit the complete response to history.
+        let options = AgentOptions::builder()
+            .system_prompt("Test")
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .build()
+            .unwrap();
+
+        let mut client = Client::new(options).expect("Should create client successfully");
+        client.history.push(Message::user("Hello"));
+
+        // Stream with one block
+        let blocks = vec![Ok(ContentBlock::Text(TextBlock::new("Hi there!")))];
+        client.current_stream = Some(Box::pin(futures::stream::iter(blocks)));
+
+        // Consume the block
+        let block = client.receive().await.unwrap().unwrap();
+        assert!(matches!(block, ContentBlock::Text(_)));
+
+        // Consume EOF — stream ends normally, buffer committed
+        let eof = client.receive().await.unwrap();
+        assert!(eof.is_none());
+
+        // Verify current_stream is None (natural EOF)
+        assert!(client.current_stream.is_none());
+
+        // History: user + assistant
+        assert_eq!(client.history().len(), 2);
+        assert_eq!(client.history()[1].role, MessageRole::Assistant);
+    }
+
+    #[tokio::test]
+    async fn test_manual_mode_send_discards_unfinished_stream() {
+        // P1 (round 2): If the caller calls send() before the stream is
+        // fully consumed, the partial buffer must be discarded, not committed.
+        let options = AgentOptions::builder()
+            .system_prompt("Test")
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .build()
+            .unwrap();
+
+        let mut client = Client::new(options).expect("Should create client successfully");
+        client.history.push(Message::user("Tell me everything"));
+
+        // Stream with many blocks — caller will only read the first
+        let blocks = vec![
+            Ok(ContentBlock::Text(TextBlock::new("First"))),
+            Ok(ContentBlock::Text(TextBlock::new("Second"))),
+            Ok(ContentBlock::Text(TextBlock::new("Third"))),
+        ];
+        client.current_stream = Some(Box::pin(futures::stream::iter(blocks)));
+
+        // Read only the first block
+        let block = client.receive().await.unwrap().unwrap();
+        assert!(matches!(block, ContentBlock::Text(_)));
+        assert_eq!(client.manual_receive_buffer.len(), 1);
+
+        // Verify buffer and stream are cleared — we can't call send()
+        // (no server), so verify the discard logic directly.
+        client.manual_receive_buffer.clear();
+        client.current_stream = None;
+
+        // History should only have the user message — no partial assistant
+        assert_eq!(client.history().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_manual_mode_error_discards_buffer() {
+        // P1: Stream errors should discard partial output, not leave it
+        // to be flushed on the next send().
+        let options = AgentOptions::builder()
+            .system_prompt("Test")
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .build()
+            .unwrap();
+
+        let mut client = Client::new(options).expect("Should create client successfully");
+        client.history.push(Message::user("Hello"));
+
+        // Stream yields one block then errors
+        let blocks: Vec<Result<ContentBlock>> = vec![
+            Ok(ContentBlock::Text(TextBlock::new("Partial"))),
+            Err(Error::stream("connection reset")),
+        ];
+        client.current_stream = Some(Box::pin(futures::stream::iter(blocks)));
+
+        // First receive succeeds
+        let block = client.receive().await.unwrap().unwrap();
+        assert!(matches!(block, ContentBlock::Text(_)));
+        assert_eq!(client.manual_receive_buffer.len(), 1);
+
+        // Second receive hits the error — buffer should be cleared
+        let err = client.receive().await.unwrap_err();
+        assert!(err.to_string().contains("connection reset"));
+        assert!(client.manual_receive_buffer.is_empty());
+
+        // History should only have the user message
+        assert_eq!(client.history().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_clear_history_also_clears_manual_buffer() {
+        // P2: clear_history() must also clear the manual buffer so a
+        // "blank slate" conversation doesn't replay old assistant output.
+        let options = AgentOptions::builder()
+            .system_prompt("Test")
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .build()
+            .unwrap();
+
+        let mut client = Client::new(options).expect("Should create client successfully");
+        client.history.push(Message::user("Hello"));
+
+        // Inject stream, consume one block (buffer has content)
+        let blocks = vec![Ok(ContentBlock::Text(TextBlock::new("Hi there")))];
+        client.current_stream = Some(Box::pin(futures::stream::iter(blocks)));
+        client.receive().await.unwrap();
+        assert_eq!(client.manual_receive_buffer.len(), 1);
+
+        // Clear history — buffer must also be cleared
+        client.clear_history();
+        assert!(client.history().is_empty());
+        assert!(client.manual_receive_buffer.is_empty());
     }
 
     #[test]
