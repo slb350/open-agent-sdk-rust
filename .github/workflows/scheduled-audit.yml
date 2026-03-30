@@ -12,9 +12,9 @@ jobs:
     name: Dependency Security Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions-rust-lang/audit@v1
         with:
           # Create GitHub issues for vulnerabilities
           # Set to 'true' to enable issue creation
-          create-issues: false
+          createIssues: false

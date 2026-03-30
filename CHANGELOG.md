@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-03-29
+
+### Fixed
+
+- **Security**: Resolved 2 dependency vulnerabilities via `cargo update`:
+  - `bytes` 1.10.1 → 1.11.1 (RUSTSEC-2026-0007: integer overflow in `BytesMut::reserve`)
+  - `rustls-webpki` 0.103.8 → 0.103.10 (RUSTSEC-2026-0049: faulty CRL matching logic)
+- **CI**: Fixed daily Security Audit workflow failure — `create-issues` parameter renamed to `createIssues` per `actions-rust-lang/audit@v1` input schema
+
+### Changed
+
+- **Dependencies**: Updated all transitive dependencies to latest compatible versions
+- **Dependencies**: Tightened direct dependency version floors:
+  - `tokio` 1.40 → 1.50
+  - `reqwest` 0.12 → 0.12.28
+  - `futures` 0.3 → 0.3.32
+  - `log` 0.4 → 0.4.29
+- **CI**: Updated `actions/checkout` v4 → v6 (Node.js 20 deprecation)
+- **CI**: Updated `codecov/codecov-action` v4 → v6
+
 ## [0.6.0] - 2025-11-14
 
 ### Added
