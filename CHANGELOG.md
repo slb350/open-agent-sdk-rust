@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-03-30
+
+### Fixed
+
+- **Client**: Manual mode `receive()` now adds assistant messages to conversation history (fixes #4)
+  - Previously, only user messages appeared in `history()`, breaking multi-turn conversations
+  - Buffer is committed on natural stream EOF and flushed before `add_tool_result()`
+  - Partial output is correctly discarded on stream errors, interrupts, and abandoned streams
+  - `clear_history()` also clears the manual buffer to prevent stale replay
+- **Client**: Interrupt after stream EOF now commits (not discards) the complete response
+- **Client**: `send()`/`send_message()` discard unfinished stream buffers instead of persisting truncated content
+
 ## [0.6.1] - 2026-03-29
 
 ### Fixed
