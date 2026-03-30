@@ -2950,7 +2950,9 @@ mod tests {
         // Inject a fake stream with two text blocks
         let blocks = vec![
             Ok(ContentBlock::Text(TextBlock::new("Paris is"))),
-            Ok(ContentBlock::Text(TextBlock::new(" the capital of France."))),
+            Ok(ContentBlock::Text(TextBlock::new(
+                " the capital of France.",
+            ))),
         ];
         let stream = futures::stream::iter(blocks);
         client.current_stream = Some(Box::pin(stream));
