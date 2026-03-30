@@ -2275,12 +2275,18 @@ impl Client {
             // ====================================================================
             // Stream blocks to caller while accumulating them so we can add
             // the complete assistant message to history when the stream ends.
-            match self.receive_one().await? {
-                Some(block) => {
+            match self.receive_one().await {
+                Err(e) => {
+                    // Stream error — discard partial output so a retry
+                    // doesn't flush truncated blocks into history.
+                    self.manual_receive_buffer.clear();
+                    Err(e)
+                }
+                Ok(Some(block)) => {
                     self.manual_receive_buffer.push(block.clone());
                     Ok(Some(block))
                 }
-                None => {
+                Ok(None) => {
                     if self.interrupted.load(Ordering::SeqCst) {
                         // Interrupted — discard partial output so the client
                         // stays reusable without replaying truncated content.
@@ -2562,6 +2568,7 @@ impl Client {
     /// ```
     pub fn clear_history(&mut self) {
         self.history.clear();
+        self.manual_receive_buffer.clear();
     }
 
     /// Adds a tool result to the conversation history for manual tool execution.
@@ -3083,6 +3090,67 @@ mod tests {
         // History should only have the user message — no partial assistant
         assert_eq!(client.history().len(), 1);
         assert_eq!(client.history()[0].role, MessageRole::User);
+        assert!(client.manual_receive_buffer.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_manual_mode_error_discards_buffer() {
+        // P1: Stream errors should discard partial output, not leave it
+        // to be flushed on the next send().
+        let options = AgentOptions::builder()
+            .system_prompt("Test")
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .build()
+            .unwrap();
+
+        let mut client = Client::new(options).expect("Should create client successfully");
+        client.history.push(Message::user("Hello"));
+
+        // Stream yields one block then errors
+        let blocks: Vec<Result<ContentBlock>> = vec![
+            Ok(ContentBlock::Text(TextBlock::new("Partial"))),
+            Err(Error::stream("connection reset")),
+        ];
+        client.current_stream = Some(Box::pin(futures::stream::iter(blocks)));
+
+        // First receive succeeds
+        let block = client.receive().await.unwrap().unwrap();
+        assert!(matches!(block, ContentBlock::Text(_)));
+        assert_eq!(client.manual_receive_buffer.len(), 1);
+
+        // Second receive hits the error — buffer should be cleared
+        let err = client.receive().await.unwrap_err();
+        assert!(err.to_string().contains("connection reset"));
+        assert!(client.manual_receive_buffer.is_empty());
+
+        // History should only have the user message
+        assert_eq!(client.history().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_clear_history_also_clears_manual_buffer() {
+        // P2: clear_history() must also clear the manual buffer so a
+        // "blank slate" conversation doesn't replay old assistant output.
+        let options = AgentOptions::builder()
+            .system_prompt("Test")
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .build()
+            .unwrap();
+
+        let mut client = Client::new(options).expect("Should create client successfully");
+        client.history.push(Message::user("Hello"));
+
+        // Inject stream, consume one block (buffer has content)
+        let blocks = vec![Ok(ContentBlock::Text(TextBlock::new("Hi there")))];
+        client.current_stream = Some(Box::pin(futures::stream::iter(blocks)));
+        client.receive().await.unwrap();
+        assert_eq!(client.manual_receive_buffer.len(), 1);
+
+        // Clear history — buffer must also be cleared
+        client.clear_history();
+        assert!(client.history().is_empty());
         assert!(client.manual_receive_buffer.is_empty());
     }
 
