@@ -18,7 +18,7 @@
 **How fast?**
 From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 85+ tests.
 
-[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg)](https://crates.io/crates/open-agent-sdk)
+[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.6.2)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -53,7 +53,7 @@ Open Agent SDK (Rust) provides a clean, streaming API for working with OpenAI-co
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.6.0"
+open-agent-sdk = "0.6.2"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -910,6 +910,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.6.0 Published - Multimodal image support, 110+ unit tests, 61 integration tests
+**Status**: v0.6.2 Published - Manual-mode history fixes, multimodal image support, 110+ unit tests, 61 integration tests
 
 Star this repo if you're building AI agents with local models in Rust!
