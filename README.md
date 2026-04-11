@@ -815,10 +815,10 @@ open-agent-sdk-rust/
 │   ├── context.rs         # Token estimation and truncation
 │   ├── error.rs           # Error types
 │   ├── hooks.rs           # Lifecycle hooks
-│   ├── lib.rs             # Public exports
+│   ├── lib.rs             # Public exports and prelude module
 │   ├── retry.rs           # Retry logic with exponential backoff
 │   ├── tools.rs           # Tool system
-│   ├── types.rs           # Core types (AgentOptions, ContentBlock, etc.)
+│   ├── types.rs           # Core types (AgentOptions, ContentBlock, ImageBlock, etc.)
 │   └── utils.rs           # SSE parsing and tool call aggregation
 ├── examples/
 │   ├── simple_query.rs              # Basic streaming query
@@ -830,12 +830,23 @@ open-agent-sdk-rust/
 │   ├── interrupt_demo.rs            # Interrupt capability patterns
 │   ├── git_commit_agent.rs          # Production: Git commit generator
 │   ├── log_analyzer_agent.rs        # Production: Log analyzer
-│   └── advanced_patterns.rs         # Retry logic and concurrent requests
+│   ├── advanced_patterns.rs         # Retry logic and concurrent requests
+│   ├── vision_example.rs            # Multimodal: URLs, local files, base64
+│   └── vision_api_demo.rs           # Vision API walkthrough
 ├── tests/
 │   ├── integration_tests.rs
-│   ├── hooks_integration_test.rs    # Hooks integration tests
-│   ├── auto_execution_test.rs       # Auto-execution tests
-│   └── advanced_integration_test.rs # Advanced integration tests
+│   ├── advanced_integration_test.rs
+│   ├── auto_execution_test.rs
+│   ├── backward_compatibility_test.rs
+│   ├── client_image_serialization_test.rs
+│   ├── debug_logging_test.rs
+│   ├── defensive_validation_test.rs
+│   ├── edge_cases_test.rs
+│   ├── hooks_integration_test.rs
+│   ├── image_serialization_test.rs
+│   ├── security_bypass_test.rs
+│   ├── send_message_test.rs         # Manual-mode history regression (v0.6.2)
+│   └── tool_call_content_test.rs
 ├── Cargo.toml
 └── README.md
 ```
@@ -854,6 +865,7 @@ open-agent-sdk-rust/
 - `calculator_tools.rs` – Manual tool execution pattern
 - `auto_execution_demo.rs` – Automatic tool execution pattern
 - `vision_example.rs` – Multimodal image support (URLs, local files, base64)
+- `vision_api_demo.rs` – Vision API walkthrough with token cost notes
 - `hooks_example.rs` – Lifecycle hooks patterns (security gates, audit logging)
 - `context_management.rs` – Manual history management patterns
 - `interrupt_demo.rs` – Interrupt capability patterns (timeout, conditional, concurrent)
