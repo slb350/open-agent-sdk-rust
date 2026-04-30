@@ -228,7 +228,7 @@ impl LogAnalyzer {
 
         // Convert to sorted vector
         let mut sorted_patterns: Vec<(String, usize)> = patterns.into_iter().collect();
-        sorted_patterns.sort_by(|a, b| b.1.cmp(&a.1)); // Sort by count, descending
+        sorted_patterns.sort_by_key(|p| std::cmp::Reverse(p.1)); // Sort by count, descending
         sorted_patterns.into_iter().take(5).collect()
     }
 }

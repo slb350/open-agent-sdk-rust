@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-04-29
+
+### Fixed
+
+- **Security**: Resolved 3 dependency vulnerabilities via `cargo update`:
+  - `rustls-webpki` 0.103.10 → 0.103.13 (RUSTSEC-2026-0098: name constraints incorrectly accepted for URI names)
+  - `rustls-webpki` 0.103.10 → 0.103.13 (RUSTSEC-2026-0099: name constraints accepted for wildcard certificates)
+  - `rustls-webpki` 0.103.10 → 0.103.13 (RUSTSEC-2026-0104: reachable panic in CRL parsing)
+- **Security**: Addressed `rand` unsoundness warning (RUSTSEC-2026-0097) by updating 0.8.5 → 0.8.6
+- **Docs**: README code snippets used a stale `client.receive()` pattern that no longer compiled (fixes #6)
+  - `while let Some(block) = client.receive().await { match block? { ... } }` did not match the v0.4.0+ `Result<Option<ContentBlock>>` return type
+  - All 8 occurrences updated to `while let Some(block) = client.receive().await? { match block { ... } }`
+  - Manual tool execution snippet updated to clone the borrowed `tool_use.input()` reference
+- **Lint**: Fixed `clippy::unnecessary_sort_by` in `log_analyzer_agent` example (rust 1.95)
+
 ## [0.6.2] - 2026-03-30
 
 ### Fixed
