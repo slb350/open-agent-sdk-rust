@@ -2,7 +2,7 @@
 
 ## Project Description
 
-A Rust SDK (v0.6.2) for building AI agents with local or cloud LLMs via OpenAI-compatible endpoints. Feature parity with the Python SDK — streaming, tools, hooks, auto-execution, vision, context management, and interrupt capability. Published to crates.io as `open-agent-sdk`.
+A Rust SDK (v0.6.3) for building AI agents with local or cloud LLMs via OpenAI-compatible endpoints. Feature parity with the Python SDK — streaming, tools, hooks, auto-execution, vision, context management, and interrupt capability. Published to crates.io as `open-agent-sdk`.
 
 ## Repository Structure
 
@@ -47,7 +47,7 @@ open-agent-sdk-rust/
 │   ├── security_bypass_test.rs
 │   ├── send_message_test.rs
 │   └── tool_call_content_test.rs
-├── Cargo.toml           # version = "0.6.2"
+├── Cargo.toml           # version = "0.6.3"
 ├── Cargo.lock
 └── CHANGELOG.md
 ```
