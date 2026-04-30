@@ -18,7 +18,7 @@
 **How fast?**
 From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 85+ tests.
 
-[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg)](https://crates.io/crates/open-agent-sdk)
+[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.6.2)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -53,7 +53,7 @@ Open Agent SDK (Rust) provides a clean, streaming API for working with OpenAI-co
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.6.0"
+open-agent-sdk = "0.6.2"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -821,10 +821,10 @@ open-agent-sdk-rust/
 │   ├── context.rs         # Token estimation and truncation
 │   ├── error.rs           # Error types
 │   ├── hooks.rs           # Lifecycle hooks
-│   ├── lib.rs             # Public exports
+│   ├── lib.rs             # Public exports and prelude module
 │   ├── retry.rs           # Retry logic with exponential backoff
 │   ├── tools.rs           # Tool system
-│   ├── types.rs           # Core types (AgentOptions, ContentBlock, etc.)
+│   ├── types.rs           # Core types (AgentOptions, ContentBlock, ImageBlock, etc.)
 │   └── utils.rs           # SSE parsing and tool call aggregation
 ├── examples/
 │   ├── simple_query.rs              # Basic streaming query
@@ -836,12 +836,23 @@ open-agent-sdk-rust/
 │   ├── interrupt_demo.rs            # Interrupt capability patterns
 │   ├── git_commit_agent.rs          # Production: Git commit generator
 │   ├── log_analyzer_agent.rs        # Production: Log analyzer
-│   └── advanced_patterns.rs         # Retry logic and concurrent requests
+│   ├── advanced_patterns.rs         # Retry logic and concurrent requests
+│   ├── vision_example.rs            # Multimodal: URLs, local files, base64
+│   └── vision_api_demo.rs           # Vision API walkthrough
 ├── tests/
 │   ├── integration_tests.rs
-│   ├── hooks_integration_test.rs    # Hooks integration tests
-│   ├── auto_execution_test.rs       # Auto-execution tests
-│   └── advanced_integration_test.rs # Advanced integration tests
+│   ├── advanced_integration_test.rs
+│   ├── auto_execution_test.rs
+│   ├── backward_compatibility_test.rs
+│   ├── client_image_serialization_test.rs
+│   ├── debug_logging_test.rs
+│   ├── defensive_validation_test.rs
+│   ├── edge_cases_test.rs
+│   ├── hooks_integration_test.rs
+│   ├── image_serialization_test.rs
+│   ├── security_bypass_test.rs
+│   ├── send_message_test.rs         # Manual-mode history regression (v0.6.2)
+│   └── tool_call_content_test.rs
 ├── Cargo.toml
 └── README.md
 ```
@@ -860,6 +871,7 @@ open-agent-sdk-rust/
 - `calculator_tools.rs` – Manual tool execution pattern
 - `auto_execution_demo.rs` – Automatic tool execution pattern
 - `vision_example.rs` – Multimodal image support (URLs, local files, base64)
+- `vision_api_demo.rs` – Vision API walkthrough with token cost notes
 - `hooks_example.rs` – Lifecycle hooks patterns (security gates, audit logging)
 - `context_management.rs` – Manual history management patterns
 - `interrupt_demo.rs` – Interrupt capability patterns (timeout, conditional, concurrent)
@@ -916,6 +928,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.6.0 Published - Multimodal image support, 110+ unit tests, 61 integration tests
+**Status**: v0.6.2 Published - Manual-mode history fixes, multimodal image support, 110+ unit tests, 61 integration tests
 
 Star this repo if you're building AI agents with local models in Rust!
