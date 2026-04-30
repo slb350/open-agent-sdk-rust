@@ -112,8 +112,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     client.send("What's the capital of France?").await?;
 
-    while let Some(block) = client.receive().await {
-        match block? {
+    while let Some(block) = client.receive().await? {
+        match block {
             ContentBlock::Text(text) => {
                 println!("Assistant: {}", text.text);
             }
@@ -164,8 +164,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     client.send("What's 25 + 17?").await?;
 
     // Simply iterate - tools execute automatically!
-    while let Some(block) = client.receive().await {
-        match block? {
+    while let Some(block) = client.receive().await? {
+        match block {
             ContentBlock::Text(text) => {
                 println!("Response: {}", text.text);
             }
@@ -194,11 +194,11 @@ let options = AgentOptions::builder()
 let mut client = Client::new(options)?;
 client.send("What's 25 + 17?").await?;
 
-while let Some(block) = client.receive().await {
-    match block? {
+while let Some(block) = client.receive().await? {
+    match block {
         ContentBlock::ToolUse(tool_use) => {
             // You execute the tool manually
-            let result = add_tool.execute(tool_use.input()).await?;
+            let result = add_tool.execute(tool_use.input().clone()).await?;
 
             // Return result to agent
             client.add_tool_result(tool_use.id(), result)?;
@@ -336,8 +336,9 @@ let mut client = Client::new(options)?;
 // Long conversation...
 for i in 0..50 {
     client.send(&format!("Question {}", i)).await?;
-    while let Some(block) = client.receive().await {
+    while let Some(block) = client.receive().await? {
         // Process blocks
+        let _ = block;
     }
 }
 
@@ -538,9 +539,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Timeout after 5 seconds
     match timeout(Duration::from_secs(5), async {
-        while let Some(block) = client.receive().await {
+        while let Some(block) = client.receive().await? {
             // Process blocks
+            let _ = block;
         }
+        Ok::<_, Box<dyn std::error::Error>>(())
     }).await {
         Ok(_) => println!("Completed"),
         Err(_) => {
@@ -563,8 +566,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```rust
 let mut full_text = String::new();
-while let Some(block) = client.receive().await {
-    if let ContentBlock::Text(text) = block? {
+while let Some(block) = client.receive().await? {
+    if let ContentBlock::Text(text) = block {
         full_text.push_str(&text.text);
         if full_text.contains("error") {
             client.interrupt();
@@ -580,9 +583,11 @@ while let Some(block) = client.receive().await {
 use tokio::select;
 
 let stream_task = async {
-    while let Some(block) = client.receive().await {
+    while let Some(block) = client.receive().await? {
         // Process blocks
+        let _ = block;
     }
+    Ok::<_, Box<dyn std::error::Error>>(())
 };
 
 let cancel_task = async {
@@ -766,8 +771,9 @@ Multi-turn conversation client with tool monitoring.
 let mut client = Client::new(options)?;
 client.send(prompt).await?;
 
-while let Some(block) = client.receive().await {
+while let Some(block) = client.receive().await? {
     // Process ContentBlock items
+    let _ = block;
 }
 ```
 
