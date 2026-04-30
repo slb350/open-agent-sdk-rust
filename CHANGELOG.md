@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-04-29
+
+### Fixed
+
+- **Package**: Remove inadvertent `CLAUDE.md` (development notes) from the published crate. v0.6.3 has been yanked. v0.6.4 is identical to v0.6.3 in terms of source, with the only change being the package no longer ships `CLAUDE.md`.
+
 ## [0.6.3] - 2026-04-29
 
 ### Fixed
