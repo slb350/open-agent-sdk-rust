@@ -16,7 +16,7 @@
 - **Control** - pick your model (Qwen, Llama, Mistral, etc.)
 
 **How fast?**
-From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 170+ tests.
+From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 466+ tests.
 
 [![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.6.4)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
@@ -741,13 +741,15 @@ AgentOptions::builder()
     .system_prompt(str)                  // System prompt
     .model(str)                          // Model name (required)
     .base_url(str)                       // OpenAI-compatible endpoint (required)
-    .tool(Tool)                          // Add tools for function calling
+    .tool(Tool)                          // Add a single tool for function calling
+    .tools(Vec<Tool>)                    // Add multiple tools at once
     .hooks(Hooks)                        // Lifecycle hooks for monitoring/control
     .auto_execute_tools(bool)            // Enable automatic tool execution
-    .max_tool_iterations(usize)          // Max tool calls per query in auto mode
-    .max_tokens(Option<u32>)             // Tokens to generate (None = provider default)
-    .temperature(f32)                    // Sampling temperature
-    .timeout(u64)                        // Request timeout in seconds
+    .max_tool_iterations(u32)            // Max tool calls per query in auto mode
+    .max_tokens(u32)                     // Tokens to generate (default: 4096)
+    .max_turns(u32)                      // Max conversation turns (default: 1)
+    .temperature(f32)                    // Sampling temperature (default: 0.7)
+    .timeout(u64)                        // Request timeout in seconds (default: 60)
     .api_key(str)                        // API key (default: "not-needed")
     .build()?
 ```
@@ -758,10 +760,10 @@ Simple single-turn query function.
 
 ```rust
 pub async fn query(prompt: &str, options: &AgentOptions)
-    -> Result<ContentStream>
+    -> Result<Pin<Box<dyn Stream<Item = Result<ContentBlock>> + Send>>>
 ```
 
-Returns a stream yielding `ContentBlock` items.
+Returns a stream yielding `ContentBlock` items. Use `futures::StreamExt` to iterate.
 
 ### Client
 
@@ -780,6 +782,7 @@ while let Some(block) = client.receive().await? {
 ### Message Types
 
 - `ContentBlock::Text(TextBlock)` - Text content from model
+- `ContentBlock::Image(ImageBlock)` - Image content (for vision models)
 - `ContentBlock::ToolUse(ToolUseBlock)` - Tool calls from model
 - `ContentBlock::ToolResult(ToolResultBlock)` - Tool execution results
 
@@ -817,7 +820,7 @@ let my_tool = tool("name", "description")
 open-agent-sdk-rust/
 ├── src/
 │   ├── client.rs          # query() and Client implementation
-│   ├── config.rs          # Configuration builder
+│   ├── config.rs          # Provider helpers (Provider, get_base_url, get_model)
 │   ├── context.rs         # Token estimation and truncation
 │   ├── error.rs           # Error types
 │   ├── hooks.rs           # Lifecycle hooks
@@ -838,9 +841,10 @@ open-agent-sdk-rust/
 │   ├── log_analyzer_agent.rs        # Production: Log analyzer
 │   ├── advanced_patterns.rs         # Retry logic and concurrent requests
 │   ├── vision_example.rs            # Multimodal: URLs, local files, base64
-│   └── vision_api_demo.rs           # Vision API walkthrough
+│   ├── vision_api_demo.rs           # Vision API walkthrough
+│   └── test_tool_serialization.rs   # Tool call serialization verification
 ├── tests/
-│   ├── integration_tests.rs
+│   ├── integration_tests.rs         # Core integration tests
 │   ├── advanced_integration_test.rs
 │   ├── auto_execution_test.rs
 │   ├── backward_compatibility_test.rs
@@ -852,7 +856,7 @@ open-agent-sdk-rust/
 │   ├── image_serialization_test.rs
 │   ├── security_bypass_test.rs
 │   ├── send_message_test.rs         # Manual-mode history regression (v0.6.2)
-│   └── tool_call_content_test.rs
+│   └── tool_call_content_test.rs    # Tool call serialization tests
 ├── Cargo.toml
 └── README.md
 ```
@@ -876,6 +880,7 @@ open-agent-sdk-rust/
 - `context_management.rs` – Manual history management patterns
 - `interrupt_demo.rs` – Interrupt capability patterns (timeout, conditional, concurrent)
 - `advanced_patterns.rs` – Retry logic and concurrent request handling
+- `test_tool_serialization.rs` – Verifies tool call serialization (see `examples/test_tool_serialization.rs`)
 
 ## Documentation
 
@@ -898,20 +903,21 @@ cargo test test_agent_options_builder
 
 **Test Coverage:**
 
-- 110 unit tests across 10 modules
-- 61 integration tests
+- 118 unit tests (lib)
+- 197 integration tests across 13 test files
   - Hooks integration tests
   - Auto-execution tests
   - Image serialization tests
   - Defensive validation tests
   - Backward compatibility tests
   - Advanced integration tests
+  - Edge cases, security bypass, debug logging, send message, tool call content tests
 - 151 doctests
 
 ## Requirements
 
 - Rust 1.85+
-- Tokio 1.0+ (async runtime)
+- Tokio 1.50+ (async runtime)
 - serde, serde_json (serialization)
 - reqwest (HTTP client)
 - futures (async streams)
@@ -928,6 +934,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.6.4 Published - Security advisories resolved, README example fixes, manual-mode history fixes, multimodal image support, 110+ unit tests, 61 integration tests
+**Status**: v0.6.4 Published - Security advisories resolved, README example fixes, manual-mode history fixes, multimodal image support, 118 unit tests, 197 integration tests, 151 doctests
 
 Star this repo if you're building AI agents with local models in Rust!
