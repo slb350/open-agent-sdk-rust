@@ -329,7 +329,7 @@ Local models have fixed context windows (typically 8k-32k tokens). The SDK provi
 ### Token Estimation & Truncation
 
 ```rust
-use open_agent::{Client, AgentOptions, estimate_tokens, truncate_messages};
+use open_agent::{Client, AgentOptions, estimate_tokens, is_approaching_limit, truncate_messages};
 
 let mut client = Client::new(options)?;
 
@@ -345,6 +345,11 @@ for i in 0..50 {
 // Check token usage
 let tokens = estimate_tokens(client.history());
 println!("Context size: ~{} tokens", tokens);
+
+// Check if approaching limit (margin = 0.8 means warn at 80% of limit)
+if is_approaching_limit(client.history(), 32000, 0.8) {
+    println!("Warning: approaching context limit");
+}
 
 // Manually truncate when needed
 if tokens > 28000 {
@@ -797,6 +802,21 @@ let my_tool = tool("name", "description")
         // Tool implementation
         Ok(json!({"result": value}))
     });
+```
+
+### Context Utilities
+
+```rust
+use open_agent::{estimate_tokens, is_approaching_limit, truncate_messages};
+
+// Estimate tokens in message history (character-based approximation)
+let tokens = estimate_tokens(client.history());
+
+// Check if approaching a context limit (margin=0.8 means 80% of limit)
+let near_limit = is_approaching_limit(client.history(), 32000, 0.8);
+
+// Truncate history, keeping the last N messages (preserve_system=true keeps system prompt)
+let truncated = truncate_messages(client.history(), 10, true);
 ```
 
 ## Recommended Models
