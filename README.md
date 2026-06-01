@@ -16,7 +16,7 @@
 - **Control** - pick your model (Qwen, Llama, Mistral, etc.)
 
 **How fast?**
-From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 466+ tests.
+From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 360+ tests.
 
 [![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.6.4)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
@@ -924,7 +924,7 @@ cargo test test_agent_options_builder
 **Test Coverage:**
 
 - 118 unit tests (lib)
-- 197 integration tests across 13 test files
+- 91 integration tests across 13 test files
   - Hooks integration tests
   - Auto-execution tests
   - Image serialization tests
@@ -954,6 +954,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.6.4 Published - Security advisories resolved, README example fixes, manual-mode history fixes, multimodal image support, 118 unit tests, 197 integration tests, 151 doctests
+**Status**: v0.6.4 Published - Security advisories resolved, README example fixes, manual-mode history fixes, multimodal image support, 118 unit tests, 91 integration tests, 151 doctests
 
 Star this repo if you're building AI agents with local models in Rust!
