@@ -956,6 +956,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.6.4 Published - Security advisories resolved, README example fixes, manual-mode history fixes, multimodal image support, 118 unit tests, 91 integration tests, 151 doctests
+**Status**: v0.6.4 Published - Security advisories resolved, README example fixes, manual-mode history fixes, multimodal image support, 118 unit tests, 209 integration tests, 151 doctests
 
 Star this repo if you're building AI agents with local models in Rust!
