@@ -498,18 +498,18 @@ hooks.add_pre_tool_use(|event| async move {
 let audit_log = Arc::new(Mutex::new(Vec::new()));
 let log_clone = audit_log.clone();
 
-hooks.add_post_tool_use(move |event| {
+// Note: add_post_tool_use consumes and returns Hooks (builder pattern) — always rebind
+let hooks = hooks.add_post_tool_use(move |event| {
     let log = log_clone.clone();
     async move {
         log.lock().unwrap().push(format!(
-            "[{}] {} -> {:?}",
-            chrono::Utc::now(),
+            "{} -> {:?}",
             event.tool_name,
             event.tool_result
         ));
         None
     }
-})
+});
 ```
 
 ### Hook Execution Flow
@@ -923,7 +923,7 @@ cargo test test_agent_options_builder
 
 **Test Coverage:**
 
-- 118 unit tests (lib)
+- ~118 unit tests (lib)
 - 91 integration tests across 13 test files
   - Hooks integration tests
   - Auto-execution tests
@@ -934,7 +934,7 @@ cargo test test_agent_options_builder
   - Edge cases, security bypass, debug logging, send message, tool call content tests
 - 151 doctests
 
-Total: 209 tests
+Total: ~209 unit + integration tests (plus 151 doctests)
 
 ## Requirements
 
