@@ -16,7 +16,7 @@
 - **Control** - pick your model (Qwen, Llama, Mistral, etc.)
 
 **How fast?**
-From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 209 tests.
+From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 197 tests.
 
 [![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.6.4)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
@@ -784,6 +784,25 @@ while let Some(block) = client.receive().await? {
 }
 ```
 
+**Additional Client methods:**
+
+```rust
+// Send a pre-built Message (e.g., with images)
+client.send_message(msg).await?;
+
+// Access the AgentOptions this client was created with
+let opts = client.options();
+
+// Clear conversation history (resets to system prompt only)
+client.clear_history();
+
+// Look up a registered tool by name
+if let Some(t) = client.get_tool("my_tool") { /* ... */ }
+
+// Obtain a shareable interrupt handle (Arc<AtomicBool>) for use across tasks
+let handle = client.interrupt_handle();
+```
+
 ### Message Types
 
 - `ContentBlock::Text(TextBlock)` - Text content from model
@@ -802,6 +821,34 @@ let my_tool = tool("name", "description")
         // Tool implementation
         Ok(json!({"result": value}))
     });
+```
+
+For full JSON Schema control, use `.schema()` instead of chaining `.param()` calls:
+
+```rust
+let my_tool = tool("name", "description")
+    .schema(json!({
+        "type": "object",
+        "properties": { "x": { "type": "number" } },
+        "required": ["x"]
+    }))
+    .build(|args| async move { Ok(json!({})) });
+```
+
+### Prelude Import
+
+For convenience, import the most commonly used types at once:
+
+```rust
+use open_agent::prelude::*;
+```
+
+### Hook Name Constants
+
+String constants for hook event types are exported for use in custom registries:
+
+```rust
+use open_agent::{HOOK_PRE_TOOL_USE, HOOK_POST_TOOL_USE, HOOK_USER_PROMPT_SUBMIT};
 ```
 
 ### Context Utilities
@@ -924,7 +971,7 @@ cargo test test_agent_options_builder
 **Test Coverage:**
 
 - ~118 unit tests (lib)
-- 91 integration tests across 13 test files
+- 79 integration tests across 13 test files (12 additional tests are `#[ignore]`d by default)
   - Hooks integration tests
   - Auto-execution tests
   - Image serialization tests
@@ -934,7 +981,7 @@ cargo test test_agent_options_builder
   - Edge cases, security bypass, debug logging, send message, tool call content tests
 - 151 doctests
 
-Total: ~209 unit + integration tests (plus 151 doctests)
+Total: ~197 unit + integration tests (plus 151 doctests)
 
 ## Requirements
 
@@ -956,6 +1003,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.6.4 Published - Security advisories resolved, README example fixes, manual-mode history fixes, multimodal image support, 118 unit tests, 91 integration tests, 151 doctests
+**Status**: v0.6.4 Published - Security advisories resolved, README example fixes, manual-mode history fixes, multimodal image support, 118 unit tests, 79 integration tests (+12 ignored), 151 doctests
 
 Star this repo if you're building AI agents with local models in Rust!
