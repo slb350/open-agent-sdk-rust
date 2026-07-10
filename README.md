@@ -16,7 +16,7 @@
 - **Control** - pick your model (Qwen, Llama, Mistral, etc.)
 
 **How fast?**
-From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 197 tests.
+From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 377 tests.
 
 [![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.6.4)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
@@ -835,6 +835,45 @@ let my_tool = tool("name", "description")
     .build(|args| async move { Ok(json!({})) });
 ```
 
+### ToolBuilder
+
+The `tool()` function returns a `ToolBuilder` for fluent construction of tool definitions:
+
+```rust
+use open_agent::{tool, ToolBuilder, Tool};
+
+let t: Tool = tool("name", "description")
+    .param("arg", "string")
+    .build(|args| async move { Ok(json!({})) });
+```
+
+### Provider Configuration
+
+Helper types and functions for mapping provider names to their default endpoints:
+
+```rust
+use open_agent::{Provider, get_base_url, get_model};
+
+let url = get_base_url(&Provider::LMStudio);   // http://localhost:1234/v1
+let model = get_model(&Provider::Ollama);       // provider default model name
+```
+
+### Newtype Wrappers
+
+Strong-typed wrappers used internally by `AgentOptions` and exported for external use:
+
+```rust
+use open_agent::{BaseUrl, ModelName, Temperature};
+```
+
+### Retry Module
+
+Exponential-backoff retry utilities, exported as a public module:
+
+```rust
+use open_agent::retry;
+```
+
 ### Prelude Import
 
 For convenience, import the most commonly used types at once:
@@ -981,7 +1020,7 @@ cargo test test_agent_options_builder
   - Edge cases, security bypass, debug logging, send message, tool call content tests
 - 151 doctests
 
-Total: ~197 unit + integration tests (plus 151 doctests)
+Total: ~377 unit + integration tests (plus 168 doctests)
 
 ## Requirements
 
