@@ -300,11 +300,11 @@ let msg = Message::new(
     vec![
         ContentBlock::Text(TextBlock::new("Compare these images:")),
         ContentBlock::Image(
-            ImageBlock::from_url("https://example.com/before.jpg")
+            ImageBlock::from_url("https://example.com/before.jpg")?
                 .with_detail(ImageDetail::Low)
         ),
         ContentBlock::Image(
-            ImageBlock::from_url("https://example.com/after.jpg")
+            ImageBlock::from_url("https://example.com/after.jpg")?
                 .with_detail(ImageDetail::Low)
         ),
     ],
@@ -854,10 +854,24 @@ Helper types and functions for mapping provider names to their default endpoints
 ```rust
 use open_agent::{Provider, get_base_url, get_model};
 
-let url = get_base_url(&Provider::LMStudio);   // http://localhost:1234/v1
-let model = get_model(&Provider::Ollama);       // provider default model name
+// get_base_url(provider: Option<Provider>, fallback: Option<&str>) -> String
+let url = get_base_url(Some(Provider::LMStudio), None);   // http://localhost:1234/v1
+let url_with_fallback = get_base_url(None, Some("http://localhost:8080/v1"));
+
+// get_model(fallback: Option<&str>, prefer_env: bool) -> Option<String>
+let model = get_model(Some("qwen2.5-32b"), false);  // use provided model
+let env_model = get_model(None, true);              // prefer OPEN_AGENT_MODEL env var
 ```
 
+### OpenAI Wire Types
+
+Low-level serialization types matching the OpenAI API request format, exported for callers that need to construct raw payloads:
+
+```rust
+use open_agent::{OpenAIContent, OpenAIContentPart};
+```
+
+`OpenAIContent` and `OpenAIContentPart` are used internally by the SDK when serializing messages to the OpenAI-compatible format. They are exported for advanced use cases where callers need to inspect or construct raw request content.
 ### Newtype Wrappers
 
 Strong-typed wrappers used internally by `AgentOptions` and exported for external use:
@@ -1018,9 +1032,9 @@ cargo test test_agent_options_builder
   - Backward compatibility tests
   - Advanced integration tests
   - Edge cases, security bypass, debug logging, send message, tool call content tests
-- 151 doctests
+- 151 active doctests (168 total, 17 `#[ignore]`d)
 
-Total: ~377 unit + integration tests (plus 168 doctests)
+Total: ~209 unit + integration tests (plus 168 doctests; 151 active + 17 `#[ignore]`d)
 
 ## Requirements
 
