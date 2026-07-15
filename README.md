@@ -16,7 +16,7 @@
 - **Control** - pick your model (Qwen, Llama, Mistral, etc.)
 
 **How fast?**
-From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 377 tests.
+From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 276 tests.
 
 [![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.6.4)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
@@ -963,6 +963,8 @@ open-agent-sdk-rust/
 │   ├── vision_example.rs            # Multimodal: URLs, local files, base64
 │   ├── vision_api_demo.rs           # Vision API walkthrough
 │   └── test_tool_serialization.rs   # Tool call serialization verification
+├── benches/
+│   └── performance.rs               # Criterion benchmarks (token estimation, history ops)
 ├── tests/
 │   ├── integration_tests.rs         # Core integration tests
 │   ├── advanced_integration_test.rs
@@ -1032,9 +1034,9 @@ cargo test test_agent_options_builder
   - Backward compatibility tests
   - Advanced integration tests
   - Edge cases, security bypass, debug logging, send message, tool call content tests
-- 151 active doctests (168 total, 17 `#[ignore]`d)
+- ~67 active doctests (34 compile-only `no_run` + 33 executable; 6 `ignore`d)
 
-Total: ~209 unit + integration tests (plus 168 doctests; 151 active + 17 `#[ignore]`d)
+Total: ~209 unit + integration tests + ~67 active doctests ≈ 276 tests
 
 ## Requirements
 
@@ -1056,6 +1058,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.6.4 Published - Security advisories resolved, README example fixes, manual-mode history fixes, multimodal image support, 118 unit tests, 79 integration tests (+12 ignored), 151 doctests
+**Status**: v0.6.4 Published - Security advisories resolved, README example fixes, manual-mode history fixes, multimodal image support, 118 unit tests, 79 integration tests (+12 ignored), ~67 doctests
 
 Star this repo if you're building AI agents with local models in Rust!
