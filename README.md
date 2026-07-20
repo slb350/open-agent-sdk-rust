@@ -231,7 +231,7 @@ Send images alongside text to vision-capable models like llava, qwen-vl, or mini
 ### Simple Image + Text
 
 ```rust
-use open_agent::{Client, Message, ImageBlock, ImageDetail};
+use open_agent::{Client, Message, MessageRole, ContentBlock, TextBlock, ImageBlock, ImageDetail};
 
 // From URL
 let msg = Message::user_with_image(
@@ -269,7 +269,7 @@ client.send_message(msg).await?;
 
 **Supported Image Sources:**
 
-- **`ImageBlock::from_url(url)`** - HTTPS/HTTP URLs
+- **`ImageBlock::from_url(url)`** - HTTPS/HTTP URLs or data URIs (e.g., `data:image/png;base64,...`)
 - **`ImageBlock::from_file_path(path)`** - Local filesystem (automatically encodes as base64)
   - Supports: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.bmp`, `.svg`
   - MIME type inferred from file extension
@@ -751,7 +751,7 @@ AgentOptions::builder()
     .hooks(Hooks)                        // Lifecycle hooks for monitoring/control
     .auto_execute_tools(bool)            // Enable automatic tool execution
     .max_tool_iterations(u32)            // Max tool calls per query in auto mode
-    .max_tokens(u32)                     // Tokens to generate (default: 4096)
+    .max_tokens(u32)                     // Tokens to generate (default: 4096); getter returns Option<u32>
     .max_turns(u32)                      // Max conversation turns (default: 1)
     .temperature(f32)                    // Sampling temperature (default: 0.7)
     .timeout(u64)                        // Request timeout in seconds (default: 60)
@@ -801,6 +801,41 @@ if let Some(t) = client.get_tool("my_tool") { /* ... */ }
 
 // Obtain a shareable interrupt handle (Arc<AtomicBool>) for use across tasks
 let handle = client.interrupt_handle();
+```
+
+### MessageRole
+
+Who sent a message. Used when constructing `Message` values directly.
+
+```rust
+use open_agent::MessageRole;
+
+MessageRole::System     // Establishes context and instructions
+MessageRole::User       // Input from the human or calling application
+MessageRole::Assistant  // Response from the AI model
+MessageRole::Tool       // Results from tool/function execution
+```
+
+### Message
+
+Pre-built message values (for `client.send_message()`). Convenience constructors:
+
+```rust
+use open_agent::{Message, MessageRole, ContentBlock, TextBlock};
+
+// Build a message manually (any role)
+Message::new(role: MessageRole, content: Vec<ContentBlock>) -> Self
+
+// Convenience constructors — all return Self (infallible):
+Message::user(text: &str) -> Self
+Message::assistant(text: &str) -> Self
+Message::system(text: &str) -> Self
+Message::user_with_blocks(blocks: Vec<ContentBlock>) -> Self
+
+// Vision constructors — return Result<Self>:
+Message::user_with_image(text: &str, image_url: &str) -> Result<Self>
+Message::user_with_image_detail(text: &str, image_url: &str, detail: ImageDetail) -> Result<Self>
+Message::user_with_base64_image(text: &str, base64_data: &str, mime: &str) -> Result<Self>
 ```
 
 ### Message Types
@@ -872,6 +907,14 @@ use open_agent::{OpenAIContent, OpenAIContentPart};
 ```
 
 `OpenAIContent` and `OpenAIContentPart` are used internally by the SDK when serializing messages to the OpenAI-compatible format. They are exported for advanced use cases where callers need to inspect or construct raw request content.
+### Error and Result Types
+
+```rust
+use open_agent::{Error, Result};
+```
+
+`Error` is the SDK's unified error type, covering HTTP errors, parse failures, configuration errors, and I/O errors. `Result<T>` is an alias for `std::result::Result<T, Error>`.
+
 ### Newtype Wrappers
 
 Strong-typed wrappers used internally by `AgentOptions` and exported for external use:
@@ -885,7 +928,27 @@ use open_agent::{BaseUrl, ModelName, Temperature};
 Exponential-backoff retry utilities, exported as a public module:
 
 ```rust
-use open_agent::retry;
+use open_agent::retry::{RetryConfig, retry_with_backoff, retry_with_backoff_conditional, is_retryable_error};
+
+// Configure retry behavior (builder pattern)
+let config = RetryConfig::default()          // 3 attempts, exponential backoff
+    .max_attempts(5)
+    .initial_delay_ms(100)
+    .max_delay_ms(5000)
+    .backoff_multiplier(2.0);
+
+// Retry any async operation
+let result = retry_with_backoff(config.clone(), || async {
+    some_fallible_operation().await
+}).await?;
+
+// Retry with a custom condition (only retry on certain errors)
+let result = retry_with_backoff_conditional(config, |err| is_retryable_error(err), || async {
+    some_fallible_operation().await
+}).await?;
+
+// Check if an SDK error is worth retrying (network errors, 429, 5xx)
+let retryable = is_retryable_error(&some_error);
 ```
 
 ### Prelude Import
