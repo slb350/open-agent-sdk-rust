@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-07-22
+
+### Fixed
+
+- **Security**: Raised the `anyhow` minimum to 1.0.103 and refreshed the lockfile from 1.0.102 → 1.0.104 to resolve RUSTSEC-2026-0190 (`Error::downcast_mut()` unsoundness).
+- **Security**: Updated transitive development dependency `crossbeam-epoch` 0.9.18 → 0.9.20 to resolve RUSTSEC-2026-0204 (invalid pointer dereference in pointer formatting).
+
+### Changed
+
+- **Maintenance**: Added grouped weekly Dependabot updates for Cargo and GitHub Actions dependencies.
+- **Dependencies**: Refreshed all lockfile dependencies to their latest Rust 1.85-compatible releases.
+- **CI**: Moved the standalone scheduled audit to Monday after the proactive Sunday maintenance window; push and pull-request audits remain unchanged.
+- **Automation**: Added a weekly Codex maintenance task authorized to audit, remediate, verify, commit, push, and publish patch releases when downstream dependency constraints change.
+
 ## [0.6.4] - 2026-04-29
 
 ### Fixed
