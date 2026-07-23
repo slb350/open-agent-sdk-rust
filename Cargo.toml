@@ -105,6 +105,18 @@ path = "examples/auto_execution_demo.rs"
 name = "multi_tool_agent"
 path = "examples/multi_tool_agent.rs"
 
+[[example]]
+name = "vision_example"
+path = "examples/vision_example.rs"
+
+[[example]]
+name = "vision_api_demo"
+path = "examples/vision_api_demo.rs"
+
+[[example]]
+name = "test_tool_serialization"
+path = "examples/test_tool_serialization.rs"
+
 [[bench]]
 name = "performance"
 harness = false

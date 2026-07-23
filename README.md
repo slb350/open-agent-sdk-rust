@@ -16,7 +16,7 @@
 - **Control** - pick your model (Qwen, Llama, Mistral, etc.)
 
 **How fast?**
-From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 85+ tests.
+From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 276 tests.
 
 [![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.6.5)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
@@ -231,7 +231,7 @@ Send images alongside text to vision-capable models like llava, qwen-vl, or mini
 ### Simple Image + Text
 
 ```rust
-use open_agent::{Client, Message, ImageBlock, ImageDetail};
+use open_agent::{Client, Message, MessageRole, ContentBlock, TextBlock, ImageBlock, ImageDetail};
 
 // From URL
 let msg = Message::user_with_image(
@@ -269,7 +269,7 @@ client.send_message(msg).await?;
 
 **Supported Image Sources:**
 
-- **`ImageBlock::from_url(url)`** - HTTPS/HTTP URLs
+- **`ImageBlock::from_url(url)`** - HTTPS/HTTP URLs or data URIs (e.g., `data:image/png;base64,...`)
 - **`ImageBlock::from_file_path(path)`** - Local filesystem (automatically encodes as base64)
   - Supports: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.bmp`, `.svg`
   - MIME type inferred from file extension
@@ -300,11 +300,11 @@ let msg = Message::new(
     vec![
         ContentBlock::Text(TextBlock::new("Compare these images:")),
         ContentBlock::Image(
-            ImageBlock::from_url("https://example.com/before.jpg")
+            ImageBlock::from_url("https://example.com/before.jpg")?
                 .with_detail(ImageDetail::Low)
         ),
         ContentBlock::Image(
-            ImageBlock::from_url("https://example.com/after.jpg")
+            ImageBlock::from_url("https://example.com/after.jpg")?
                 .with_detail(ImageDetail::Low)
         ),
     ],
@@ -329,7 +329,7 @@ Local models have fixed context windows (typically 8k-32k tokens). The SDK provi
 ### Token Estimation & Truncation
 
 ```rust
-use open_agent::{Client, AgentOptions, estimate_tokens, truncate_messages};
+use open_agent::{Client, AgentOptions, estimate_tokens, is_approaching_limit, truncate_messages};
 
 let mut client = Client::new(options)?;
 
@@ -345,6 +345,11 @@ for i in 0..50 {
 // Check token usage
 let tokens = estimate_tokens(client.history());
 println!("Context size: ~{} tokens", tokens);
+
+// Check if approaching limit (margin = 0.8 means warn at 80% of limit)
+if is_approaching_limit(client.history(), 32000, 0.8) {
+    println!("Warning: approaching context limit");
+}
 
 // Manually truncate when needed
 if tokens > 28000 {
@@ -493,18 +498,18 @@ hooks.add_pre_tool_use(|event| async move {
 let audit_log = Arc::new(Mutex::new(Vec::new()));
 let log_clone = audit_log.clone();
 
-hooks.add_post_tool_use(move |event| {
+// Note: add_post_tool_use consumes and returns Hooks (builder pattern) — always rebind
+let hooks = hooks.add_post_tool_use(move |event| {
     let log = log_clone.clone();
     async move {
         log.lock().unwrap().push(format!(
-            "[{}] {} -> {:?}",
-            chrono::Utc::now(),
+            "{} -> {:?}",
             event.tool_name,
             event.tool_result
         ));
         None
     }
-})
+});
 ```
 
 ### Hook Execution Flow
@@ -741,13 +746,15 @@ AgentOptions::builder()
     .system_prompt(str)                  // System prompt
     .model(str)                          // Model name (required)
     .base_url(str)                       // OpenAI-compatible endpoint (required)
-    .tool(Tool)                          // Add tools for function calling
+    .tool(Tool)                          // Add a single tool for function calling
+    .tools(Vec<Tool>)                    // Add multiple tools at once
     .hooks(Hooks)                        // Lifecycle hooks for monitoring/control
     .auto_execute_tools(bool)            // Enable automatic tool execution
-    .max_tool_iterations(usize)          // Max tool calls per query in auto mode
-    .max_tokens(Option<u32>)             // Tokens to generate (None = provider default)
-    .temperature(f32)                    // Sampling temperature
-    .timeout(u64)                        // Request timeout in seconds
+    .max_tool_iterations(u32)            // Max tool calls per query in auto mode
+    .max_tokens(u32)                     // Tokens to generate (default: 4096); getter returns Option<u32>
+    .max_turns(u32)                      // Max conversation turns (default: 1)
+    .temperature(f32)                    // Sampling temperature (default: 0.7)
+    .timeout(u64)                        // Request timeout in seconds (default: 60)
     .api_key(str)                        // API key (default: "not-needed")
     .build()?
 ```
@@ -758,10 +765,10 @@ Simple single-turn query function.
 
 ```rust
 pub async fn query(prompt: &str, options: &AgentOptions)
-    -> Result<ContentStream>
+    -> Result<Pin<Box<dyn Stream<Item = Result<ContentBlock>> + Send>>>
 ```
 
-Returns a stream yielding `ContentBlock` items.
+Returns a stream yielding `ContentBlock` items. Use `futures::StreamExt` to iterate.
 
 ### Client
 
@@ -777,9 +784,64 @@ while let Some(block) = client.receive().await? {
 }
 ```
 
+**Additional Client methods:**
+
+```rust
+// Send a pre-built Message (e.g., with images)
+client.send_message(msg).await?;
+
+// Access the AgentOptions this client was created with
+let opts = client.options();
+
+// Clear conversation history (resets to system prompt only)
+client.clear_history();
+
+// Look up a registered tool by name
+if let Some(t) = client.get_tool("my_tool") { /* ... */ }
+
+// Obtain a shareable interrupt handle (Arc<AtomicBool>) for use across tasks
+let handle = client.interrupt_handle();
+```
+
+### MessageRole
+
+Who sent a message. Used when constructing `Message` values directly.
+
+```rust
+use open_agent::MessageRole;
+
+MessageRole::System     // Establishes context and instructions
+MessageRole::User       // Input from the human or calling application
+MessageRole::Assistant  // Response from the AI model
+MessageRole::Tool       // Results from tool/function execution
+```
+
+### Message
+
+Pre-built message values (for `client.send_message()`). Convenience constructors:
+
+```rust
+use open_agent::{Message, MessageRole, ContentBlock, TextBlock};
+
+// Build a message manually (any role)
+Message::new(role: MessageRole, content: Vec<ContentBlock>) -> Self
+
+// Convenience constructors — all return Self (infallible):
+Message::user(text: &str) -> Self
+Message::assistant(text: &str) -> Self
+Message::system(text: &str) -> Self
+Message::user_with_blocks(blocks: Vec<ContentBlock>) -> Self
+
+// Vision constructors — return Result<Self>:
+Message::user_with_image(text: &str, image_url: &str) -> Result<Self>
+Message::user_with_image_detail(text: &str, image_url: &str, detail: ImageDetail) -> Result<Self>
+Message::user_with_base64_image(text: &str, base64_data: &str, mime: &str) -> Result<Self>
+```
+
 ### Message Types
 
 - `ContentBlock::Text(TextBlock)` - Text content from model
+- `ContentBlock::Image(ImageBlock)` - Image content (for vision models)
 - `ContentBlock::ToolUse(ToolUseBlock)` - Tool calls from model
 - `ContentBlock::ToolResult(ToolResultBlock)` - Tool execution results
 
@@ -794,6 +856,130 @@ let my_tool = tool("name", "description")
         // Tool implementation
         Ok(json!({"result": value}))
     });
+```
+
+For full JSON Schema control, use `.schema()` instead of chaining `.param()` calls:
+
+```rust
+let my_tool = tool("name", "description")
+    .schema(json!({
+        "type": "object",
+        "properties": { "x": { "type": "number" } },
+        "required": ["x"]
+    }))
+    .build(|args| async move { Ok(json!({})) });
+```
+
+### ToolBuilder
+
+The `tool()` function returns a `ToolBuilder` for fluent construction of tool definitions:
+
+```rust
+use open_agent::{tool, ToolBuilder, Tool};
+
+let t: Tool = tool("name", "description")
+    .param("arg", "string")
+    .build(|args| async move { Ok(json!({})) });
+```
+
+### Provider Configuration
+
+Helper types and functions for mapping provider names to their default endpoints:
+
+```rust
+use open_agent::{Provider, get_base_url, get_model};
+
+// get_base_url(provider: Option<Provider>, fallback: Option<&str>) -> String
+let url = get_base_url(Some(Provider::LMStudio), None);   // http://localhost:1234/v1
+let url_with_fallback = get_base_url(None, Some("http://localhost:8080/v1"));
+
+// get_model(fallback: Option<&str>, prefer_env: bool) -> Option<String>
+let model = get_model(Some("qwen2.5-32b"), false);  // use provided model
+let env_model = get_model(None, true);              // prefer OPEN_AGENT_MODEL env var
+```
+
+### OpenAI Wire Types
+
+Low-level serialization types matching the OpenAI API request format, exported for callers that need to construct raw payloads:
+
+```rust
+use open_agent::{OpenAIContent, OpenAIContentPart};
+```
+
+`OpenAIContent` and `OpenAIContentPart` are used internally by the SDK when serializing messages to the OpenAI-compatible format. They are exported for advanced use cases where callers need to inspect or construct raw request content.
+### Error and Result Types
+
+```rust
+use open_agent::{Error, Result};
+```
+
+`Error` is the SDK's unified error type, covering HTTP errors, parse failures, configuration errors, and I/O errors. `Result<T>` is an alias for `std::result::Result<T, Error>`.
+
+### Newtype Wrappers
+
+Strong-typed wrappers used internally by `AgentOptions` and exported for external use:
+
+```rust
+use open_agent::{BaseUrl, ModelName, Temperature};
+```
+
+### Retry Module
+
+Exponential-backoff retry utilities, exported as a public module:
+
+```rust
+use open_agent::retry::{RetryConfig, retry_with_backoff, retry_with_backoff_conditional, is_retryable_error};
+
+// Configure retry behavior (builder pattern)
+let config = RetryConfig::default()          // 3 attempts, exponential backoff
+    .max_attempts(5)
+    .initial_delay_ms(100)
+    .max_delay_ms(5000)
+    .backoff_multiplier(2.0);
+
+// Retry any async operation
+let result = retry_with_backoff(config.clone(), || async {
+    some_fallible_operation().await
+}).await?;
+
+// Retry with a custom condition (only retry on certain errors)
+let result = retry_with_backoff_conditional(config, |err| is_retryable_error(err), || async {
+    some_fallible_operation().await
+}).await?;
+
+// Check if an SDK error is worth retrying (network errors, 429, 5xx)
+let retryable = is_retryable_error(&some_error);
+```
+
+### Prelude Import
+
+For convenience, import the most commonly used types at once:
+
+```rust
+use open_agent::prelude::*;
+```
+
+### Hook Name Constants
+
+String constants for hook event types are exported for use in custom registries:
+
+```rust
+use open_agent::{HOOK_PRE_TOOL_USE, HOOK_POST_TOOL_USE, HOOK_USER_PROMPT_SUBMIT};
+```
+
+### Context Utilities
+
+```rust
+use open_agent::{estimate_tokens, is_approaching_limit, truncate_messages};
+
+// Estimate tokens in message history (character-based approximation)
+let tokens = estimate_tokens(client.history());
+
+// Check if approaching a context limit (margin=0.8 means 80% of limit)
+let near_limit = is_approaching_limit(client.history(), 32000, 0.8);
+
+// Truncate history, keeping the last N messages (preserve_system=true keeps system prompt)
+let truncated = truncate_messages(client.history(), 10, true);
 ```
 
 ## Recommended Models
@@ -817,7 +1003,7 @@ let my_tool = tool("name", "description")
 open-agent-sdk-rust/
 ├── src/
 │   ├── client.rs          # query() and Client implementation
-│   ├── config.rs          # Configuration builder
+│   ├── config.rs          # Provider helpers (Provider, get_base_url, get_model)
 │   ├── context.rs         # Token estimation and truncation
 │   ├── error.rs           # Error types
 │   ├── hooks.rs           # Lifecycle hooks
@@ -838,9 +1024,12 @@ open-agent-sdk-rust/
 │   ├── log_analyzer_agent.rs        # Production: Log analyzer
 │   ├── advanced_patterns.rs         # Retry logic and concurrent requests
 │   ├── vision_example.rs            # Multimodal: URLs, local files, base64
-│   └── vision_api_demo.rs           # Vision API walkthrough
+│   ├── vision_api_demo.rs           # Vision API walkthrough
+│   └── test_tool_serialization.rs   # Tool call serialization verification
+├── benches/
+│   └── performance.rs               # Criterion benchmarks (token estimation, history ops)
 ├── tests/
-│   ├── integration_tests.rs
+│   ├── integration_tests.rs         # Core integration tests
 │   ├── advanced_integration_test.rs
 │   ├── auto_execution_test.rs
 │   ├── backward_compatibility_test.rs
@@ -852,7 +1041,7 @@ open-agent-sdk-rust/
 │   ├── image_serialization_test.rs
 │   ├── security_bypass_test.rs
 │   ├── send_message_test.rs         # Manual-mode history regression (v0.6.2)
-│   └── tool_call_content_test.rs
+│   └── tool_call_content_test.rs    # Tool call serialization tests
 ├── Cargo.toml
 └── README.md
 ```
@@ -876,6 +1065,7 @@ open-agent-sdk-rust/
 - `context_management.rs` – Manual history management patterns
 - `interrupt_demo.rs` – Interrupt capability patterns (timeout, conditional, concurrent)
 - `advanced_patterns.rs` – Retry logic and concurrent request handling
+- `test_tool_serialization.rs` – Verifies tool call serialization (see `examples/test_tool_serialization.rs`)
 
 ## Documentation
 
@@ -898,20 +1088,23 @@ cargo test test_agent_options_builder
 
 **Test Coverage:**
 
-- 110 unit tests across 10 modules
-- 61 integration tests
+- ~118 unit tests (lib)
+- 79 integration tests across 13 test files (12 additional tests are `#[ignore]`d by default)
   - Hooks integration tests
   - Auto-execution tests
   - Image serialization tests
   - Defensive validation tests
   - Backward compatibility tests
   - Advanced integration tests
-- 151 doctests
+  - Edge cases, security bypass, debug logging, send message, tool call content tests
+- ~67 active doctests (34 compile-only `no_run` + 33 executable; 6 `ignore`d)
+
+Total: ~209 unit + integration tests + ~67 active doctests ≈ 276 tests
 
 ## Requirements
 
 - Rust 1.85+
-- Tokio 1.0+ (async runtime)
+- Tokio 1.50+ (async runtime)
 - serde, serde_json (serialization)
 - reqwest (HTTP client)
 - futures (async streams)
@@ -928,6 +1121,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.6.5 Published - Automated weekly dependency maintenance, current security advisories resolved, README example fixes, manual-mode history fixes, multimodal image support, 110+ unit tests, 61 integration tests
+**Status**: v0.6.5 Published - Automated weekly dependency maintenance, current security advisories resolved, README example fixes, manual-mode history fixes, multimodal image support, 118 unit tests, 79 integration tests (+12 ignored), ~67 doctests
 
 Star this repo if you're building AI agents with local models in Rust!
