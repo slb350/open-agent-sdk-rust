@@ -50,7 +50,10 @@ open-agent-sdk-rust/
 │   ├── send_message_test.rs         # Manual-mode history regression (v0.6.2)
 │   └── tool_call_content_test.rs
 ├── .github/
-│   └── dependabot.yml               # Grouped weekly Cargo dependency updates
+│   ├── dependabot.yml               # Grouped weekly Cargo dependency updates
+│   └── workflows/
+│       ├── ci.yml                   # CI pipeline (build, test, clippy, fmt)
+│       └── scheduled-audit.yml      # Scheduled dependency audit
 ├── Cargo.toml
 ├── Cargo.lock
 ├── CHANGELOG.md
