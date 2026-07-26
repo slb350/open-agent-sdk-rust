@@ -12,8 +12,10 @@
 //! http://localhost:11434 with a model loaded before running.
 
 use open_agent::{AgentOptions, Client, ContentBlock};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
+use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
 // ============================================================================
@@ -116,7 +118,14 @@ async fn conditional_example() -> Result<(), Box<dyn std::error::Error>> {
 // ============================================================================
 // Example 3: Concurrent Interruption
 // ============================================================================
-#[allow(clippy::await_holding_lock)]
+fn spawn_interrupt_task(interrupt_handle: Arc<AtomicBool>, delay: Duration) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        tokio::time::sleep(delay).await;
+        println!("\n\n🛑 User clicked cancel button!");
+        interrupt_handle.store(true, Ordering::SeqCst);
+    })
+}
+
 async fn concurrent_example() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", "=".repeat(60));
     println!("Example 3: Concurrent Interruption (Simulated User Cancel)");
@@ -130,48 +139,23 @@ async fn concurrent_example() -> Result<(), Box<dyn std::error::Error>> {
         .temperature(0.7)
         .build()?;
 
-    // Wrap client in Arc<Mutex> for shared access across tasks
-    let client = Arc::new(Mutex::new(Client::new(options)?));
-
-    {
-        let mut client_lock = client.lock().unwrap();
-        client_lock
-            .send("Explain artificial intelligence in detail")
-            .await?;
-    }
+    let mut client = Client::new(options)?;
+    client
+        .send("Explain artificial intelligence in detail")
+        .await?;
 
     println!("Receiving response...\n");
 
-    // Create cancel button task
-    let cancel_handle = {
-        let client_clone = Arc::clone(&client);
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(2)).await;
-            println!("\n\n🛑 User clicked cancel button!");
-            let client_lock = client_clone.lock().unwrap();
-            client_lock.interrupt();
-        })
-    };
+    // Share only the atomic interrupt flag with the simulated cancel button.
+    // The receive loop retains exclusive ownership of the client.
+    let cancel_handle = spawn_interrupt_task(client.interrupt_handle(), Duration::from_secs(2));
 
-    // Stream task
     let mut full_text = String::new();
-    loop {
-        let block_opt = {
-            let mut client_lock = client.lock().unwrap();
-            client_lock.receive().await
-        };
-
-        match block_opt {
-            Ok(Some(ContentBlock::Text(text))) => {
-                print!("{}", text.text);
-                full_text.push_str(&text.text);
-                tokio::time::sleep(Duration::from_millis(50)).await; // Simulate processing
-            }
-            Ok(None) => break,
-            Err(e) => return Err(e.into()),
-            Ok(Some(
-                ContentBlock::ToolUse(_) | ContentBlock::ToolResult(_) | ContentBlock::Image(_),
-            )) => {}
+    while let Some(block) = client.receive().await? {
+        if let ContentBlock::Text(text) = block {
+            print!("{}", text.text);
+            full_text.push_str(&text.text);
+            tokio::time::sleep(Duration::from_millis(50)).await; // Simulate processing
         }
     }
 
@@ -237,6 +221,35 @@ async fn retry_example() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n\nSuccess! Query completed after retry.\n");
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::Ordering;
+
+    #[tokio::test]
+    async fn concurrent_cancel_does_not_require_locking_the_client() {
+        let options = AgentOptions::builder()
+            .system_prompt("Test")
+            .model("test-model")
+            .base_url("http://localhost:1234/v1")
+            .build()
+            .unwrap();
+        let client = Client::new(options).unwrap();
+        let interrupt_handle = client.interrupt_handle();
+
+        let cancel_task =
+            spawn_interrupt_task(Arc::clone(&interrupt_handle), Duration::from_millis(1));
+
+        timeout(Duration::from_millis(100), cancel_task)
+            .await
+            .expect("cancel task deadlocked")
+            .expect("cancel task panicked");
+
+        assert!(interrupt_handle.load(Ordering::SeqCst));
+        assert!(client.history().is_empty());
+    }
 }
 
 #[tokio::main]

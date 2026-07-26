@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-07-25
+
+### Fixed
+
+- **Interrupt example**: Replaced the deadlocking `Arc<Mutex<Client>>` concurrent-cancellation pattern with `Client::interrupt_handle()`, so the receive loop retains exclusive ownership of the client while another task signals cancellation (fixes #7).
+- **Documentation**: Corrected the README concurrent-cancellation example and clarified that interrupted partial manual responses are discarded rather than committed to conversation history.
+- **Package**: Excluded the newly restored `CLAUDE.md` notes and `.markdownlint.json` development configuration from published crate archives, preventing a recurrence of the packaging issue that caused v0.6.3 to be yanked.
+
+### Testing
+
+- Added regression coverage for non-locking concurrent cancellation and development-file package exclusions.
+
 ## [0.6.5] - 2026-07-22
 
 ### Fixed
@@ -474,6 +486,7 @@ client.add_tool_result(&id, result)?;
   - vLLM
   - Any other OpenAI-compatible endpoint
 
+[0.6.6]: https://github.com/slb350/open-agent-sdk-rust/releases/tag/v0.6.6
 [0.3.0]: https://github.com/slb350/open-agent-sdk-rust/releases/tag/v0.3.0
 [0.2.0]: https://github.com/slb350/open-agent-sdk-rust/releases/tag/v0.2.0
 [0.1.0]: https://github.com/slb350/open-agent-sdk-rust/releases/tag/v0.1.0

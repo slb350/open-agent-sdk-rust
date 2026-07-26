@@ -18,7 +18,7 @@
 **How fast?**
 From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 276 tests.
 
-[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.6.5)](https://crates.io/crates/open-agent-sdk)
+[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.6.6)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -53,7 +53,7 @@ Open Agent SDK (Rust) provides a clean, streaming API for working with OpenAI-co
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.6.5"
+open-agent-sdk = "0.6.6"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -585,36 +585,31 @@ while let Some(block) = client.receive().await? {
 #### 2. Concurrent Cancellation
 
 ```rust
-use tokio::select;
+use std::sync::atomic::Ordering;
 
-let stream_task = async {
-    while let Some(block) = client.receive().await? {
-        // Process blocks
-        let _ = block;
-    }
-    Ok::<_, Box<dyn std::error::Error>>(())
-};
-
-let cancel_task = async {
+let interrupt_handle = client.interrupt_handle();
+let cancel_task = tokio::spawn(async move {
     tokio::time::sleep(Duration::from_secs(2)).await;
-    client.interrupt();
-};
+    interrupt_handle.store(true, Ordering::SeqCst);
+});
 
-tokio::select! {
-    _ = stream_task => println!("Completed"),
-    _ = cancel_task => println!("Cancelled"),
+while let Some(block) = client.receive().await? {
+    // Process blocks until cancellation is observed
+    let _ = block;
 }
+
+cancel_task.await?;
 ```
 
 ### How It Works
 
 When you call `client.interrupt()`:
 
-1. **Active stream closure** - HTTP stream closed immediately (not just a flag)
-2. **Clean state** - Client remains in valid state for reuse
-3. **Partial output** - Text blocks flushed to history, incomplete tools skipped
+1. **Atomic signal** - A thread-safe flag tells the receive loop to stop
+2. **Stream cleanup** - `receive()` observes the flag, drops the active stream, and returns `Ok(None)`
+3. **Clean history** - Partial manual responses are discarded instead of committing incomplete assistant messages
 4. **Idempotent** - Safe to call multiple times
-5. **Thread-safe** - Can be called from separate async tasks
+5. **Cross-task safe** - `interrupt_handle()` lets another task cancel without locking the `Client`
 
 See `examples/interrupt_demo.rs` for comprehensive patterns.
 
@@ -1121,6 +1116,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.6.5 Published - Automated weekly dependency maintenance, current security advisories resolved, README example fixes, manual-mode history fixes, multimodal image support, 118 unit tests, 79 integration tests (+12 ignored), ~67 doctests
+**Status**: v0.6.6 source - Non-locking concurrent cancellation, package hygiene regression coverage, automated weekly dependency maintenance, current security advisories resolved, manual-mode history fixes, multimodal image support
 
 Star this repo if you're building AI agents with local models in Rust!

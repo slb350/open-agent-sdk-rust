@@ -2,7 +2,7 @@
 
 ## Project Description
 
-A lightweight Rust SDK (v0.6.5) for building AI agents with local or cloud LLMs via OpenAI-compatible endpoints. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
+A lightweight Rust SDK (v0.6.6 source) for building AI agents with local or cloud LLMs via OpenAI-compatible endpoints. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
 
 ## Repository Structure
 
@@ -165,6 +165,10 @@ client.interrupt_handle();         // Arc<AtomicBool> for cross-task cancellatio
 client.history();                  // &[Message] — read conversation history
 client.history_mut();              // &mut Vec<Message> — mutate (e.g. truncate)
 ```
+
+For cancellation from another task, share `client.interrupt_handle()` and set the
+atomic flag. Never place `Client` behind a synchronous mutex whose guard can be
+held across `receive().await`; that pattern deadlocks the cancellation task.
 
 ### tool() builder
 
@@ -332,6 +336,8 @@ RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 
 ## Current Version
 
-**v0.6.5** — Published 2026-07-23.
+**v0.6.6 source** — Non-locking cross-task cancellation in the interrupt example,
+corrected interrupt lifecycle documentation, and package exclusion coverage for
+development-only `CLAUDE.md`.
 
 Features: multimodal vision (URLs, local files, base64), manual-mode history fix (v0.6.2 regression), retry module, interrupt capability, lifecycle hooks, automatic tool execution, context management utilities, provider helpers, prelude module, OpenAI wire type exports.
