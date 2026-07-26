@@ -16,9 +16,9 @@
 - **Control** - pick your model (Qwen, Llama, Mistral, etc.)
 
 **How fast?**
-From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 276 tests.
+From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 350 active tests.
 
-[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.6.6)](https://crates.io/crates/open-agent-sdk)
+[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.6.7)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -53,7 +53,7 @@ Open Agent SDK (Rust) provides a clean, streaming API for working with OpenAI-co
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.6.6"
+open-agent-sdk = "0.6.7"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -902,6 +902,7 @@ use open_agent::{OpenAIContent, OpenAIContentPart};
 ```
 
 `OpenAIContent` and `OpenAIContentPart` are used internally by the SDK when serializing messages to the OpenAI-compatible format. They are exported for advanced use cases where callers need to inspect or construct raw request content.
+
 ### Error and Result Types
 
 ```rust
@@ -1083,8 +1084,8 @@ cargo test test_agent_options_builder
 
 **Test Coverage:**
 
-- ~118 unit tests (lib)
-- 79 integration tests across 13 test files (12 additional tests are `#[ignore]`d by default)
+- 119 unit tests (lib)
+- 80 active integration tests across 14 test files (12 additional tests are `#[ignore]`d by default)
   - Hooks integration tests
   - Auto-execution tests
   - Image serialization tests
@@ -1092,9 +1093,9 @@ cargo test test_agent_options_builder
   - Backward compatibility tests
   - Advanced integration tests
   - Edge cases, security bypass, debug logging, send message, tool call content tests
-- ~67 active doctests (34 compile-only `no_run` + 33 executable; 6 `ignore`d)
+- 151 active doctests (17 additional doctests are `ignore`d)
 
-Total: ~209 unit + integration tests + ~67 active doctests ≈ 276 tests
+Total: 350 active unit, integration, and documentation tests
 
 ## Requirements
 
@@ -1116,6 +1117,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.6.6 source - Non-locking concurrent cancellation, package hygiene regression coverage, automated weekly dependency maintenance, current security advisories resolved, manual-mode history fixes, multimodal image support
+**Status**: v0.6.7 source - Rust 1.85-compatible dependency updates, hardened GitHub Actions, retained coverage artifacts, non-locking concurrent cancellation, current security advisories resolved, manual-mode history fixes, multimodal image support
 
 Star this repo if you're building AI agents with local models in Rust!

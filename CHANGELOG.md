@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-07-25
+
+### Fixed
+
+- **Benchmarks**: Replaced Criterion's deprecated `black_box` re-export with `std::hint::black_box`, restoring zero-warning benchmark builds after the Criterion 0.7 update.
+- **Coverage CI**: Replaced an unauthenticated Codecov upload that silently failed for this unconfigured repository with a required, first-party GitHub Actions coverage artifact retained for 14 days.
+
+### Changed
+
+- **Production dependencies**: Updated `thiserror` 1.x → 2.x, `rand` 0.8 → 0.10, and `base64` 0.22 → 0.23 while preserving Rust 1.85 compatibility.
+- **Base64 safety**: Disabled base64 0.23's default `simd-unsafe` feature and enabled only `std`.
+- **HTTP compatibility**: Retained reqwest 0.12.28 because the public `Error::Http` variant wraps `reqwest::Error`; a reqwest 0.13 migration remains reserved for a documented breaking release.
+- **Development dependency**: Updated Criterion 0.5 → 0.7, the newest release compatible with the project's Rust 1.85 MSRV.
+- **CI security**: Updated checkout to v7.0.1, pinned every action to an immutable commit, reduced default workflow permissions to read-only, and replaced the obsolete Node 16 benchmark action with direct Criterion base/head comparison.
+
+### Testing
+
+- Added retry jitter regression coverage that samples 1,000 delays and verifies the configured ±10% bounds.
+- Verified the dependency batch on stable, beta, macOS, Ubuntu, and Rust 1.85 through the required GitHub Actions matrix.
+
 ## [0.6.6] - 2026-07-25
 
 ### Fixed
@@ -151,6 +171,7 @@ Following Rust API Guidelines (C-STRUCT-PRIVATE), public struct fields are now p
 - **Private fields**: `id`, `name`, `input`
 - **Getter methods**: `.id()`, `.name()`, `.input()`
 - **Migration**:
+
   ```rust
   // Before:
   println!("Tool: {}", tool_use.name);
@@ -168,6 +189,7 @@ Following Rust API Guidelines (C-STRUCT-PRIVATE), public struct fields are now p
 - **Private fields**: `tool_use_id`, `content`
 - **Getter methods**: `.tool_use_id()`, `.content()`
 - **Migration**:
+
   ```rust
   // Before:
   let id = &tool_result.tool_use_id;
@@ -213,6 +235,7 @@ Following Rust API Guidelines (C-STRUCT-PRIVATE), public struct fields are now p
 Fixed a critical bug where tool calls and tool results were not being serialized into OpenAI message format, causing an infinite loop when using `auto_execute_tools(true)`:
 
 **The Problem:**
+
 - Internal conversation history stored tool results as `ContentBlock::ToolResult`
 - When building OpenAI API requests, only text blocks were extracted
 - Tool results were silently dropped from the conversation history
@@ -221,6 +244,7 @@ Fixed a critical bug where tool calls and tool results were not being serialized
 - Same tool called 50+ times instead of once
 
 **The Fix:**
+
 - Tool calls now properly serialized with `tool_calls` array in assistant messages
 - Tool results now serialized as separate messages with `role: "tool"` and `tool_call_id`
 - Message building logic handles three cases:
@@ -229,6 +253,7 @@ Fixed a critical bug where tool calls and tool results were not being serialized
   3. Messages with only text → normal text messages
 
 **Impact:**
+
 - ✅ Tool results now included in conversation history
 - ✅ LLM sees tool results and responds appropriately
 - ✅ Each tool called only once per unique request
@@ -236,6 +261,7 @@ Fixed a critical bug where tool calls and tool results were not being serialized
 - ✅ Works correctly with llama.cpp and other OpenAI-compatible servers
 
 **Technical Details:**
+
 - Modified `client.rs` message building logic (lines ~1105-1214)
 - Added imports for `OpenAIToolCall` and `OpenAIFunction`
 - Properly populates `tool_calls` field with tool ID, name, and serialized arguments
@@ -243,6 +269,7 @@ Fixed a critical bug where tool calls and tool results were not being serialized
 - Arguments serialized as JSON strings per OpenAI API specification
 
 **Test Case:**
+
 ```rust
 // Before: Tool called 50+ times, no final response
 // After: Tool called once, final text response returned
@@ -269,16 +296,19 @@ See `examples/test_tool_serialization.rs` for demonstration.
 Following Rust API Guidelines (C-STRUCT-PRIVATE), all public struct fields are now private with getter methods for better encapsulation and future-proof APIs:
 
 #### AgentOptions
+
 - **Private fields**: `system_prompt`, `model`, `base_url`, `api_key`, `max_turns`, `max_tokens`, `temperature`, `timeout`, `tools`, `auto_execute_tools`, `max_tool_iterations`, `hooks`
 - **Getter methods**: `.system_prompt()`, `.model()`, `.base_url()`, `.api_key()`, `.max_turns()`, `.max_tokens()`, `.temperature()`, `.timeout()`, `.tools()`, `.auto_execute_tools()`, `.max_tool_iterations()`, `.hooks()`
 - **Migration**: `options.model` → `options.model()`
 
 #### Tool
+
 - **Private fields**: `name`, `description`, `input_schema`, `handler`
 - **Getter methods**: `.name()`, `.description()`, `.input_schema()`
 - **Migration**: `tool.name` → `tool.name()`
 
 #### HookDecision
+
 - **Private fields**: `continue_execution`, `modified_input`, `modified_prompt`, `reason`
 - **Getter methods**: `.continue_execution()`, `.modified_input()`, `.modified_prompt()`, `.reason()`
 - **Migration**: `decision.continue_execution` → `decision.continue_execution()`
@@ -289,6 +319,7 @@ Following Rust API Guidelines (C-STRUCT-PRIVATE), all public struct fields are n
 `Client::new()` now returns `Result<Self>` instead of panicking on HTTP client creation failure.
 
 **Migration**:
+
 ```rust
 // Before:
 let client = Client::new(options);
@@ -304,6 +335,7 @@ let client = Client::new(options).expect("Failed to create client");
 `Client::add_tool_result()` now returns `Result<()>` instead of silently failing on serialization errors.
 
 **Migration**:
+
 ```rust
 // Before:
 client.add_tool_result(&id, result);
@@ -351,6 +383,7 @@ client.add_tool_result(&id, result)?;
 ### Changed
 
 **BREAKING**: Improved `Client::receive()` API ergonomics
+
 - Changed signature from `Option<Result<ContentBlock>>` to `Result<Option<ContentBlock>>`
 - More intuitive: errors are always `Err()`, success is always `Ok()`
 - Better ergonomics with `?` operator: `while let Some(block) = client.receive().await? { ... }`
@@ -374,6 +407,7 @@ client.add_tool_result(&id, result)?;
 ### Changed
 
 **BREAKING**: Upgraded to Rust Edition 2024
+
 - Requires Rust 1.85.0 or newer (was 1.83.0)
 - Edition 2024 brings latest language features and safety improvements
 - No API changes - only compiler/edition upgrade
@@ -400,6 +434,7 @@ client.add_tool_result(&id, result)?;
 ### Added
 
 #### Core Features
+
 - **Streaming API**: Single-query `query()` function with async streaming responses
 - **Multi-turn Client**: Stateful `Client` for conversation history management
 - **Tool System**: Full function calling support with `tool()` builder
@@ -412,6 +447,7 @@ client.add_tool_result(&id, result)?;
   - Error handling and recovery
 
 #### Advanced Features
+
 - **Lifecycle Hooks**: Three extension points for custom logic
   - `PreToolUse`: Intercept before tool execution
   - `PostToolUse`: Process tool results
@@ -427,6 +463,7 @@ client.add_tool_result(&id, result)?;
   - Detailed error context
 
 #### Configuration
+
 - **AgentOptions Builder**: Fluent API for configuration
   - System prompts
   - Model selection
@@ -435,6 +472,7 @@ client.add_tool_result(&id, result)?;
   - Base URL for local servers
 
 #### Quality & Documentation
+
 - **85+ Comprehensive Tests**:
   - 57 unit tests across 10 modules
   - 28 integration tests (hooks, auto-execution, advanced patterns)
@@ -465,12 +503,14 @@ client.add_tool_result(&id, result)?;
   - Tool execution overhead
 
 #### Documentation
+
 - Comprehensive API documentation with examples
 - Crate-level quick start guide
 - Module-level documentation
 - Doc tests for all public APIs
 
 ### Technical Details
+
 - **Rust Edition**: 2021
 - **MSRV**: 1.83.0
 - **License**: MIT
@@ -479,6 +519,7 @@ client.add_tool_result(&id, result)?;
 - **HTTP Client**: reqwest with streaming support
 
 ### Compatibility
+
 - Works with any OpenAI-compatible API server:
   - LM Studio (localhost:1234)
   - Ollama (localhost:11434)
@@ -486,6 +527,7 @@ client.add_tool_result(&id, result)?;
   - vLLM
   - Any other OpenAI-compatible endpoint
 
+[0.6.7]: https://github.com/slb350/open-agent-sdk-rust/releases/tag/v0.6.7
 [0.6.6]: https://github.com/slb350/open-agent-sdk-rust/releases/tag/v0.6.6
 [0.3.0]: https://github.com/slb350/open-agent-sdk-rust/releases/tag/v0.3.0
 [0.2.0]: https://github.com/slb350/open-agent-sdk-rust/releases/tag/v0.2.0

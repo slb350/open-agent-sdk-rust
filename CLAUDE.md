@@ -2,11 +2,11 @@
 
 ## Project Description
 
-A lightweight Rust SDK (v0.6.6 source) for building AI agents with local or cloud LLMs via OpenAI-compatible endpoints. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
+A lightweight Rust SDK (v0.6.7 source) for building AI agents with local or cloud LLMs via OpenAI-compatible endpoints. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
 
 ## Repository Structure
 
-```
+```text
 open-agent-sdk-rust/
 ├── src/
 │   ├── client.rs      # query() function + Client struct (streaming, tool loop, send_message)
@@ -63,7 +63,7 @@ open-agent-sdk-rust/
 ## Tech Stack
 
 | Component | Technology |
-|-----------|------------|
+| ----------- | ------------ |
 | **Language** | Rust 1.85+ |
 | **Async runtime** | Tokio 1.50+ |
 | **HTTP** | reqwest 0.12.28+ |
@@ -292,6 +292,7 @@ use open_agent::prelude::*;  // imports the most commonly used types
 ## Supported Providers
 
 All OpenAI-compatible endpoints:
+
 - LM Studio: `http://localhost:1234/v1`
 - Ollama: `http://localhost:11434/v1`
 - llama.cpp server (OpenAI-compatible mode)
@@ -300,11 +301,11 @@ All OpenAI-compatible endpoints:
 
 ## Test Coverage
 
-- ~118 unit tests (lib + inline)
-- 79 integration tests across 13 test files (12 additional `#[ignore]`d by default)
-- ~67 active doctests (34 `no_run` compile-only + 33 executable; 6 `ignore`d)
+- 119 unit tests (lib + inline)
+- 80 active integration tests across 14 test files (12 additional `#[ignore]`d by default)
+- 151 active doctests (17 additional doctests are `ignore`d)
 
-**Total: ~276 tests**
+Total: 350 active tests.
 
 ```bash
 cargo test              # run all (unit + integration + doctests)
@@ -335,6 +336,7 @@ cargo test --doc        # doctests only
 ## Security Advisories (v0.6.5)
 
 RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
+
 - `anyhow` raised to `1.0.103` minimum
 - `reqwest` pinned to `0.12.28`
 - `log` raised to `0.4.29`
@@ -342,8 +344,8 @@ RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 
 ## Current Version
 
-**v0.6.6 source** — Non-locking cross-task cancellation in the interrupt example,
-corrected interrupt lifecycle documentation, and package exclusion coverage for
-development-only `CLAUDE.md`.
+**v0.6.7 source** — Rust 1.85-compatible production dependency updates,
+immutable and least-privilege GitHub Actions, first-party coverage artifacts,
+and direct Criterion base/head benchmark comparison.
 
 Features: multimodal vision (URLs, local files, base64), manual-mode history fix (v0.6.2 regression), retry module, interrupt capability, lifecycle hooks, automatic tool execution, context management utilities, provider helpers, prelude module, OpenAI wire type exports.
