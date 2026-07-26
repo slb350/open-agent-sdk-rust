@@ -30,7 +30,7 @@ tokio = { version = "1.50", features = ["full"] }
 tokio-stream = "0.1"
 
 # HTTP client
-reqwest = { version = "0.13.4", features = ["json", "stream"] }
+reqwest = { version = "0.12.28", features = ["json", "stream"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -54,7 +54,7 @@ rand = "0.10"
 log = "0.4.29"
 
 # Base64 encoding for image support
-base64 = "0.23"
+base64 = { version = "0.23", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 tokio-test = "0.4"

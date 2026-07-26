@@ -283,6 +283,19 @@ mod tests {
         assert!(delay2 > delay1);
     }
 
+    #[test]
+    fn test_calculate_delay_stays_within_jitter_bounds() {
+        let config = RetryConfig::new()
+            .with_initial_delay(Duration::from_millis(1_000))
+            .with_jitter_factor(0.2);
+
+        for _ in 0..1_000 {
+            let delay = config.calculate_delay(0);
+            assert!(delay >= Duration::from_millis(900));
+            assert!(delay <= Duration::from_millis(1_100));
+        }
+    }
+
     #[tokio::test]
     async fn test_retry_success_on_first_attempt() {
         let config = RetryConfig::new().with_max_attempts(3);
