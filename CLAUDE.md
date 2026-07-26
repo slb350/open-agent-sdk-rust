@@ -328,7 +328,7 @@ cargo test --doc        # doctests only
 - GitHub Actions: pin every third-party action to an immutable full commit SHA with a version comment; Dependabot maintains the pins
 - Workflow permissions: default to `contents: read` and grant additional permissions only to the job that requires them
 - PR benchmarks: compare Criterion results directly against the base commit with a shared target directory; do not restore the obsolete `boa-dev/criterion-compare-action`
-- Coverage uploads: authenticate Codecov through OIDC and fail CI when an upload reports an error
+- Coverage reports: retain Tarpaulin XML as a pinned first-party GitHub Actions artifact and fail CI when the report is missing
 
 ## Security Advisories (v0.6.5)
 

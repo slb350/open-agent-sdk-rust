@@ -95,13 +95,10 @@ jobs:
       - name: Build documentation
         run: cargo doc --no-deps --all-features
 
-  # Code coverage: Tarpaulin + Codecov
+  # Code coverage: Tarpaulin report retained with the workflow run
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master
@@ -112,12 +109,13 @@ jobs:
         run: cargo install cargo-tarpaulin
       - name: Generate coverage
         run: cargo tarpaulin --out xml --all-features --workspace
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+      - name: Retain coverage report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          files: ./cobertura.xml
-          fail_ci_if_error: true
-          use_oidc: true
+          name: coverage-${{ github.sha }}
+          path: cobertura.xml
+          if-no-files-found: error
+          retention-days: 14
 
   # Benchmark comparison: Only run on PRs
   benchmarks:
