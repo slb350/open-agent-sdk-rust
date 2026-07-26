@@ -55,6 +55,7 @@ open-agent-sdk-rust/
 │   └── workflows/
 │       ├── ci.yml                   # CI pipeline (build, test, clippy, fmt)
 │       └── scheduled-audit.yml      # Scheduled dependency audit
+├── .markdownlint.json               # Markdown lint rules (disable MD013, allow duplicate sibling headings)
 ├── Cargo.toml
 ├── Cargo.lock
 ├── CHANGELOG.md

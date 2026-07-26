@@ -1039,7 +1039,17 @@ open-agent-sdk-rust/
 │   ├── security_bypass_test.rs
 │   ├── send_message_test.rs         # Manual-mode history regression (v0.6.2)
 │   └── tool_call_content_test.rs    # Tool call serialization tests
+├── benches/
+│   └── performance.rs               # Criterion benchmarks
+├── .github/
+│   ├── dependabot.yml               # Grouped weekly Cargo dependency updates
+│   └── workflows/
+│       ├── ci.yml                   # CI pipeline (build, test, clippy, fmt)
+│       └── scheduled-audit.yml      # Scheduled dependency audit
+├── .markdownlint.json               # Markdown lint rules (disable MD013, allow duplicate sibling headings)
 ├── Cargo.toml
+├── Cargo.lock
+├── CHANGELOG.md
 └── README.md
 ```
 
