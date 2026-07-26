@@ -1035,6 +1035,7 @@ open-agent-sdk-rust/
 │   ├── edge_cases_test.rs
 │   ├── hooks_integration_test.rs
 │   ├── image_serialization_test.rs
+│   ├── package_manifest_test.rs     # Package exclusion coverage (CLAUDE.md, .markdownlint.json)
 │   ├── security_bypass_test.rs
 │   ├── send_message_test.rs         # Manual-mode history regression (v0.6.2)
 │   └── tool_call_content_test.rs    # Tool call serialization tests
