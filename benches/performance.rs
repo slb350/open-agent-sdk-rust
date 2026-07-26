@@ -1,9 +1,10 @@
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use open_agent::{
     ContentBlock, Message, MessageRole, TextBlock, ToolResultBlock, ToolUseBlock, estimate_tokens,
     is_approaching_limit, truncate_messages,
 };
 use serde_json::json;
+use std::hint::black_box;
 
 // Helper function to create test messages with varying sizes
 fn create_messages(count: usize, text_size: usize) -> Vec<Message> {

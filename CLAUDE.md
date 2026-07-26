@@ -325,6 +325,8 @@ cargo test --doc        # doctests only
 - **`add_tool_result()` is sync** — no await needed
 - Commit format: `type(scope): description` (feat, fix, docs, test, refactor, chore)
 - Dependency updates: Dependabot runs weekly (grouped Cargo updates) — resolve security advisories promptly
+- Reqwest compatibility: keep reqwest on 0.12.x while `Error::Http` publicly wraps `reqwest::Error`; upgrading reqwest requires a documented v0.7.0 release
+- Base64 safety: use base64 0.23 without its default `simd-unsafe` feature unless a measured need justifies enabling it
 - GitHub Actions: pin every third-party action to an immutable full commit SHA with a version comment; Dependabot maintains the pins
 - Workflow permissions: default to `contents: read` and grant additional permissions only to the job that requires them
 - PR benchmarks: compare Criterion results directly against the base commit with a shared target directory; do not restore the obsolete `boa-dev/criterion-compare-action`
