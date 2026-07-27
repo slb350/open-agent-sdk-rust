@@ -334,7 +334,7 @@ cargo test --doc        # doctests only
 - Workflow permissions: default to `contents: read` and grant additional permissions only to the job that requires them
 - Audit workflows: set `denyWarnings: true` and `createIssues: false` so vulnerabilities, yanked crates, unmaintained crates, and unsoundness warnings fail CI without requiring issue-write permissions
 - PR benchmarks: compare Criterion results directly against the base commit with a shared target directory; do not restore the obsolete `boa-dev/criterion-compare-action`
-- Coverage reports: retain Tarpaulin XML with the latest compatible, immutable-SHA-pinned `actions/upload-artifact` release (currently v7) and fail CI when the report is missing
+- Coverage reports: retain Tarpaulin XML with the latest compatible, immutable-SHA-pinned `actions/upload-artifact` release (currently v7.0.1) and fail CI when the report is missing
 
 ## Security Advisories (v0.6.5)
 
