@@ -53,7 +53,7 @@ open-agent-sdk-rust/
 ├── .github/
 │   ├── dependabot.yml               # Grouped weekly Cargo dependency updates
 │   └── workflows/
-│       ├── ci.yml                   # CI pipeline (build, test, clippy, fmt)
+│       ├── ci.yml                   # CI pipeline (fmt, clippy, test matrix [ubuntu+macos × stable+beta], msrv, security audit, docs build, coverage [Tarpaulin], benchmarks [PR-only Criterion])
 │       └── scheduled-audit.yml      # Scheduled dependency audit
 ├── .markdownlint.json               # Markdown lint rules (disable MD013, allow duplicate sibling headings)
 ├── Cargo.toml
@@ -336,7 +336,7 @@ cargo test --doc        # doctests only
 - PR benchmarks: compare Criterion results directly against the base commit with a shared target directory; do not restore the obsolete `boa-dev/criterion-compare-action`
 - Coverage reports: retain Tarpaulin XML with the latest compatible, immutable-SHA-pinned `actions/upload-artifact` release (currently v7.0.1) and fail CI when the report is missing
 
-## Security Advisories (v0.6.5)
+## Security Advisories (resolved in v0.6.5, current v0.6.7)
 
 RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 
