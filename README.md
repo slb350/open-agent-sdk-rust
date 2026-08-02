@@ -16,9 +16,9 @@
 - **Control** - pick your model (Qwen, Llama, Mistral, etc.)
 
 **How fast?**
-From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 350 active tests.
+From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 353 active tests.
 
-[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.6.7)](https://crates.io/crates/open-agent-sdk)
+[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.6.8)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -53,7 +53,7 @@ Open Agent SDK (Rust) provides a clean, streaming API for working with OpenAI-co
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.6.7"
+open-agent-sdk = "0.6.8"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -458,11 +458,16 @@ let mut client = Client::new(options)?;
 - **Modify inputs**: Return `Some(HookDecision::modify_input(json!({}), reason))`
 - **Allow**: Return `Some(HookDecision::continue_())`
 
-**PostToolUse** - Fires after tool result added to history
+**PostToolUse** - Fires after the tool completes and before the final result is committed
 
 - **Observational** (tool already executed)
 - Use for audit logging, metrics, result validation
 - Return `None` or `Some(HookDecision::...)`
+
+Every hook event exposes `history` as `Vec<serde_json::Value>`, with one structured
+JSON object per internal `Message` (`role` plus typed `content` blocks). Prompt and
+pre-tool snapshots contain history up to that lifecycle point; post-tool snapshots
+also include the completed tool call and its unmodified result.
 
 **UserPromptSubmit** - Fires before sending prompt to API
 
@@ -998,16 +1003,21 @@ let truncated = truncate_messages(client.history(), 10, true);
 ```text
 open-agent-sdk-rust/
 ├── src/
-│   ├── client.rs          # query() and Client implementation
+│   ├── client.rs          # Public client module docs/imports and fragment orchestration
+│   ├── client/            # Query, request setup, streaming, receive, history, and tests
 │   ├── config.rs          # Provider helpers (Provider, get_base_url, get_model)
 │   ├── context.rs         # Token estimation and truncation
 │   ├── error.rs           # Error types
-│   ├── hooks.rs           # Lifecycle hooks
+│   ├── hooks.rs           # Public lifecycle-hook module orchestration
+│   ├── hooks/             # Hook events, decisions, handlers, registry, and tests
 │   ├── lib.rs             # Public exports and prelude module
 │   ├── retry.rs           # Retry logic with exponential backoff
-│   ├── tools.rs           # Tool system
-│   ├── types.rs           # Core types (AgentOptions, ContentBlock, ImageBlock, etc.)
-│   └── utils.rs           # SSE parsing and tool call aggregation
+│   ├── tools.rs           # Public tool module orchestration
+│   ├── tools/             # Tool, schema, builder, handler, factory, and tests
+│   ├── types.rs           # Public core-type module orchestration
+│   ├── types/             # Options, messages, images, wire types, and tests
+│   ├── utils.rs           # SSE parsing and tool call aggregation
+│   └── utils/             # Utility unit tests
 ├── examples/
 │   ├── simple_query.rs              # Basic streaming query
 │   ├── calculator_tools.rs          # Function calling (manual mode)
@@ -1033,11 +1043,13 @@ open-agent-sdk-rust/
 │   ├── debug_logging_test.rs
 │   ├── defensive_validation_test.rs
 │   ├── edge_cases_test.rs
+│   ├── hooks_history_snapshot_test.rs
 │   ├── hooks_integration_test.rs
 │   ├── image_serialization_test.rs
 │   ├── package_manifest_test.rs     # Package exclusion coverage (CLAUDE.md, .markdownlint.json)
 │   ├── security_bypass_test.rs
 │   ├── send_message_test.rs         # Manual-mode history regression (v0.6.2)
+│   ├── source_file_size_test.rs      # Repository Rust hard-limit guard
 │   └── tool_call_content_test.rs    # Tool call serialization tests
 ├── .github/
 │   ├── dependabot.yml               # Grouped weekly Cargo dependency updates
@@ -1093,8 +1105,8 @@ cargo test test_agent_options_builder
 
 **Test Coverage:**
 
-- 119 unit tests (lib)
-- 80 active integration tests across 14 test files (12 additional tests are `#[ignore]`d by default)
+- 120 unit tests (lib)
+- 82 active integration tests across 16 test files (12 additional tests are `#[ignore]`d by default)
   - Hooks integration tests
   - Auto-execution tests
   - Image serialization tests
@@ -1104,7 +1116,7 @@ cargo test test_agent_options_builder
   - Edge cases, security bypass, debug logging, send message, tool call content tests
 - 151 active doctests (17 additional doctests are `ignore`d)
 
-Total: 350 active unit, integration, and documentation tests
+Total: 353 active unit, integration, and documentation tests
 
 ## Requirements
 
@@ -1126,6 +1138,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.6.7 source - Rust 1.85-compatible dependency updates, hardened GitHub Actions, retained coverage artifacts, non-locking concurrent cancellation, current security advisories resolved, manual-mode history fixes, multimodal image support
+**Status**: v0.6.8 source - complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, hardened GitHub Actions, non-locking cancellation, manual-mode history fixes, and multimodal image support
 
 Star this repo if you're building AI agents with local models in Rust!

@@ -2,23 +2,28 @@
 
 ## Project Description
 
-A lightweight Rust SDK (v0.6.7 source) for building AI agents with local or cloud LLMs via OpenAI-compatible endpoints. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
+A lightweight Rust SDK (v0.6.8 source) for building AI agents with local or cloud LLMs via OpenAI-compatible endpoints. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
 
 ## Repository Structure
 
 ```text
 open-agent-sdk-rust/
 ├── src/
-│   ├── client.rs      # query() function + Client struct (streaming, tool loop, send_message)
+│   ├── client.rs      # Public client module docs/imports and fragment orchestration
+│   ├── client/        # Query, request setup, streaming, receive, history, and tests
 │   ├── config.rs      # Provider enum, get_base_url(), get_model() helpers
 │   ├── context.rs     # estimate_tokens(), is_approaching_limit(), truncate_messages()
 │   ├── error.rs       # Error type and Result alias
-│   ├── hooks.rs       # Hooks system (PreToolUse, PostToolUse, UserPromptSubmit, HookDecision)
+│   ├── hooks.rs       # Public hooks module orchestration
+│   ├── hooks/         # Events, decisions, handlers, registry, and tests
 │   ├── lib.rs         # Public exports and prelude module
 │   ├── retry.rs       # RetryConfig, retry_with_backoff, retry_with_backoff_conditional, is_retryable_error
-│   ├── tools.rs       # tool() builder + Tool struct
-│   ├── types.rs       # AgentOptions builder, ContentBlock, ImageBlock, Message, MessageRole, etc.
-│   └── utils.rs       # SSE parser, ToolCallAggregator, OpenAI wire types
+│   ├── tools.rs       # Public tool module orchestration
+│   ├── tools/         # Tool, schema, builder, handler, factory, and tests
+│   ├── types.rs       # Public core-type module orchestration
+│   ├── types/         # Options, messages, images, wire types, and tests
+│   ├── utils.rs       # SSE parser and ToolCallAggregator
+│   └── utils/         # Utility unit tests
 ├── examples/
 │   ├── simple_query.rs              # Minimal streaming query
 │   ├── calculator_tools.rs          # Manual tool execution
@@ -44,11 +49,13 @@ open-agent-sdk-rust/
 │   ├── debug_logging_test.rs
 │   ├── defensive_validation_test.rs
 │   ├── edge_cases_test.rs
+│   ├── hooks_history_snapshot_test.rs
 │   ├── hooks_integration_test.rs
 │   ├── image_serialization_test.rs
 │   ├── package_manifest_test.rs     # Package exclusion coverage (CLAUDE.md, .markdownlint.json)
 │   ├── security_bypass_test.rs
 │   ├── send_message_test.rs         # Manual-mode history regression (v0.6.2)
+│   ├── source_file_size_test.rs      # Repository Rust hard-limit guard
 │   └── tool_call_content_test.rs
 ├── .github/
 │   ├── dependabot.yml               # Grouped weekly Cargo dependency updates
@@ -303,11 +310,11 @@ All OpenAI-compatible endpoints:
 
 ## Test Coverage
 
-- 119 unit tests (lib + inline)
-- 80 active integration tests across 14 test files (12 additional `#[ignore]`d by default)
+- 120 unit tests (lib + inline)
+- 82 active integration tests across 16 test files (12 additional `#[ignore]`d by default)
 - 151 active doctests (17 additional doctests are `ignore`d)
 
-Total: 350 active tests.
+Total: 353 active tests.
 
 ```bash
 cargo test              # run all (unit + integration + doctests)
@@ -326,6 +333,8 @@ cargo test --doc        # doctests only
 - **`auto_execute_tools` defaults to `false`** (backwards compatibility)
 - **Context management is opt-in** — never silently mutate history
 - **`add_tool_result()` is sync** — no await needed
+- Hook event histories are structured JSON snapshots of internal `Message` values; never substitute placeholder objects. `PostToolUseEvent` includes the pending unmodified tool result.
+- The include-backed `client/`, `hooks/`, `tools/`, `types/`, and `utils/` fragments preserve their parent public module paths; keep production source files below 600 lines and retain the repository-wide 800-line Rust architecture guard.
 - Commit format: `type(scope): description` (feat, fix, docs, test, refactor, chore)
 - Dependency updates: Dependabot runs weekly (grouped Cargo updates) — resolve security advisories promptly
 - Reqwest compatibility: keep reqwest on 0.12.x while `Error::Http` publicly wraps `reqwest::Error`; upgrading reqwest requires a documented v0.7.0 release
@@ -336,7 +345,7 @@ cargo test --doc        # doctests only
 - PR benchmarks: compare Criterion results directly against the base commit with a shared target directory; do not restore the obsolete `boa-dev/criterion-compare-action`
 - Coverage reports: retain Tarpaulin XML with the latest compatible, immutable-SHA-pinned `actions/upload-artifact` release (currently v7.0.1) and fail CI when the report is missing
 
-## Security Advisories (resolved in v0.6.5, current v0.6.7)
+## Security Advisories (resolved in v0.6.5, current v0.6.8)
 
 RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 
@@ -347,8 +356,8 @@ RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 
 ## Current Version
 
-**v0.6.7 source** — Rust 1.85-compatible production dependency updates,
-immutable and least-privilege GitHub Actions, first-party coverage artifacts,
-and direct Criterion base/head benchmark comparison.
+**v0.6.8 source** — complete structured hook history, shared client request
+construction, and source-size architecture guards, while retaining Rust 1.85
+compatibility and the hardened dependency/CI baseline.
 
 Features: multimodal vision (URLs, local files, base64), manual-mode history fix (v0.6.2 regression), retry module, interrupt capability, lifecycle hooks, automatic tool execution, context management utilities, provider helpers, prelude module, OpenAI wire type exports.

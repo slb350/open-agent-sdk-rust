@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-08-01
+
+### Fixed
+
+- **Hook history**: `UserPromptSubmit`, `PreToolUse`, and `PostToolUse` events now receive complete structured JSON snapshots of conversation messages instead of one empty object per message.
+- **Post-tool context**: `PostToolUseEvent::history` now includes the completed tool call and its unmodified result, matching the documented lifecycle semantics while still allowing the hook to modify the result before it is committed.
+- **Client documentation**: Attached the receive-loop documentation to `Client::receive()` instead of accidentally including it in `Client::send_message()` documentation.
+
+### Changed
+
+- **Client request path**: Centralized request construction for `send()` and `send_message()`, then unified HTTP error handling and SSE stream setup across `query()` and the stateful client.
+- **Source architecture**: Split the oversized client, hook, tool, type, and utility implementations into focused include-backed module fragments while preserving all existing public module paths and APIs. Every production Rust source file is now below the 600-line soft limit.
+
+### Testing
+
+- Added RED/GREEN regressions for prompt-hook, pre-tool, and post-tool history snapshots across text, tool-call, and tool-result content.
+- Added an architecture guard that fails if any repository Rust source file exceeds the 800-line hard limit.
+
 ## [0.6.7] - 2026-07-25
 
 ### Fixed
@@ -527,6 +545,7 @@ client.add_tool_result(&id, result)?;
   - vLLM
   - Any other OpenAI-compatible endpoint
 
+[0.6.8]: https://github.com/slb350/open-agent-sdk-rust/releases/tag/v0.6.8
 [0.6.7]: https://github.com/slb350/open-agent-sdk-rust/releases/tag/v0.6.7
 [0.6.6]: https://github.com/slb350/open-agent-sdk-rust/releases/tag/v0.6.6
 [0.3.0]: https://github.com/slb350/open-agent-sdk-rust/releases/tag/v0.3.0
