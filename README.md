@@ -1004,7 +1004,7 @@ let truncated = truncate_messages(client.history(), 10, true);
 open-agent-sdk-rust/
 ├── src/
 │   ├── client.rs          # Public client module docs/imports and fragment orchestration
-│   ├── client/            # Query, request setup, streaming, receive, history, and tests
+│   ├── client/            # Query, send, send_message, setup, streaming, receive, history, state, and tests
 │   ├── config.rs          # Provider helpers (Provider, get_base_url, get_model)
 │   ├── context.rs         # Token estimation and truncation
 │   ├── error.rs           # Error types
@@ -1015,7 +1015,7 @@ open-agent-sdk-rust/
 │   ├── tools.rs           # Public tool module orchestration
 │   ├── tools/             # Tool, schema, builder, handler, factory, and tests
 │   ├── types.rs           # Public core-type module orchestration
-│   ├── types/             # Options, messages, images, wire types, and tests
+│   ├── types/             # Options, messages, images, wire types, validated newtypes, and tests
 │   ├── utils.rs           # SSE parsing and tool call aggregation
 │   └── utils/             # Utility unit tests
 ├── examples/

@@ -10,7 +10,7 @@ A lightweight Rust SDK (v0.6.8 source) for building AI agents with local or clou
 open-agent-sdk-rust/
 ├── src/
 │   ├── client.rs      # Public client module docs/imports and fragment orchestration
-│   ├── client/        # Query, request setup, streaming, receive, history, and tests
+│   ├── client/        # Query, send, send_message, setup, streaming, receive, history, state, and tests
 │   ├── config.rs      # Provider enum, get_base_url(), get_model() helpers
 │   ├── context.rs     # estimate_tokens(), is_approaching_limit(), truncate_messages()
 │   ├── error.rs       # Error type and Result alias
@@ -21,7 +21,7 @@ open-agent-sdk-rust/
 │   ├── tools.rs       # Public tool module orchestration
 │   ├── tools/         # Tool, schema, builder, handler, factory, and tests
 │   ├── types.rs       # Public core-type module orchestration
-│   ├── types/         # Options, messages, images, wire types, and tests
+│   ├── types/         # Options, messages, images, wire types, validated newtypes, and tests
 │   ├── utils.rs       # SSE parser and ToolCallAggregator
 │   └── utils/         # Utility unit tests
 ├── examples/
