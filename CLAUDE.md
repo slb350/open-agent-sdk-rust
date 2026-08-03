@@ -49,7 +49,7 @@ open-agent-sdk-rust/
 │   ├── debug_logging_test.rs
 │   ├── defensive_validation_test.rs
 │   ├── edge_cases_test.rs
-│   ├── hooks_history_snapshot_test.rs
+│   ├── hooks_history_snapshot_test.rs  # Regression coverage for structured hook lifecycle history snapshots
 │   ├── hooks_integration_test.rs
 │   ├── image_serialization_test.rs
 │   ├── package_manifest_test.rs     # Package exclusion coverage (CLAUDE.md, .markdownlint.json)
@@ -224,6 +224,8 @@ let hooks = Hooks::new()
 `HookDecision` variants: `continue_()`, `block(reason)`, `modify_input(json, reason)`, `modify_prompt(text, reason)`.
 
 Hooks run sequentially; first non-None decision wins. Hook name constants: `HOOK_PRE_TOOL_USE`, `HOOK_POST_TOOL_USE`, `HOOK_USER_PROMPT_SUBMIT`.
+
+Every hook event carries `event.history: Vec<serde_json::Value>` — a structured JSON snapshot of the conversation at that lifecycle point. Pre-tool snapshots reflect history before the call; post-tool snapshots include the completed call and its unmodified result.
 
 ### Multimodal Vision
 
