@@ -78,7 +78,7 @@ open-agent-sdk-rust/
 | **HTTP** | reqwest 0.12.28+ |
 | **Serialization** | serde, serde_json 1.0 |
 | **Streams** | futures 0.3.32+ |
-| **Error handling** | anyhow 1.0.103+ |
+| **Error handling** | thiserror 2.0, anyhow 1.0.103+ |
 | **Logging** | log 0.4.29+ |
 | **Benchmarks** | criterion |
 | **Automation** | Dependabot (grouped weekly Cargo updates) |
