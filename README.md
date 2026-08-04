@@ -16,7 +16,7 @@
 - **Control** - pick your model (Qwen, Llama, Mistral, etc.)
 
 **How fast?**
-From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 353 active tests.
+From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 382 active tests.
 
 [![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.6.8)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
@@ -1106,7 +1106,7 @@ cargo test test_agent_options_builder
 **Test Coverage:**
 
 - 120 unit tests (lib)
-- 82 active integration tests across 16 test files (12 additional tests are `#[ignore]`d by default)
+- 94 active integration tests across 16 test files (12 additional tests are `#[ignore]`d by default)
   - Hooks integration tests
   - Auto-execution tests
   - Image serialization tests
@@ -1114,9 +1114,9 @@ cargo test test_agent_options_builder
   - Backward compatibility tests
   - Advanced integration tests
   - Edge cases, security bypass, debug logging, send message, tool call content tests
-- 151 active doctests (17 additional doctests are `ignore`d)
+- 168 active doctests (17 additional doctests are `ignore`d)
 
-Total: 353 active unit, integration, and documentation tests
+Total: 382 active unit, integration, and documentation tests
 
 ## Requirements
 
@@ -1124,7 +1124,10 @@ Total: 353 active unit, integration, and documentation tests
 - Tokio 1.50+ (async runtime)
 - serde, serde_json (serialization)
 - reqwest (HTTP client)
-- futures (async streams)
+- futures, tokio-stream (async streams)
+- eventsource-stream (SSE parsing)
+- async-trait (async trait support)
+- rand (retry jitter)
 
 ## License
 

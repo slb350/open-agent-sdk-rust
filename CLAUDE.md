@@ -77,9 +77,12 @@ open-agent-sdk-rust/
 | **Async runtime** | Tokio 1.50+ |
 | **HTTP** | reqwest 0.12.28+ |
 | **Serialization** | serde, serde_json 1.0 |
-| **Streams** | futures 0.3.32+ |
+| **Streams** | futures 0.3.32+, tokio-stream 0.1 |
+| **SSE Parsing** | eventsource-stream 0.2 |
+| **Async traits** | async-trait 0.1 |
 | **Error handling** | thiserror 2.0, anyhow 1.0.103+ |
 | **Logging** | log 0.4.29+ |
+| **Retry jitter** | rand 0.10 |
 | **Benchmarks** | criterion |
 | **Automation** | Dependabot (grouped weekly Cargo updates) |
 
@@ -313,10 +316,10 @@ All OpenAI-compatible endpoints:
 ## Test Coverage
 
 - 120 unit tests (lib + inline)
-- 82 active integration tests across 16 test files (12 additional `#[ignore]`d by default)
-- 151 active doctests (17 additional doctests are `ignore`d)
+- 94 active integration tests across 16 test files (12 additional `#[ignore]`d by default)
+- 168 active doctests (17 additional doctests are `ignore`d)
 
-Total: 353 active tests.
+Total: 382 active tests.
 
 ```bash
 cargo test              # run all (unit + integration + doctests)
