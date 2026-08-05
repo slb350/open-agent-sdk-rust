@@ -316,10 +316,10 @@ All OpenAI-compatible endpoints:
 ## Test Coverage
 
 - 120 unit tests (lib + inline)
-- 94 active integration tests across 16 test files (12 additional `#[ignore]`d by default)
-- 168 active doctests (17 additional doctests are `ignore`d)
+- 82 active integration tests across 16 test files (12 additional `#[ignore]`d by default)
+- 151 active doctests (17 additional doctests are `ignore`d)
 
-Total: 382 active tests.
+Total: 353 active tests.
 
 ```bash
 cargo test              # run all (unit + integration + doctests)
