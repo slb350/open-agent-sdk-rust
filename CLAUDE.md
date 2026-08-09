@@ -2,7 +2,7 @@
 
 ## Project Description
 
-A lightweight Rust SDK (v0.6.8 source) for building AI agents with local or cloud LLMs via OpenAI-compatible endpoints. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
+A lightweight Rust SDK (v0.6.9 source) for building AI agents with local or cloud LLMs via OpenAI-compatible endpoints. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
 
 ## Repository Structure
 
@@ -22,7 +22,7 @@ open-agent-sdk-rust/
 │   ├── tools/         # Tool, schema, builder, handler, factory, and tests
 │   ├── types.rs       # Public core-type module orchestration
 │   ├── types/         # Options, messages, images, wire types, validated newtypes, and tests
-│   ├── utils.rs       # SSE parser and ToolCallAggregator
+│   ├── utils.rs       # Transport-safe SSE decoder and ToolCallAggregator
 │   └── utils/         # Utility unit tests
 ├── examples/
 │   ├── simple_query.rs              # Minimal streaming query
@@ -315,11 +315,11 @@ All OpenAI-compatible endpoints:
 
 ## Test Coverage
 
-- 120 unit tests (lib + inline)
+- 121 unit tests (lib + inline)
 - 82 active integration tests across 16 test files (12 additional `#[ignore]`d by default)
 - 151 active doctests (17 additional doctests are `ignore`d)
 
-Total: 353 active tests.
+Total: 354 active tests.
 
 ```bash
 cargo test              # run all (unit + integration + doctests)
@@ -339,10 +339,11 @@ cargo test --doc        # doctests only
 - **Context management is opt-in** — never silently mutate history
 - **`add_tool_result()` is sync** — no await needed
 - Hook event histories are structured JSON snapshots of internal `Message` values; never substitute placeholder objects. `PostToolUseEvent` includes the pending unmodified tool result.
+- SSE parsing must buffer across arbitrary reqwest transport chunks and emit every complete event through `eventsource-stream`; never parse `bytes_stream()` chunks as self-contained SSE messages.
 - The include-backed `client/`, `hooks/`, `tools/`, `types/`, and `utils/` fragments preserve their parent public module paths; keep production source files below 600 lines and retain the repository-wide 800-line Rust architecture guard.
 - Commit format: `type(scope): description` (feat, fix, docs, test, refactor, chore)
 - Dependency updates: Dependabot runs weekly (grouped Cargo updates) — resolve security advisories promptly
-- Reqwest compatibility: keep reqwest on 0.12.x while `Error::Http` publicly wraps `reqwest::Error`; upgrading reqwest requires a documented v0.7.0 release
+- Reqwest compatibility: keep reqwest on 0.12.x while `Error::Http` publicly wraps `reqwest::Error`; Dependabot ignores only semver-major reqwest updates until the documented v0.7.0 release
 - Base64 safety: use base64 0.23 without its default `simd-unsafe` feature unless a measured need justifies enabling it
 - GitHub Actions: pin every third-party action to an immutable full commit SHA with a version comment; Dependabot maintains the pins
 - Workflow permissions: default to `contents: read` and grant additional permissions only to the job that requires them
@@ -350,7 +351,7 @@ cargo test --doc        # doctests only
 - PR benchmarks: compare Criterion results directly against the base commit with a shared target directory; do not restore the obsolete `boa-dev/criterion-compare-action`
 - Coverage reports: retain Tarpaulin XML with the latest compatible, immutable-SHA-pinned `actions/upload-artifact` release (currently v7.0.1) and fail CI when the report is missing
 
-## Security Advisories (resolved in v0.6.5, current v0.6.8)
+## Security Advisories (resolved in v0.6.5, current v0.6.9)
 
 RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 
@@ -361,8 +362,9 @@ RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 
 ## Current Version
 
-**v0.6.8 source** — complete structured hook history, shared client request
-construction, and source-size architecture guards, while retaining Rust 1.85
-compatibility and the hardened dependency/CI baseline.
+**v0.6.9 source** — transport-boundary-safe SSE streaming, complete structured
+hook history, shared client request construction, and source-size architecture
+guards, while retaining Rust 1.85 compatibility and the hardened dependency/CI
+baseline.
 
 Features: multimodal vision (URLs, local files, base64), manual-mode history fix (v0.6.2 regression), retry module, interrupt capability, lifecycle hooks, automatic tool execution, context management utilities, provider helpers, prelude module, OpenAI wire type exports.

@@ -85,6 +85,7 @@
 
 use crate::types::{ContentBlock, OpenAIChunk, TextBlock, ToolUseBlock};
 use crate::{Error, Result};
+use eventsource_stream::{EventStreamError, Eventsource};
 use futures::stream::{Stream, StreamExt};
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -389,21 +390,21 @@ impl ToolCallAggregator {
 /// Each stream item can be an error:
 /// - **HTTP errors**: Network issues, connection drops (wrapped as [`Error::Http`])
 /// - **Parse errors**: Invalid JSON in the SSE data field (wrapped as [`Error::Stream`])
-/// - **Protocol errors**: SSE chunks that don't contain a `data:` line (wrapped as [`Error::Stream`])
+/// - **Protocol errors**: Invalid UTF-8 or malformed SSE fields (wrapped as [`Error::Stream`])
 ///
-/// Errors are per-chunk, not fatal to the stream. Consumers should handle errors gracefully.
+/// Errors are yielded as stream items rather than panicking the parser. Consumers should handle
+/// them explicitly.
 ///
 /// # Example Flow
 ///
 /// ```text
 /// Raw HTTP bytes: b"data: {\"id\":\"123\"}\n\ndata: [DONE]\n\n"
 ///        ↓
-/// bytes_stream() splits into chunks
+/// bytes_stream() yields arbitrary transport chunks
 ///        ↓
-/// Parse each chunk:
-///   - Find lines starting with "data: "
-///   - Skip "[DONE]" sentinel
-///   - Parse JSON into OpenAIChunk
+/// Eventsource buffers chunks into complete SSE events
+///        ↓
+/// Skip "[DONE]" and parse event data into OpenAIChunk
 ///        ↓
 /// Stream<Result<OpenAIChunk>>
 /// ```
@@ -413,12 +414,12 @@ impl ToolCallAggregator {
 /// - **`[DONE]` sentinel**: OpenAI's SSE streams end with `data: [DONE]`. This is not valid
 ///   JSON, so we skip it rather than attempting to parse.
 ///
-/// - **Chunk boundaries**: HTTP streaming can split data at arbitrary byte positions. Each
-///   `bytes_stream()` chunk may contain partial events, complete events, or multiple events.
-///   The line-by-line parsing handles this naturally.
+/// - **Chunk boundaries**: HTTP streaming can split data at arbitrary byte positions. The
+///   eventsource decoder buffers partial events and emits every complete event, including
+///   multiple events received in a single transport chunk.
 ///
-/// - **UTF-8 handling**: We use `from_utf8_lossy()` to be resilient to split UTF-8 sequences
-///   at chunk boundaries, though the API should always send well-formed UTF-8.
+/// - **UTF-8 handling**: Split multi-byte characters are buffered until complete. Invalid
+///   UTF-8 is reported as a stream error instead of being replaced with lossy characters.
 ///
 /// # Usage
 ///
@@ -436,45 +437,21 @@ impl ToolCallAggregator {
 pub fn parse_sse_stream(
     body: reqwest::Response,
 ) -> Pin<Box<dyn Stream<Item = Result<OpenAIChunk>> + Send>> {
-    let stream = body.bytes_stream().filter_map(move |result| async move {
-        // Convert HTTP errors to our Error type
-        let bytes = match result.map_err(Error::Http) {
-            Ok(b) => b,
-            Err(e) => return Some(Err(e)),
-        };
-
-        // Convert bytes to string. Use lossy conversion to handle potential
-        // UTF-8 boundary splits (though the API should send well-formed UTF-8).
-        let text = String::from_utf8_lossy(&bytes);
-
-        // Parse SSE format by examining each line.
-        // Format: "data: <payload>\n\n"
-        // Lines not starting with "data: " are ignored (e.g., comments, event types).
-        for line in text.lines() {
-            if let Some(data) = line.strip_prefix("data: ") {
-                // Skip the end-of-stream sentinel.
-                // OpenAI sends "data: [DONE]" to signal stream completion.
-                if data == "[DONE]" {
-                    continue;
-                }
-
-                // Parse the JSON payload into an OpenAIChunk.
-                // This is where we deserialize the actual chunk data.
-                let chunk: OpenAIChunk = match serde_json::from_str(data) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        return Some(Err(Error::stream(format!("Failed to parse chunk: {}", e))));
-                    }
-                };
-
-                return Some(Ok(chunk));
+    let stream = body
+        .bytes_stream()
+        .eventsource()
+        .filter_map(|event_result| async move {
+            match event_result {
+                Ok(event) if event.data == "[DONE]" => None,
+                Ok(event) => Some(serde_json::from_str(&event.data).map_err(|error| {
+                    Error::stream(format!("Failed to parse SSE event data: {error}"))
+                })),
+                Err(EventStreamError::Transport(error)) => Some(Err(Error::Http(error))),
+                Err(error) => Some(Err(Error::stream(format!(
+                    "Failed to parse SSE event: {error}"
+                )))),
             }
-        }
-
-        // If we processed all lines and found no "data: " line, skip this chunk.
-        // This handles heartbeats, comments, and other SSE events gracefully.
-        None
-    });
+        });
 
     // Pin the stream to the heap and box it for dynamic dispatch.
     // This allows the function to return a uniform type regardless of the

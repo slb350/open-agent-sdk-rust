@@ -7,6 +7,11 @@ updates:
       day: saturday
       time: "06:00"
       timezone: America/Los_Angeles
+    ignore:
+      # Error::Http publicly exposes reqwest::Error; 0.13 requires the v0.7 boundary.
+      - dependency-name: reqwest
+        update-types:
+          - version-update:semver-major
     groups:
       cargo-dependencies:
         patterns:

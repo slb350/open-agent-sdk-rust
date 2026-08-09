@@ -16,9 +16,9 @@
 - **Control** - pick your model (Qwen, Llama, Mistral, etc.)
 
 **How fast?**
-From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 353 active tests.
+From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 354 active tests.
 
-[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.6.8)](https://crates.io/crates/open-agent-sdk)
+[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.6.9)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -26,7 +26,7 @@ From zero to working agent in under 5 minutes. Rust-native performance (zero-cos
 
 ## Overview
 
-Open Agent SDK (Rust) provides a clean, streaming API for working with OpenAI-compatible local model servers. 100% feature parity with the Python SDK—complete with streaming, tool call aggregation, hooks, and automatic tool execution—built on Tokio for high-performance async I/O.
+Open Agent SDK (Rust) provides a clean, streaming API for working with OpenAI-compatible local model servers. 100% feature parity with the Python SDK—complete with transport-boundary-safe SSE streaming, tool call aggregation, hooks, and automatic tool execution—built on Tokio for high-performance async I/O.
 
 ## Supported Providers
 
@@ -53,7 +53,7 @@ Open Agent SDK (Rust) provides a clean, streaming API for working with OpenAI-co
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.6.8"
+open-agent-sdk = "0.6.9"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -1105,7 +1105,7 @@ cargo test test_agent_options_builder
 
 **Test Coverage:**
 
-- 120 unit tests (lib)
+- 121 unit tests (lib)
 - 82 active integration tests across 16 test files (12 additional tests are `#[ignore]`d by default)
   - Hooks integration tests
   - Auto-execution tests
@@ -1116,7 +1116,7 @@ cargo test test_agent_options_builder
   - Edge cases, security bypass, debug logging, send message, tool call content tests
 - 151 active doctests (17 additional doctests are `ignore`d)
 
-Total: 353 active unit, integration, and documentation tests
+Total: 354 active unit, integration, and documentation tests
 
 ## Requirements
 
@@ -1141,6 +1141,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.6.8 source - complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, hardened GitHub Actions, non-locking cancellation, manual-mode history fixes, and multimodal image support
+**Status**: v0.6.9 source - transport-boundary-safe SSE streaming, complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, hardened GitHub Actions, non-locking cancellation, manual-mode history fixes, and multimodal image support
 
 Star this repo if you're building AI agents with local models in Rust!

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.9] - 2026-08-08
+
+### Fixed
+
+- **SSE transport framing**: Streaming responses now buffer arbitrary HTTP transport fragments before parsing JSON, so events split across reqwest body chunks no longer fail with truncated-JSON errors.
+- **SSE event delivery**: Every complete event is emitted when multiple SSE messages arrive in one transport chunk; split UTF-8 sequences are buffered and invalid UTF-8 is reported instead of being lossily replaced.
+
+### Changed
+
+- **SSE decoder**: Replaced the per-chunk line parser with the existing `eventsource-stream` dependency while preserving typed reqwest transport errors and the OpenAI `[DONE]` sentinel behavior.
+- **Compatible maintenance**: Refreshed the direct base64 lock entry from 0.23.0 to 0.23.1 and advanced the immutable `dtolnay/rust-toolchain` action pin to `6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772`.
+- **Dependency automation**: Deferred only reqwest semver-major Dependabot updates because the public `Error::Http(reqwest::Error)` boundary requires the documented v0.7.0 migration; compatible reqwest updates and security alerts remain enabled.
+
+### Testing
+
+- Added a RED/GREEN loopback regression that sends one JSON event across separate HTTP chunks and multiple SSE events in one chunk, then verifies all three events arrive intact.
+
 ## [0.6.8] - 2026-08-01
 
 ### Fixed
@@ -545,6 +562,7 @@ client.add_tool_result(&id, result)?;
   - vLLM
   - Any other OpenAI-compatible endpoint
 
+[0.6.9]: https://github.com/slb350/open-agent-sdk-rust/releases/tag/v0.6.9
 [0.6.8]: https://github.com/slb350/open-agent-sdk-rust/releases/tag/v0.6.8
 [0.6.7]: https://github.com/slb350/open-agent-sdk-rust/releases/tag/v0.6.7
 [0.6.6]: https://github.com/slb350/open-agent-sdk-rust/releases/tag/v0.6.6
