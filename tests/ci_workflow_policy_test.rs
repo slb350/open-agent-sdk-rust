@@ -18,15 +18,17 @@ fn macos_tests_run_only_on_github_hosted_runners() {
 
     assert!(linux.contains("runs-on: ubuntu-latest"));
     assert!(!linux.contains("macos-latest"));
-    assert!(macos.contains("runs-on: macos-latest"));
+    assert!(macos.contains(
+        "runs-on: ${{ github.server_url == 'https://github.com' && 'macos-latest' || 'ubuntu-latest' }}"
+    ));
     assert!(
         macos.contains("if: github.server_url == 'https://github.com'"),
-        "the macOS job must be skipped before Gitea tries to assign a runner"
+        "the macOS job must be skipped on Gitea after assignment to an available label"
     );
 }
 
 #[test]
-fn audit_jobs_install_and_verify_rust_before_running() {
+fn audit_jobs_install_and_verify_rust_before_running_cargo_audit_directly() {
     let push_audit = between(CI_WORKFLOW, "  security:\n", "  docs:\n");
 
     for workflow in [push_audit, SCHEDULED_AUDIT_WORKFLOW] {
@@ -36,15 +38,19 @@ fn audit_jobs_install_and_verify_rust_before_running() {
         let verification = workflow
             .find("name: Verify Rust toolchain")
             .expect("audit workflow must verify the Rust installation");
+        let install = workflow
+            .find("cargo install cargo-audit --version '=0.22.2' --no-default-features")
+            .expect("audit workflow must install the exact cargo-audit release");
         let audit = workflow
-            .find("uses: actions-rust-lang/audit@")
-            .expect("audit workflow must run cargo-audit");
+            .find("cargo audit --deny warnings")
+            .expect("audit workflow must deny every cargo-audit warning");
 
-        assert!(toolchain < verification && verification < audit);
+        assert!(toolchain < verification && verification < install && install < audit);
         assert!(workflow.contains("toolchain: stable"));
         assert!(workflow.contains("rustc --version\n          cargo --version\n"));
-        assert!(workflow.contains("denyWarnings: true"));
-        assert!(workflow.contains("createIssues: false"));
+        assert!(!workflow.contains("actions-rust-lang/audit@"));
+        assert!(!workflow.contains("cargo install --locked cargo-audit"));
+        assert!(!workflow.contains("shell: python"));
     }
 }
 
@@ -58,6 +64,14 @@ fn coverage_uses_pinned_tarpaulin_with_the_unprivileged_llvm_engine() {
         coverage.contains("cargo tarpaulin --engine llvm --out xml --all-features --workspace")
     );
     assert!(coverage.contains("if-no-files-found: error"));
+    let report_check = coverage
+        .find("test -s cobertura.xml")
+        .expect("coverage must fail when its XML report is missing or empty");
+    let artifact_upload = coverage
+        .find("uses: actions/upload-artifact@")
+        .expect("GitHub coverage must retain the report as an artifact");
+    assert!(report_check < artifact_upload);
+    assert!(coverage.contains("if: github.server_url == 'https://github.com'"));
     assert!(!coverage.contains("seccomp=unconfined"));
     assert!(!coverage.contains("--privileged"));
 }

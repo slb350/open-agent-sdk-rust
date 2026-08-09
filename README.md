@@ -1055,7 +1055,7 @@ open-agent-sdk-rust/
 ├── .github/
 │   ├── dependabot.yml               # Grouped weekly Cargo dependency updates
 │   └── workflows/
-│       ├── ci.yml                   # Cross-host CI (Linux on GitHub/Gitea, macOS on GitHub, audit, docs, LLVM Tarpaulin, benchmarks)
+│       ├── ci.yml                   # Cross-host CI (Linux on both hosts, macOS/artifacts on GitHub, direct audit, LLVM Tarpaulin)
 │       └── scheduled-audit.yml      # Scheduled dependency audit
 ├── .markdownlint.json               # Markdown lint rules (disable MD013, allow duplicate sibling headings)
 ├── Cargo.toml
