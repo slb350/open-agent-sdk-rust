@@ -39,7 +39,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo clippy --all-targets --all-features -- -D warnings
 
-  # Linux matrix runs on both GitHub-hosted and family Gitea runners.
+  # Linux matrix runs on GitHub-hosted runners.
   test-linux:
     name: Test Suite (Linux, ${{ matrix.rust }})
     runs-on: ubuntu-latest
@@ -58,13 +58,10 @@ jobs:
       - name: Run tests
         run: cargo test --all-features --all --verbose
 
-  # The family Gitea runner is Linux-only; GitHub retains the macOS matrix.
+  # Preserve native macOS coverage on GitHub-hosted runners.
   test-macos:
     name: Test Suite (macOS, ${{ matrix.rust }})
-    if: github.server_url == 'https://github.com'
-    # Gitea assigns a runner before evaluating the job condition. Give it an
-    # available Linux label so it can mark this GitHub-only job as skipped.
-    runs-on: ${{ github.server_url == 'https://github.com' && 'macos-latest' || 'ubuntu-latest' }}
+    runs-on: macos-latest
     strategy:
       matrix:
         rust: [stable, beta]
@@ -145,7 +142,6 @@ jobs:
       - name: Verify coverage report
         run: test -s cobertura.xml
       - name: Retain coverage report
-        if: github.server_url == 'https://github.com'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-${{ github.sha }}

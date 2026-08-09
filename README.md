@@ -1047,7 +1047,7 @@ open-agent-sdk-rust/
 │   ├── hooks_integration_test.rs
 │   ├── image_serialization_test.rs
 │   ├── package_manifest_test.rs     # Package exclusion coverage (CLAUDE.md, .markdownlint.json)
-│   ├── ci_workflow_policy_test.rs   # Cross-host CI portability and security policy guards
+│   ├── ci_workflow_policy_test.rs   # GitHub CI runner, coverage, and security policy guards
 │   ├── security_bypass_test.rs
 │   ├── send_message_test.rs         # Manual-mode history regression (v0.6.2)
 │   ├── source_file_size_test.rs      # Repository Rust hard-limit guard
@@ -1055,7 +1055,7 @@ open-agent-sdk-rust/
 ├── .github/
 │   ├── dependabot.yml               # Grouped weekly Cargo dependency updates
 │   └── workflows/
-│       ├── ci.yml                   # Cross-host CI (Linux on both hosts, macOS/artifacts on GitHub, direct audit, LLVM Tarpaulin)
+│       ├── ci.yml                   # GitHub CI (Linux/macOS, direct audit, LLVM Tarpaulin, coverage artifacts)
 │       └── scheduled-audit.yml      # Scheduled dependency audit
 ├── .markdownlint.json               # Markdown lint rules (disable MD013, allow duplicate sibling headings)
 ├── Cargo.toml
@@ -1140,8 +1140,12 @@ MIT License - see [LICENSE](LICENSE) for details.
 - API design inspired by claude-agent-sdk
 - Built for local/open-source LLM enthusiasts
 
+## Repository Hosting
+
+[GitHub](https://github.com/slb350/open-agent-sdk-rust) is the canonical repository and CI/release host. Any family Gitea copy is a passive Git mirror and does not run a separate required Actions pipeline.
+
 ---
 
-**Status**: v0.6.9 source - transport-boundary-safe SSE streaming, complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, portable GitHub/Gitea Actions, non-locking cancellation, manual-mode history fixes, and multimodal image support
+**Status**: v0.6.9 source - transport-boundary-safe SSE streaming, complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, GitHub-hosted Linux/macOS CI, non-locking cancellation, manual-mode history fixes, and multimodal image support
 
 Star this repo if you're building AI agents with local models in Rust!

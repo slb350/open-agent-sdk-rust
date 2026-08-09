@@ -12,19 +12,14 @@ fn between<'a>(workflow: &'a str, start: &str, end: &str) -> &'a str {
 }
 
 #[test]
-fn macos_tests_run_only_on_github_hosted_runners() {
+fn test_matrix_uses_native_github_hosted_runners() {
     let linux = between(CI_WORKFLOW, "  test-linux:\n", "  test-macos:\n");
     let macos = between(CI_WORKFLOW, "  test-macos:\n", "  msrv:\n");
 
     assert!(linux.contains("runs-on: ubuntu-latest"));
     assert!(!linux.contains("macos-latest"));
-    assert!(macos.contains(
-        "runs-on: ${{ github.server_url == 'https://github.com' && 'macos-latest' || 'ubuntu-latest' }}"
-    ));
-    assert!(
-        macos.contains("if: github.server_url == 'https://github.com'"),
-        "the macOS job must be skipped on Gitea after assignment to an available label"
-    );
+    assert!(macos.contains("runs-on: macos-latest"));
+    assert!(!macos.contains("github.server_url"));
 }
 
 #[test]
@@ -71,7 +66,7 @@ fn coverage_uses_pinned_tarpaulin_with_the_unprivileged_llvm_engine() {
         .find("uses: actions/upload-artifact@")
         .expect("GitHub coverage must retain the report as an artifact");
     assert!(report_check < artifact_upload);
-    assert!(coverage.contains("if: github.server_url == 'https://github.com'"));
+    assert!(!coverage.contains("github.server_url"));
     assert!(!coverage.contains("seccomp=unconfined"));
     assert!(!coverage.contains("--privileged"));
 }

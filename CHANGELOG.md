@@ -7,15 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Canonical CI host**: GitHub is now the canonical repository and sole Actions host. The family Gitea repository is retained only as a passive Git mirror, removing cross-host runner-routing and artifact-protocol compatibility code while preserving native stable/beta macOS coverage.
+
 ### Fixed
 
-- **Cross-host CI routing**: Split Linux and macOS tests and use host-dependent runner routing so the Linux-only family Gitea runner can assign and then skip GitHub-only macOS jobs, while GitHub-hosted runners retain the stable/beta macOS matrix.
 - **Security audit portability**: Install and verify stable Rust, exact-pin cargo-audit 0.22.2, and invoke it directly with warnings denied. This removes assumptions that runner images provide either `cargo` or the Python interpreter used internally by the audit action. Its published upstream lockfile is deliberately not imported because that lock contains denied RustSec advisories.
-- **Container-safe coverage**: Pin cargo-tarpaulin exactly to 0.37.0 and use its LLVM engine, which preserves required Cobertura output without ptrace, ASLR changes, privileged containers, or relaxed seccomp policy. The report is required and checked on both hosts, then retained with GitHub's artifact service only where that protocol is supported. The install deliberately resolves patched compatible build dependencies instead of importing Tarpaulin's upstream lockfile, which contains vulnerable anyhow 1.0.102.
+- **Container-safe coverage**: Pin cargo-tarpaulin exactly to 0.37.0 and use its LLVM engine, which preserves required Cobertura output without ptrace, ASLR changes, privileged containers, or relaxed seccomp policy. The report is required, checked for content, and retained with GitHub's artifact service. The install deliberately resolves patched compatible build dependencies instead of importing Tarpaulin's upstream lockfile, which contains vulnerable anyhow 1.0.102.
 
 ### Testing
 
-- Added workflow-policy regressions for pre-condition cross-host runner routing, direct warnings-denied cargo-audit execution without Python, the exact Tarpaulin version without its vulnerable upstream lock, required coverage report generation, host-compatible artifact retention, and the absence of privileged-container workarounds.
+- Added workflow-policy regressions for native GitHub-hosted Linux/macOS routing, direct warnings-denied cargo-audit execution without Python, the exact Tarpaulin version without its vulnerable upstream lock, required coverage report generation and retention, and the absence of privileged-container workarounds.
 
 ## [0.6.9] - 2026-08-08
 
