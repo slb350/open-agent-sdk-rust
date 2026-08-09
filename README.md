@@ -1047,6 +1047,7 @@ open-agent-sdk-rust/
 │   ├── hooks_integration_test.rs
 │   ├── image_serialization_test.rs
 │   ├── package_manifest_test.rs     # Package exclusion coverage (CLAUDE.md, .markdownlint.json)
+│   ├── ci_workflow_policy_test.rs   # Cross-host CI portability and security policy guards
 │   ├── security_bypass_test.rs
 │   ├── send_message_test.rs         # Manual-mode history regression (v0.6.2)
 │   ├── source_file_size_test.rs      # Repository Rust hard-limit guard
@@ -1054,7 +1055,7 @@ open-agent-sdk-rust/
 ├── .github/
 │   ├── dependabot.yml               # Grouped weekly Cargo dependency updates
 │   └── workflows/
-│       ├── ci.yml                   # CI pipeline (fmt, clippy, test matrix [ubuntu+macos × stable+beta], msrv, security audit, docs build, coverage [Tarpaulin], benchmarks [PR-only Criterion])
+│       ├── ci.yml                   # Cross-host CI (Linux on GitHub/Gitea, macOS on GitHub, audit, docs, LLVM Tarpaulin, benchmarks)
 │       └── scheduled-audit.yml      # Scheduled dependency audit
 ├── .markdownlint.json               # Markdown lint rules (disable MD013, allow duplicate sibling headings)
 ├── Cargo.toml
@@ -1106,7 +1107,7 @@ cargo test test_agent_options_builder
 **Test Coverage:**
 
 - 121 unit tests (lib)
-- 82 active integration tests across 16 test files (12 additional tests are `#[ignore]`d by default)
+- 85 active integration tests across 17 test files (12 additional tests are `#[ignore]`d by default)
   - Hooks integration tests
   - Auto-execution tests
   - Image serialization tests
@@ -1116,7 +1117,7 @@ cargo test test_agent_options_builder
   - Edge cases, security bypass, debug logging, send message, tool call content tests
 - 151 active doctests (17 additional doctests are `ignore`d)
 
-Total: 354 active unit, integration, and documentation tests
+Total: 357 active unit, integration, and documentation tests
 
 ## Requirements
 
@@ -1141,6 +1142,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.6.9 source - transport-boundary-safe SSE streaming, complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, hardened GitHub Actions, non-locking cancellation, manual-mode history fixes, and multimodal image support
+**Status**: v0.6.9 source - transport-boundary-safe SSE streaming, complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, portable GitHub/Gitea Actions, non-locking cancellation, manual-mode history fixes, and multimodal image support
 
 Star this repo if you're building AI agents with local models in Rust!

@@ -53,6 +53,7 @@ open-agent-sdk-rust/
 │   ├── hooks_integration_test.rs
 │   ├── image_serialization_test.rs
 │   ├── package_manifest_test.rs     # Package exclusion coverage (CLAUDE.md, .markdownlint.json)
+│   ├── ci_workflow_policy_test.rs   # Cross-host CI portability and security policy guards
 │   ├── security_bypass_test.rs
 │   ├── send_message_test.rs         # Manual-mode history regression (v0.6.2)
 │   ├── source_file_size_test.rs      # Repository Rust hard-limit guard
@@ -60,7 +61,7 @@ open-agent-sdk-rust/
 ├── .github/
 │   ├── dependabot.yml               # Grouped weekly Cargo dependency updates
 │   └── workflows/
-│       ├── ci.yml                   # CI pipeline (fmt, clippy, test matrix [ubuntu+macos × stable+beta], msrv, security audit, docs build, coverage [Tarpaulin], benchmarks [PR-only Criterion])
+│       ├── ci.yml                   # Cross-host CI (Linux on GitHub/Gitea, macOS on GitHub, audit, docs, LLVM Tarpaulin, benchmarks)
 │       └── scheduled-audit.yml      # Scheduled dependency audit
 ├── .markdownlint.json               # Markdown lint rules (disable MD013, allow duplicate sibling headings)
 ├── Cargo.toml
@@ -316,10 +317,10 @@ All OpenAI-compatible endpoints:
 ## Test Coverage
 
 - 121 unit tests (lib + inline)
-- 82 active integration tests across 16 test files (12 additional `#[ignore]`d by default)
+- 85 active integration tests across 17 test files (12 additional `#[ignore]`d by default)
 - 151 active doctests (17 additional doctests are `ignore`d)
 
-Total: 354 active tests.
+Total: 357 active tests.
 
 ```bash
 cargo test              # run all (unit + integration + doctests)
@@ -347,9 +348,10 @@ cargo test --doc        # doctests only
 - Base64 safety: use base64 0.23 without its default `simd-unsafe` feature unless a measured need justifies enabling it
 - GitHub Actions: pin every third-party action to an immutable full commit SHA with a version comment; Dependabot maintains the pins
 - Workflow permissions: default to `contents: read` and grant additional permissions only to the job that requires them
-- Audit workflows: set `denyWarnings: true` and `createIssues: false` so vulnerabilities, yanked crates, unmaintained crates, and unsoundness warnings fail CI without requiring issue-write permissions
+- Cross-host CI: the family Gitea runner is Linux-only, so Linux tests run on both hosts while the separate macOS job is gated to `github.server_url == 'https://github.com'`; never route macOS coverage to a Linux label
+- Audit workflows: install and verify stable Rust before the audit action, and set `denyWarnings: true` and `createIssues: false` so vulnerabilities, yanked crates, unmaintained crates, and unsoundness warnings fail CI without requiring issue-write permissions
 - PR benchmarks: compare Criterion results directly against the base commit with a shared target directory; do not restore the obsolete `boa-dev/criterion-compare-action`
-- Coverage reports: retain Tarpaulin XML with the latest compatible, immutable-SHA-pinned `actions/upload-artifact` release (currently v7.0.1) and fail CI when the report is missing
+- Coverage reports: use the exact cargo-tarpaulin 0.37.0 LLVM engine in unprivileged containers, but do not import its upstream lockfile while that lock contains vulnerable anyhow 1.0.102; retain the XML with the latest compatible immutable-SHA-pinned `actions/upload-artifact` release (currently v7.0.1) and fail CI when the report is missing
 
 ## Security Advisories (resolved in v0.6.5, current v0.6.9)
 
@@ -363,8 +365,8 @@ RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 ## Current Version
 
 **v0.6.9 source** — transport-boundary-safe SSE streaming, complete structured
-hook history, shared client request construction, and source-size architecture
-guards, while retaining Rust 1.85 compatibility and the hardened dependency/CI
-baseline.
+hook history, shared client request construction, source-size architecture
+guards, and portable GitHub/Gitea CI, while retaining Rust 1.85 compatibility
+and the hardened dependency baseline.
 
 Features: multimodal vision (URLs, local files, base64), manual-mode history fix (v0.6.2 regression), retry module, interrupt capability, lifecycle hooks, automatic tool execution, context management utilities, provider helpers, prelude module, OpenAI wire type exports.

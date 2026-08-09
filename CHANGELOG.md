@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Cross-host CI routing**: Split Linux and macOS tests so the Linux-only family Gitea runner skips macOS jobs before assignment while GitHub-hosted runners retain the stable/beta macOS matrix.
+- **Security audit bootstrap**: Install and verify the stable Rust toolchain before both push/pull-request and scheduled audits, removing the unsupported assumption that every runner image already provides `cargo`.
+- **Container-safe coverage**: Pin cargo-tarpaulin exactly to 0.37.0 and use its LLVM engine, which preserves required Cobertura output without ptrace, ASLR changes, privileged containers, or relaxed seccomp policy. The install deliberately resolves patched compatible build dependencies instead of importing Tarpaulin's upstream lockfile, which contains vulnerable anyhow 1.0.102.
+
+### Testing
+
+- Added workflow-policy regressions for cross-host macOS routing, audit toolchain ordering and strict warning settings, the exact Tarpaulin version without its vulnerable upstream lock, the LLVM coverage engine, required artifact generation, and the absence of privileged-container workarounds.
+
 ## [0.6.9] - 2026-08-08
 
 ### Fixed
