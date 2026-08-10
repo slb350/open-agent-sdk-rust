@@ -53,7 +53,7 @@ open-agent-sdk-rust/
 │   ├── hooks_integration_test.rs
 │   ├── image_serialization_test.rs
 │   ├── package_manifest_test.rs     # Package exclusion coverage (CLAUDE.md, .markdownlint.json)
-│   ├── ci_workflow_policy_test.rs   # Cross-host CI portability and security policy guards
+│   ├── ci_workflow_policy_test.rs   # GitHub CI runner, coverage, and security policy guards
 │   ├── security_bypass_test.rs
 │   ├── send_message_test.rs         # Manual-mode history regression (v0.6.2)
 │   ├── source_file_size_test.rs      # Repository Rust hard-limit guard
@@ -61,7 +61,7 @@ open-agent-sdk-rust/
 ├── .github/
 │   ├── dependabot.yml               # Grouped weekly Cargo dependency updates
 │   └── workflows/
-│       ├── ci.yml                   # Cross-host CI (Linux on GitHub/Gitea, macOS on GitHub, audit, docs, LLVM Tarpaulin, benchmarks)
+│       ├── ci.yml                   # GitHub CI (Linux/macOS, audit, docs, LLVM Tarpaulin, benchmarks)
 │       └── scheduled-audit.yml      # Scheduled dependency audit
 ├── .markdownlint.json               # Markdown lint rules (disable MD013, allow duplicate sibling headings)
 ├── Cargo.toml
@@ -348,7 +348,7 @@ cargo test --doc        # doctests only
 - Base64 safety: use base64 0.23 without its default `simd-unsafe` feature unless a measured need justifies enabling it
 - GitHub Actions: pin every third-party action to an immutable full commit SHA with a version comment; Dependabot maintains the pins
 - Workflow permissions: default to `contents: read` and grant additional permissions only to the job that requires them
-- Cross-host CI: the family Gitea runner is Linux-only, so Linux tests run on both hosts while the separate macOS job is gated to `github.server_url == 'https://github.com'`; never route macOS coverage to a Linux label
+- GitHub is the canonical CI and release host. Linux and macOS jobs both run on GitHub Actions runners; no external runner host is involved. Do not add CI configuration that routes test or coverage jobs to non-GitHub runners.
 - Audit workflows: install and verify stable Rust before the audit action, and set `denyWarnings: true` and `createIssues: false` so vulnerabilities, yanked crates, unmaintained crates, and unsoundness warnings fail CI without requiring issue-write permissions
 - PR benchmarks: compare Criterion results directly against the base commit with a shared target directory; do not restore the obsolete `boa-dev/criterion-compare-action`
 - Coverage reports: use the exact cargo-tarpaulin 0.37.0 LLVM engine in unprivileged containers, but do not import its upstream lockfile while that lock contains vulnerable anyhow 1.0.102; retain the XML with the latest compatible immutable-SHA-pinned `actions/upload-artifact` release (currently v7.0.1) and fail CI when the report is missing
@@ -366,7 +366,7 @@ RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 
 **v0.6.9 source** — transport-boundary-safe SSE streaming, complete structured
 hook history, shared client request construction, source-size architecture
-guards, and portable GitHub/Gitea CI, while retaining Rust 1.85 compatibility
+guards, and GitHub-canonical CI, while retaining Rust 1.85 compatibility
 and the hardened dependency baseline.
 
 Features: multimodal vision (URLs, local files, base64), manual-mode history fix (v0.6.2 regression), retry module, interrupt capability, lifecycle hooks, automatic tool execution, context management utilities, provider helpers, prelude module, OpenAI wire type exports.
