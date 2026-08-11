@@ -21,7 +21,7 @@ open-agent-sdk-rust/
 │   ├── tools.rs       # Public tool module orchestration
 │   ├── tools/         # Tool, schema, builder, handler, factory, and tests
 │   ├── types.rs       # Public core-type module orchestration
-│   ├── types/         # Options, messages, images, wire types, validated newtypes, and tests
+│   ├── types/         # Options, messages, images, wire types, validated newtypes; tests/ subdir (core.rs, image.rs)
 │   ├── utils.rs       # Transport-safe SSE decoder and ToolCallAggregator
 │   └── utils/         # Utility unit tests
 ├── examples/
@@ -61,7 +61,7 @@ open-agent-sdk-rust/
 ├── .github/
 │   ├── dependabot.yml               # Grouped weekly Cargo dependency updates
 │   └── workflows/
-│       ├── ci.yml                   # GitHub CI (Linux/macOS, audit, docs, LLVM Tarpaulin, benchmarks)
+│       ├── ci.yml                   # GitHub CI (fmt, clippy, MSRV, Linux/macOS tests, security audit, docs, LLVM Tarpaulin coverage, benchmarks)
 │       └── scheduled-audit.yml      # Scheduled dependency audit
 ├── .markdownlint.json               # Markdown lint rules (disable MD013, allow duplicate sibling headings)
 ├── Cargo.toml
@@ -84,6 +84,7 @@ open-agent-sdk-rust/
 | **Error handling** | thiserror 2.0, anyhow 1.0.103+ |
 | **Logging** | log 0.4.29+ |
 | **Retry jitter** | rand 0.10 |
+| **Base64** | base64 0.23 (no `simd-unsafe` feature) |
 | **Benchmarks** | criterion |
 | **Automation** | Dependabot (grouped weekly Cargo updates) |
 
