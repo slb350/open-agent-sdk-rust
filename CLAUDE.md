@@ -61,7 +61,7 @@ open-agent-sdk-rust/
 ├── .github/
 │   ├── dependabot.yml               # Grouped weekly Cargo dependency updates
 │   └── workflows/
-│       ├── ci.yml                   # GitHub CI (fmt, clippy, MSRV, Linux/macOS tests, security audit, docs, LLVM Tarpaulin coverage, benchmarks)
+│       ├── ci.yml                   # GitHub CI (fmt, clippy, MSRV, Linux/macOS stable + beta matrix, security audit, docs, LLVM Tarpaulin coverage, benchmarks)
 │       └── scheduled-audit.yml      # Scheduled dependency audit
 ├── .markdownlint.json               # Markdown lint rules (disable MD013, allow duplicate sibling headings)
 ├── Cargo.toml
@@ -350,7 +350,7 @@ cargo test --doc        # doctests only
 - GitHub Actions: pin every third-party action to an immutable full commit SHA with a version comment; Dependabot maintains the pins
 - Workflow permissions: default to `contents: read` and grant additional permissions only to the job that requires them
 - GitHub is the canonical CI and release host. Linux and macOS jobs both run on GitHub Actions runners; no external runner host is involved. Do not add CI configuration that routes test or coverage jobs to non-GitHub runners.
-- Audit workflows: install and verify stable Rust before the audit action, and set `denyWarnings: true` and `createIssues: false` so vulnerabilities, yanked crates, unmaintained crates, and unsoundness warnings fail CI without requiring issue-write permissions
+- Audit workflows: install and verify stable Rust before the audit step, then run `cargo audit --deny warnings` directly (not the `actions-rust-lang/audit@` action) so vulnerabilities, yanked crates, unmaintained crates, and unsoundness warnings all fail CI
 - PR benchmarks: compare Criterion results directly against the base commit with a shared target directory; do not restore the obsolete `boa-dev/criterion-compare-action`
 - Coverage reports: use the exact cargo-tarpaulin 0.37.0 LLVM engine in unprivileged containers, but do not import its upstream lockfile while that lock contains vulnerable anyhow 1.0.102; retain the XML with the latest compatible immutable-SHA-pinned `actions/upload-artifact` release (currently v7.0.1) and fail CI when the report is missing
 

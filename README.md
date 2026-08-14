@@ -1055,7 +1055,7 @@ open-agent-sdk-rust/
 ├── .github/
 │   ├── dependabot.yml               # Grouped weekly Cargo dependency updates
 │   └── workflows/
-│       ├── ci.yml                   # GitHub CI (Linux/macOS, direct audit, LLVM Tarpaulin, coverage artifacts)
+│       ├── ci.yml                   # GitHub CI (fmt, clippy, MSRV, Linux/macOS stable + beta matrix, security audit, docs, LLVM Tarpaulin coverage, benchmarks)
 │       └── scheduled-audit.yml      # Scheduled dependency audit
 ├── .markdownlint.json               # Markdown lint rules (disable MD013, allow duplicate sibling headings)
 ├── Cargo.toml
@@ -1128,6 +1128,9 @@ Total: 357 active unit, integration, and documentation tests
 - futures, tokio-stream (async streams)
 - eventsource-stream (SSE parsing)
 - async-trait (async trait support)
+- thiserror 2.0 + anyhow 1.0.103+ (error handling)
+- log 0.4.29+ (logging)
+- base64 0.23 (multimodal image encoding)
 - rand (retry jitter)
 
 ## License
