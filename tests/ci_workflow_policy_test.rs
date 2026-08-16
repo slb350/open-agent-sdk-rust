@@ -53,7 +53,7 @@ fn audit_jobs_install_and_verify_rust_before_running_cargo_audit_directly() {
 fn coverage_uses_pinned_tarpaulin_with_the_unprivileged_llvm_engine() {
     let coverage = between(CI_WORKFLOW, "  coverage:\n", "  benchmarks:\n");
 
-    assert!(coverage.contains("cargo install cargo-tarpaulin --version =0.37.0"));
+    assert!(coverage.contains("cargo install cargo-tarpaulin --version =0.37.2"));
     assert!(!coverage.contains("cargo install --locked cargo-tarpaulin"));
     assert!(
         coverage.contains("cargo tarpaulin --engine llvm --out xml --all-features --workspace")

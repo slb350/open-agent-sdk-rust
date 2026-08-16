@@ -10,11 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Canonical CI host**: GitHub is now the canonical repository and sole Actions host. The family Gitea repository is retained only as a passive Git mirror, removing cross-host runner-routing and artifact-protocol compatibility code while preserving native stable/beta macOS coverage.
+- **Compatible maintenance**: Refresh futures 0.3.33 to 0.3.34 and all other Rust 1.85-compatible lockfile dependencies available during the weekly maintenance window.
 
 ### Fixed
 
 - **Security audit portability**: Install and verify stable Rust, exact-pin cargo-audit 0.22.2, and invoke it directly with warnings denied. This removes assumptions that runner images provide either `cargo` or the Python interpreter used internally by the audit action. Its published upstream lockfile is deliberately not imported because that lock contains denied RustSec advisories.
-- **Container-safe coverage**: Pin cargo-tarpaulin exactly to 0.37.0 and use its LLVM engine, which preserves required Cobertura output without ptrace, ASLR changes, privileged containers, or relaxed seccomp policy. The report is required, checked for content, and retained with GitHub's artifact service. The install deliberately resolves patched compatible build dependencies instead of importing Tarpaulin's upstream lockfile, which contains vulnerable anyhow 1.0.102.
+- **Container-safe coverage**: Pin cargo-tarpaulin exactly to 0.37.2 for LLVM 23 support and its 32-bit profile fix, and use its LLVM engine to preserve required Cobertura output without ptrace, ASLR changes, privileged containers, or relaxed seccomp policy. The report is required, checked for content, and retained with GitHub's artifact service. The install deliberately resolves patched compatible build dependencies instead of importing Tarpaulin's upstream lockfile, which contains vulnerable anyhow 1.0.102.
 
 ### Testing
 

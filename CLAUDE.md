@@ -352,7 +352,7 @@ cargo test --doc        # doctests only
 - GitHub is the canonical CI and release host. Linux and macOS jobs both run on GitHub Actions runners; no external runner host is involved. Do not add CI configuration that routes test or coverage jobs to non-GitHub runners.
 - Audit workflows: install and verify stable Rust before the audit step, then run `cargo audit --deny warnings` directly (not the `actions-rust-lang/audit@` action) so vulnerabilities, yanked crates, unmaintained crates, and unsoundness warnings all fail CI
 - PR benchmarks: compare Criterion results directly against the base commit with a shared target directory; do not restore the obsolete `boa-dev/criterion-compare-action`
-- Coverage reports: use the exact cargo-tarpaulin 0.37.0 LLVM engine in unprivileged containers, but do not import its upstream lockfile while that lock contains vulnerable anyhow 1.0.102; retain the XML with the latest compatible immutable-SHA-pinned `actions/upload-artifact` release (currently v7.0.1) and fail CI when the report is missing
+- Coverage reports: use the exact cargo-tarpaulin 0.37.2 LLVM engine in unprivileged containers, but do not import its upstream lockfile while that lock contains vulnerable anyhow 1.0.102; retain the XML with the latest compatible immutable-SHA-pinned `actions/upload-artifact` release (currently v7.0.1) and fail CI when the report is missing
 
 ## Security Advisories (resolved in v0.6.5, current v0.6.9)
 

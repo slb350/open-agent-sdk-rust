@@ -135,8 +135,8 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Install tarpaulin
-        # Do not use 0.37.0's upstream lockfile: it pins vulnerable anyhow 1.0.102.
-        run: cargo install cargo-tarpaulin --version =0.37.0
+        # Do not use 0.37.2's upstream lockfile: it pins vulnerable anyhow 1.0.102.
+        run: cargo install cargo-tarpaulin --version =0.37.2
       - name: Generate coverage
         run: cargo tarpaulin --engine llvm --out xml --all-features --workspace
       - name: Verify coverage report
