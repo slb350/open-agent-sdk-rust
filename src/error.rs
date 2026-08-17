@@ -143,13 +143,27 @@ pub enum Error {
     /// - Server-side errors (500, 502, 503)
     /// - Invalid request format
     ///
+    /// The HTTP status is carried as structured data rather than embedded in the message,
+    /// so retry classification can read it directly instead of parsing prose. `status` is
+    /// `None` for API errors that did not come from an HTTP response.
+    ///
     /// # Example
     ///
     /// ```rust,ignore
+    /// // From an HTTP response
+    /// return Err(Error::api_status(429, "Rate limit exceeded"));
+    ///
+    /// // Without a status
     /// return Err(Error::api("Model 'gpt-4' not found on server"));
     /// ```
-    #[error("API error: {0}")]
-    Api(String),
+    #[error("API error{}: {message}", .status.map(|code| format!(" {code}")).unwrap_or_default())]
+    Api {
+        /// HTTP status code, when the error originated from an HTTP response.
+        status: Option<u16>,
+
+        /// Error message or response body reported by the server.
+        message: String,
+    },
 
     /// Error occurred while processing the streaming response.
     ///
@@ -278,7 +292,64 @@ impl Error {
     /// assert_eq!(err.to_string(), "API error: Model 'invalid-model' not found");
     /// ```
     pub fn api(msg: impl Into<String>) -> Self {
-        Error::Api(msg.into())
+        Error::Api {
+            status: None,
+            message: msg.into(),
+        }
+    }
+
+    /// Create a new API error from an HTTP error response.
+    ///
+    /// Prefer this over [`Error::api`] whenever a status code is available: retry
+    /// classification reads [`Error::status_code`], and an error built without a status is
+    /// treated as non-retryable no matter what its message says.
+    ///
+    /// # Arguments
+    ///
+    /// * `status` - HTTP status code from the response
+    /// * `msg` - Response body or error message from the API server
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use open_agent::Error;
+    ///
+    /// let err = Error::api_status(429, "Rate limit exceeded");
+    /// assert_eq!(err.to_string(), "API error 429: Rate limit exceeded");
+    /// assert_eq!(err.status_code(), Some(429));
+    /// ```
+    pub fn api_status(status: u16, msg: impl Into<String>) -> Self {
+        Error::Api {
+            status: Some(status),
+            message: msg.into(),
+        }
+    }
+
+    /// The HTTP status code this error carries, if any.
+    ///
+    /// Returns `Some` only for [`Error::Api`] values built with [`Error::api_status`], and
+    /// `None` for every other variant and for API errors raised without a response status.
+    ///
+    /// This is the basis for retry classification: transient failures are identified by
+    /// status code, never by searching the error message for a status-shaped substring. The
+    /// difference is not cosmetic — a substring search classifies
+    /// `API error 400 Bad Request: max_tokens 500 too small` as a 500 and retries a request
+    /// that can never succeed.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use open_agent::Error;
+    ///
+    /// assert_eq!(Error::api_status(429, "slow down").status_code(), Some(429));
+    /// assert_eq!(Error::api("Model 'gpt-4' not found").status_code(), None);
+    /// assert_eq!(Error::timeout().status_code(), None);
+    /// ```
+    pub fn status_code(&self) -> Option<u16> {
+        match self {
+            Error::Api { status, .. } => *status,
+            _ => None,
+        }
     }
 
     /// Create a new streaming error for SSE parsing or stream processing failures.
@@ -400,9 +471,21 @@ mod tests {
 
     #[test]
     fn test_error_api() {
-        let err = Error::api("500 Internal Server Error");
-        assert!(matches!(err, Error::Api(_)));
-        assert_eq!(err.to_string(), "API error: 500 Internal Server Error");
+        let err = Error::api("Internal Server Error");
+        assert!(matches!(err, Error::Api { status: None, .. }));
+        assert_eq!(err.to_string(), "API error: Internal Server Error");
+
+        // A status-carrying error renders the code once, not twice, and exposes it directly.
+        let err = Error::api_status(500, "Internal Server Error");
+        assert!(matches!(
+            err,
+            Error::Api {
+                status: Some(500),
+                ..
+            }
+        ));
+        assert_eq!(err.to_string(), "API error 500: Internal Server Error");
+        assert_eq!(err.status_code(), Some(500));
     }
 
     #[test]

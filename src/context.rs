@@ -174,27 +174,23 @@ pub fn truncate_messages(messages: &[Message], keep: usize, preserve_system: boo
         return messages.to_vec();
     }
 
-    // Check if first message is system prompt
-    let has_system = preserve_system
-        && !messages.is_empty()
-        && messages[0].role == crate::types::MessageRole::System;
+    // Check if first message is system prompt. The empty case returned above, so indexing is
+    // safe here without a further emptiness check.
+    let has_system = preserve_system && messages[0].role == crate::types::MessageRole::System;
+
+    // The early returns above guarantee `keep < messages.len()`, so `start` is at least 1 and
+    // the tail slice never re-includes the system prompt. `keep == 0` yields `start ==
+    // messages.len()`, i.e. an empty tail — no separate zero case is needed.
+    let start = messages.len() - keep;
 
     if has_system {
         // Keep system + last N messages
         let mut result = vec![messages[0].clone()];
-        if keep > 0 && messages.len() > 1 {
-            let start = messages.len().saturating_sub(keep);
-            result.extend_from_slice(&messages[start..]);
-        }
+        result.extend_from_slice(&messages[start..]);
         result
     } else {
         // Just keep last N messages
-        if keep > 0 {
-            let start = messages.len().saturating_sub(keep);
-            messages[start..].to_vec()
-        } else {
-            Vec::new()
-        }
+        messages[start..].to_vec()
     }
 }
 
@@ -250,54 +246,6 @@ mod tests {
         let tokens = estimate_tokens(&messages);
         // "Hello world" = 11 chars + overhead ≈ 5-8 tokens
         assert!((3..=10).contains(&tokens));
-    }
-
-    #[test]
-    fn test_truncate_messages_empty() {
-        let messages: Vec<Message> = vec![];
-        let truncated = truncate_messages(&messages, 10, true);
-        assert_eq!(truncated.len(), 0);
-    }
-
-    #[test]
-    fn test_truncate_messages_preserve_system() {
-        let messages = vec![
-            Message::system("System prompt"),
-            Message::user("Message 1"),
-            Message::user("Message 2"),
-            Message::user("Message 3"),
-            Message::user("Message 4"),
-        ];
-
-        let truncated = truncate_messages(&messages, 2, true);
-
-        // Should have system + last 2 = 3 messages
-        assert_eq!(truncated.len(), 3);
-        assert_eq!(truncated[0].role, MessageRole::System);
-    }
-
-    #[test]
-    fn test_truncate_messages_no_preserve() {
-        let messages = vec![
-            Message::system("System prompt"),
-            Message::user("Message 1"),
-            Message::user("Message 2"),
-            Message::user("Message 3"),
-        ];
-
-        let truncated = truncate_messages(&messages, 2, false);
-
-        // Should have only last 2 messages
-        assert_eq!(truncated.len(), 2);
-        assert_eq!(truncated[0].role, MessageRole::User);
-    }
-
-    #[test]
-    fn test_truncate_messages_keep_all() {
-        let messages = vec![Message::user("Message 1"), Message::user("Message 2")];
-
-        let truncated = truncate_messages(&messages, 10, true);
-        assert_eq!(truncated.len(), 2);
     }
 
     #[test]

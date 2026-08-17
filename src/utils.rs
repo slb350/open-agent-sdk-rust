@@ -32,8 +32,10 @@
 //! Chunk 5: { finish_reason: "tool_calls" }
 //! ```
 //!
-//! The [`ToolCallAggregator`] accumulates these deltas and only emits complete [`ContentBlock`]s
-//! when a `finish_reason` is encountered (indicating the end of generation).
+//! The [`ToolCallAggregator`] accumulates these deltas and emits complete [`ContentBlock`]s
+//! when a `finish_reason` is encountered (indicating the end of generation), or when the caller
+//! calls [`ToolCallAggregator::flush`] because the transport ended. The flush matters because
+//! several OpenAI-compatible servers never set `finish_reason` at all.
 //!
 //! # Complete Flow Example
 //!
@@ -48,7 +50,7 @@
 //!     │
 //!     │ ToolCallAggregator::process_chunk()
 //!     ▼
-//! Vec<ContentBlock>  (only when finish_reason is present)
+//! Vec<ContentBlock>  (when finish_reason is present, or on end-of-stream flush)
 //! ```
 //!
 //! ## Example: Text Response
@@ -93,8 +95,10 @@ use std::pin::Pin;
 /// Aggregates streaming deltas into complete content blocks.
 ///
 /// This is a **stateful accumulator** that processes [`OpenAIChunk`] objects one at a time,
-/// building up complete text and tool call content over multiple chunks. It only returns
-/// complete [`ContentBlock`]s when a `finish_reason` is encountered.
+/// building up complete text and tool call content over multiple chunks. It returns complete
+/// [`ContentBlock`]s when a `finish_reason` is encountered, and the stream driver must call
+/// [`ToolCallAggregator::flush`] once the transport ends so that servers which never send a
+/// `finish_reason` do not have their content silently discarded.
 ///
 /// # State Management
 ///
@@ -137,12 +141,17 @@ use std::pin::Pin;
 ///         handle_completed_blocks(blocks);
 ///     }
 /// }
+///
+/// // The transport ended. Emit anything the server left unterminated.
+/// handle_completed_blocks(aggregator.flush()?);
 /// ```
 ///
 /// # Important Invariants
 ///
 /// - **Buffers are cleared after finish**: Once a `finish_reason` is seen, both the text
-///   buffer and tool call map are cleared, readying the aggregator for the next turn.
+///   buffer and tool call map are cleared, readying the aggregator for the next turn. A
+///   subsequent [`ToolCallAggregator::flush`] therefore returns nothing, so end-of-stream
+///   flushing never double-emits content.
 ///
 /// - **Partial JSON accumulation**: Tool call arguments are accumulated as raw strings and
 ///   only parsed as JSON when the tool call is complete. This allows JSON to be split at
@@ -224,8 +233,9 @@ impl ToolCallAggregator {
     /// Processes a single chunk and returns completed content blocks.
     ///
     /// This is the core method of the aggregator. It accumulates deltas from the chunk into
-    /// internal buffers and returns completed [`ContentBlock`]s **only when** a `finish_reason`
-    /// is present in the chunk.
+    /// internal buffers and returns completed [`ContentBlock`]s when a `finish_reason` is
+    /// present in the chunk. Servers that never set `finish_reason` are handled by
+    /// [`ToolCallAggregator::flush`], which the stream driver calls at end of transport.
     ///
     /// # Arguments
     ///
@@ -317,34 +327,62 @@ impl ToolCallAggregator {
             // - "length": Hit max_tokens limit
             // - "content_filter": Content filtered
             if choice.finish_reason.is_some() {
-                // === PHASE 3A: FLUSH TEXT BUFFER ===
-                // If we accumulated any text, emit it as a TextBlock
-                if !self.text_buffer.is_empty() {
-                    blocks.push(ContentBlock::Text(TextBlock::new(self.text_buffer.clone())));
-                    self.text_buffer.clear();
-                }
+                blocks.extend(self.flush()?);
+            }
+        }
 
-                // === PHASE 3B: FLUSH AND VALIDATE TOOL CALLS ===
-                // drain() consumes the HashMap, giving us ownership of all partial tool calls
-                for (_, partial) in self.tool_calls.drain() {
-                    // Only emit tool calls that have both ID and name.
-                    // Incomplete tool calls are silently dropped (shouldn't happen with valid API).
-                    if let (Some(id), Some(name)) = (partial.id, partial.name) {
-                        // Parse the accumulated JSON argument string.
-                        // If arguments is empty, default to an empty object {}.
-                        let input: serde_json::Value = if partial.arguments.is_empty() {
-                            serde_json::json!({})
-                        } else {
-                            // This is where we validate that all the assembled JSON is valid.
-                            // If the streaming was corrupted or incomplete, this will error.
-                            serde_json::from_str(&partial.arguments).map_err(|e| {
-                                Error::stream(format!("Failed to parse tool arguments: {}", e))
-                            })?
-                        };
+        Ok(blocks)
+    }
 
-                        blocks.push(ContentBlock::ToolUse(ToolUseBlock::new(id, name, input)));
-                    }
-                }
+    /// Drains all accumulated state into completed content blocks.
+    ///
+    /// This is called internally whenever a `finish_reason` is observed, and must also be
+    /// called by the stream driver when the underlying transport terminates. Not every
+    /// OpenAI-compatible server sets `finish_reason` on its final content chunk — llama.cpp,
+    /// vLLM, and several local gateways stream content and then send `data: [DONE]` (or simply
+    /// close the connection) with `finish_reason` still null. Without an end-of-stream flush,
+    /// everything accumulated so far would be discarded silently and the caller would see an
+    /// empty successful response.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<ContentBlock>)` - Any buffered text followed by any complete tool calls.
+    ///   Empty if nothing was accumulated since the last flush, which makes the method safe
+    ///   to call unconditionally at end of stream without double-emitting content that a
+    ///   `finish_reason` already flushed.
+    /// * `Err(Error)` - If a tool call's accumulated arguments are not valid JSON, which
+    ///   indicates the stream was truncated or corrupted mid-tool-call.
+    pub fn flush(&mut self) -> Result<Vec<ContentBlock>> {
+        let mut blocks = Vec::new();
+
+        // === FLUSH TEXT BUFFER ===
+        // If we accumulated any text, emit it as a TextBlock. `take` moves the buffer into the
+        // block and leaves an empty String behind, so the whole response body is not copied.
+        if !self.text_buffer.is_empty() {
+            blocks.push(ContentBlock::Text(TextBlock::new(std::mem::take(
+                &mut self.text_buffer,
+            ))));
+        }
+
+        // === FLUSH AND VALIDATE TOOL CALLS ===
+        // drain() consumes the HashMap, giving us ownership of all partial tool calls
+        for (_, partial) in self.tool_calls.drain() {
+            // Only emit tool calls that have both ID and name.
+            // Incomplete tool calls are silently dropped (shouldn't happen with valid API).
+            if let (Some(id), Some(name)) = (partial.id, partial.name) {
+                // Parse the accumulated JSON argument string.
+                // If arguments is empty, default to an empty object {}.
+                let input: serde_json::Value = if partial.arguments.is_empty() {
+                    serde_json::json!({})
+                } else {
+                    // This is where we validate that all the assembled JSON is valid.
+                    // If the streaming was corrupted or incomplete, this will error.
+                    serde_json::from_str(&partial.arguments).map_err(|e| {
+                        Error::stream(format!("Failed to parse tool arguments: {}", e))
+                    })?
+                };
+
+                blocks.push(ContentBlock::ToolUse(ToolUseBlock::new(id, name, input)));
             }
         }
 

@@ -5,19 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.0] - 2026-08-17
 
-### Changed
+### Breaking
 
-- **Canonical CI host**: GitHub is now the canonical repository and sole Actions host. The family Gitea repository is retained only as a passive Git mirror, removing cross-host runner-routing and artifact-protocol compatibility code while preserving native stable/beta macOS coverage.
-- **Compatible maintenance**: Refresh futures 0.3.33 to 0.3.34 and all other Rust 1.85-compatible lockfile dependencies available during the weekly maintenance window.
+- **`Error::Api` is now a struct variant carrying the HTTP status**: `Api(String)` became `Api { status: Option<u16>, message: String }`. Code that matches `Error::Api(msg)` must become `Error::Api { message, .. }`. `Error::api(msg)` still works and yields `status: None`; new `Error::api_status(status, msg)` is the constructor for HTTP-derived errors and is what `stream_request` now uses. This also fixes the doubled prefix in `Display` — a status-carrying API error rendered as `API error: API error 503 Service Unavailable: …` and now renders as `API error 503: …`.
+- **`max_tokens` is no longer defaulted to 4096**: leaving `.max_tokens()` unset now yields `None` and omits the field from the wire request, so the server applies its own limit. There was previously no way to express "no cap", and the implicit 4096 truncated long-context and reasoning models mid-response — surfacing as an unparseable partial answer that reads like a model failure rather than a client-imposed limit. Callers who want a ceiling must now set one explicitly.
 
 ### Fixed
 
+- **Streamed content is no longer discarded when a stream ends without `finish_reason`**: `ToolCallAggregator` only emitted blocks on a non-null `finish_reason`, and nothing flushed its buffers at end of transport. Servers that stream content and then send `data: [DONE]` (or simply close the connection) with `finish_reason` still null — llama.cpp, vLLM, and several local gateways — produced zero blocks, no error, and no warning, leaving callers unable to distinguish an empty response from a lost one. The stream driver now signals end-of-transport and the new `ToolCallAggregator::flush` emits any buffered text and completed tool calls.
+- **Rate limiting is retryable**: `is_retryable_error` classified only 500/502/503/504 as transient, so `429 Too Many Requests` — the canonical reason to back off — failed immediately, contradicting the documented behaviour. The retryable set is now 408, 429, 500, 502, 503, 504, and 529.
+- **Status classification no longer matches on substrings**: `is_retryable_error` searched the whole message for `500`/`502`/`503`/`504`, so `API error 400 Bad Request: max_tokens 500 too small` was retried three times before failing even though it could never succeed. Classification now reads `Error::status_code()`, which returns the status `Error::Api` carries structurally — there is no message text to misparse.
+- **README retry example**: corrected `retry_with_backoff_conditional` to its actual two-argument signature.
+- **`max_delay` is now an actual maximum**: `calculate_delay` applied jitter *after* capping, so a 60s `max_delay` could still produce a 66s sleep at a 0.2 jitter factor. The jittered delay is now clamped to `max_delay`.
+- **MSRV check covers test targets**: the `msrv` job ran `cargo check --all-features --all`, which skips tests and benches, so a dev-dependency requiring a newer compiler could land without failing CI while silently breaking `cargo test` on Rust 1.85. It now runs `--all-targets --workspace`. This was found immediately: wiremock 0.6.5 uses let-chains and does not build on 1.85, so the dev-dependency is pinned to `=0.6.4`.
 - **Security audit portability**: Install and verify stable Rust, exact-pin cargo-audit 0.22.2, and invoke it directly with warnings denied. This removes assumptions that runner images provide either `cargo` or the Python interpreter used internally by the audit action. Its published upstream lockfile is deliberately not imported because that lock contains denied RustSec advisories.
 - **Container-safe coverage**: Pin cargo-tarpaulin exactly to 0.37.2 for LLVM 23 support and its 32-bit profile fix, and use its LLVM engine to preserve required Cobertura output without ptrace, ASLR changes, privileged containers, or relaxed seccomp policy. The report is required, checked for content, and retained with GitHub's artifact service. The install deliberately resolves patched compatible build dependencies instead of importing Tarpaulin's upstream lockfile, which contains vulnerable anyhow 1.0.102.
 
+### Added
+
+- **`Error::api_status(status, msg)` and `Error::status_code()`**: construct and read HTTP-derived API errors without round-tripping the status through prose.
+- **`ToolCallAggregator::flush()`**: drains buffered text and completed tool calls. Idempotent after a `finish_reason` flush, so end-of-stream flushing never double-emits.
+- **Mutation testing gate**: `cargo mutants --no-shuffle -j 4` runs unconditionally in CI via an immutable-SHA-pinned `taiki-e/install-action`, and `.githooks/pre-commit` runs fmt, clippy, the test suite, and a `--in-diff` sweep scoped to the staged Rust changes. Enable locally with `git config core.hooksPath .githooks`.
+
+### Changed
+
+- **Stream driver**: `stream_request` appends an end-of-transport sentinel to the chunk stream and drops the unobservable `blocks.is_empty()` guard, since an empty batch already flattens to nothing.
+- **Dead-guard removal**: the first full mutation sweep identified guards whose removal no test could detect because they were genuinely unreachable — `truncate_messages`'s `keep > 0` and `!messages.is_empty()` checks (the early returns above already guarantee both, so the tail slice is now a plain subtraction) and `is_retryable_error`'s explicit `Config`/`InvalidInput` arms (identical to the `_` fallthrough). All were deleted rather than papered over with mutant exclusions.
+- **Test layout**: `src/retry.rs`'s test module moved to the `src/retry/tests.rs` include-backed fragment, matching the existing `client/`, `hooks/`, `tools/`, `types/`, and `utils/` layout and keeping the source file well under the 600-line soft limit.
+- **Canonical CI host**: GitHub is now the canonical repository and sole Actions host. The family Gitea repository is retained only as a passive Git mirror, removing cross-host runner-routing and artifact-protocol compatibility code while preserving native stable/beta macOS coverage.
+- **Compatible maintenance**: Refresh futures 0.3.33 to 0.3.34 and all other Rust 1.85-compatible lockfile dependencies available during the weekly maintenance window.
+
 ### Testing
+
+- Added `tests/regression_stream_flush_test.rs`, `tests/regression_retry_classification_test.rs`, and `tests/regression_max_tokens_test.rs` (17 tests) covering end-of-stream flushing for text and tool calls, no double-emission after `finish_reason`, status-based retry classification in both directions, and `max_tokens` omission from the wire request. All were RED against 0.6.9 before the fixes.
+- Added workflow-policy regressions asserting the mutation sweep runs unconditionally with a pinned toolchain and installer SHA, that the MSRV job covers test targets, and that the pre-commit hook runs the same fmt/clippy/test commands as CI. The helper that slices a job out of the workflow now finds the next job header structurally, so inserting a job no longer forces edits to unrelated assertions.
+- Added a `wiremock` dev-dependency so streaming and wire-format behaviour can be asserted against a real HTTP server, with the shared harness in `tests/common/mod.rs`, plus tokio's `test-util` feature so retry timing is asserted on a paused virtual clock instead of flaky wall-clock tolerances.
+- Closed every survivor from the first full mutation sweep: `tests/config_env_test.rs` covers the previously untested `get_model` environment resolution in its own process, `tests/context_estimation_test.rs` asserts exact token arithmetic for tool-use and tool-result blocks plus the strict `is_approaching_limit` threshold, and new `src/retry/tests.rs` cases pin exact backoff multiples, jitter distribution, the `max_delay` clamp, and the number of sleeps each retry driver performs. `cargo mutants --no-shuffle -j 4` now reports 96 caught, 0 missed. Tests that newer, stronger cases fully subsumed were deleted rather than left to be maintained twice.
 
 - Added workflow-policy regressions for native GitHub-hosted Linux/macOS routing, direct warnings-denied cargo-audit execution without Python, the exact Tarpaulin version without its vulnerable upstream lock, required coverage report generation and retention, and the absence of privileged-container workarounds.
 

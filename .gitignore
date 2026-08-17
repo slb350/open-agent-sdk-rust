@@ -41,3 +41,7 @@ DEVELOPMENT.md
 plan.md
 .claude/
 ERROR_HANDLING_AUDIT.md
+
+# Mutation testing output
+/mutants.out/
+/mutants.out.old/

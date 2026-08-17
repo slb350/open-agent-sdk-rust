@@ -180,9 +180,9 @@ impl Default for AgentOptions {
             api_key: "not-needed".to_string(),
             // Default to single-shot interaction; users opt into conversations
             max_turns: 1,
-            // 4096 is a reasonable default that works with most models
-            // while preventing runaway generation costs
-            max_tokens: Some(4096),
+            // No client-imposed cap; the server decides how long a response may be.
+            // Callers who want a ceiling set one explicitly via `max_tokens()`.
+            max_tokens: None,
             // 0.7 balances creativity with consistency for general use
             temperature: 0.7,
             // 60 seconds handles most requests without timing out prematurely

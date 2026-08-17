@@ -16,9 +16,9 @@
 - **Control** - pick your model (Qwen, Llama, Mistral, etc.)
 
 **How fast?**
-From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 357 active tests.
+From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 390 active tests.
 
-[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.6.9)](https://crates.io/crates/open-agent-sdk)
+[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.7.0)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -53,7 +53,7 @@ Open Agent SDK (Rust) provides a clean, streaming API for working with OpenAI-co
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.6.9"
+open-agent-sdk = "0.7.0"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -751,7 +751,7 @@ AgentOptions::builder()
     .hooks(Hooks)                        // Lifecycle hooks for monitoring/control
     .auto_execute_tools(bool)            // Enable automatic tool execution
     .max_tool_iterations(u32)            // Max tool calls per query in auto mode
-    .max_tokens(u32)                     // Tokens to generate (default: 4096); getter returns Option<u32>
+    .max_tokens(u32)                     // Tokens to generate (unset: omitted, server decides); getter returns Option<u32>
     .max_turns(u32)                      // Max conversation turns (default: 1)
     .temperature(f32)                    // Sampling temperature (default: 0.7)
     .timeout(u64)                        // Request timeout in seconds (default: 60)
@@ -943,13 +943,29 @@ let result = retry_with_backoff(config.clone(), || async {
     some_fallible_operation().await
 }).await?;
 
-// Retry with a custom condition (only retry on certain errors)
-let result = retry_with_backoff_conditional(config, |err| is_retryable_error(err), || async {
+// Retry only transient failures; anything else fails on the first attempt
+let result = retry_with_backoff_conditional(config, || async {
     some_fallible_operation().await
 }).await?;
 
-// Check if an SDK error is worth retrying (network errors, 429, 5xx)
+// Check if an SDK error is worth retrying
 let retryable = is_retryable_error(&some_error);
+```
+
+`is_retryable_error` treats network errors, timeouts, and stream errors as transient. API
+errors are classified on `Error::status_code()`, which reads the status `Error::Api` carries as
+structured data; the retryable set is **408, 429, 500, 502, 503, 504, 529**. Everything else —
+including API errors raised without a status — is non-retryable, so a `400 Bad Request` fails
+immediately rather than burning the full attempt budget.
+
+```rust
+use open_agent::Error;
+
+let err = Error::api_status(429, "Rate limit exceeded");   // status: Some(429)
+assert_eq!(err.status_code(), Some(429));
+
+let err = Error::api("Model 'gpt-4' not found");            // status: None
+assert_eq!(err.status_code(), None);
 ```
 
 ### Prelude Import
@@ -1102,12 +1118,15 @@ cargo test -- --nocapture
 
 # Run specific test
 cargo test test_agent_options_builder
+
+# Mutation sweep (must report zero survivors)
+cargo mutants --no-shuffle -j 4
 ```
 
 **Test Coverage:**
 
-- 121 unit tests (lib)
-- 85 active integration tests across 17 test files (12 additional tests are `#[ignore]`d by default)
+- 124 unit tests (lib)
+- 113 active integration tests across 22 test files (12 additional tests are `#[ignore]`d by default)
   - Hooks integration tests
   - Auto-execution tests
   - Image serialization tests
@@ -1115,9 +1134,21 @@ cargo test test_agent_options_builder
   - Backward compatibility tests
   - Advanced integration tests
   - Edge cases, security bypass, debug logging, send message, tool call content tests
-- 151 active doctests (17 additional doctests are `ignore`d)
+  - Streaming, retry classification, and `max_tokens` regression tests
+- 153 active doctests (17 additional doctests are `ignore`d)
 
-Total: 357 active unit, integration, and documentation tests
+Total: 390 active unit, integration, and documentation tests
+
+**Mutation testing** is part of the gate, not an optional extra: a green suite proves the
+tests ran, not that they would notice if the code were wrong. CI runs the full sweep on every
+push. To run the same check before each commit:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hook runs `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`,
+and a `cargo mutants --in-diff` sweep scoped to the staged Rust changes.
 
 ## Requirements
 
@@ -1131,6 +1162,8 @@ Total: 357 active unit, integration, and documentation tests
 - thiserror 2.0 + anyhow 1.0.103+ (error handling)
 - log 0.4.29+ (logging)
 - base64 0.23 (multimodal image encoding)
+- wiremock 0.6 (dev-only: HTTP mocking for streaming and wire-format tests)
+- cargo-mutants 27.1.0 (dev-only: mutation testing gate)
 - rand (retry jitter)
 
 ## License
@@ -1149,6 +1182,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.6.9 source - transport-boundary-safe SSE streaming, complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, GitHub-hosted Linux/macOS CI, non-locking cancellation, manual-mode history fixes, and multimodal image support
+**Status**: v0.7.0 - end-of-stream flushing for servers that omit `finish_reason`, structured `Error::Api` with status-based retry classification, no implicit `max_tokens` cap, a mandatory mutation-testing gate, plus transport-boundary-safe SSE streaming, complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, GitHub-hosted Linux/macOS CI, non-locking cancellation, and multimodal image support
 
 Star this repo if you're building AI agents with local models in Rust!

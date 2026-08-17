@@ -1,20 +1,46 @@
 const CI_WORKFLOW: &str = include_str!("../.github/workflows/ci.yml");
 const SCHEDULED_AUDIT_WORKFLOW: &str = include_str!("../.github/workflows/scheduled-audit.yml");
+const PRE_COMMIT_HOOK: &str = include_str!("../.githooks/pre-commit");
 
-fn between<'a>(workflow: &'a str, start: &str, end: &str) -> &'a str {
-    workflow
-        .split_once(start)
-        .unwrap_or_else(|| panic!("missing workflow section: {start}"))
-        .1
-        .split_once(end)
-        .unwrap_or_else(|| panic!("missing workflow section boundary: {end}"))
-        .0
+/// Extracts the body of the named job from a workflow.
+///
+/// The slice runs from the job's header to the next top-level job header, found structurally
+/// rather than by naming whichever job currently happens to follow. Slicing by the *next*
+/// job's name couples every assertion to job ordering, so inserting a job forces edits to
+/// unrelated tests — and a mis-edit silently widens what an assertion covers instead of
+/// failing.
+fn job<'a>(workflow: &'a str, name: &str) -> &'a str {
+    let body = workflow
+        .split_once(&format!("\n  {name}:\n"))
+        .unwrap_or_else(|| panic!("missing workflow job: {name}"))
+        .1;
+
+    let end = body
+        .match_indices('\n')
+        .find(|(index, _)| starts_with_job_header(&body[index + 1..]))
+        .map_or(body.len(), |(index, _)| index);
+
+    &body[..end]
+}
+
+/// True when `text` begins with a top-level job header line.
+///
+/// A job header is exactly two spaces of indent, then a name with no spaces, then a colon —
+/// which distinguishes it from both the four-space step keys inside a job and the two-space
+/// `# comment` lines that introduce each one.
+fn starts_with_job_header(text: &str) -> bool {
+    let line = text.split('\n').next().unwrap_or_default().trim_end();
+
+    line.starts_with("  ")
+        && !line.starts_with("   ")
+        && line.ends_with(':')
+        && !line[2..].contains(' ')
 }
 
 #[test]
 fn test_matrix_uses_native_github_hosted_runners() {
-    let linux = between(CI_WORKFLOW, "  test-linux:\n", "  test-macos:\n");
-    let macos = between(CI_WORKFLOW, "  test-macos:\n", "  msrv:\n");
+    let linux = job(CI_WORKFLOW, "test-linux");
+    let macos = job(CI_WORKFLOW, "test-macos");
 
     assert!(linux.contains("runs-on: ubuntu-latest"));
     assert!(!linux.contains("macos-latest"));
@@ -24,7 +50,7 @@ fn test_matrix_uses_native_github_hosted_runners() {
 
 #[test]
 fn audit_jobs_install_and_verify_rust_before_running_cargo_audit_directly() {
-    let push_audit = between(CI_WORKFLOW, "  security:\n", "  docs:\n");
+    let push_audit = job(CI_WORKFLOW, "security");
 
     for workflow in [push_audit, SCHEDULED_AUDIT_WORKFLOW] {
         let toolchain = workflow
@@ -50,8 +76,58 @@ fn audit_jobs_install_and_verify_rust_before_running_cargo_audit_directly() {
 }
 
 #[test]
+fn msrv_check_covers_test_targets_and_dev_dependencies() {
+    let msrv = job(CI_WORKFLOW, "msrv");
+
+    // Without --all-targets the check skips tests and benches, so a dev-dependency requiring a
+    // newer compiler would land unnoticed and break `cargo test` on the MSRV.
+    assert!(msrv.contains("cargo check --all-features --all-targets --workspace"));
+    assert!(msrv.contains("toolchain: \"1.85\""));
+}
+
+#[test]
+fn mutation_sweep_runs_on_every_push_with_a_pinned_toolchain() {
+    let mutants = job(CI_WORKFLOW, "mutants");
+
+    // The sweep must be unconditional: a mutation gate that only runs on pull requests lets
+    // survivors land through direct pushes.
+    assert!(!mutants.contains("if:"));
+    assert!(mutants.contains("cargo mutants --no-shuffle -j 4"));
+    // Exact tool version, and an immutable SHA pin with a version comment for the installer.
+    assert!(mutants.contains("tool: cargo-mutants@27.1.0"));
+    assert!(mutants.contains(
+        "uses: taiki-e/install-action@b6b84cf49ebfe0176417bdce007c624f0db37f20 # v2.86.2"
+    ));
+    assert!(mutants.contains("toolchain: stable"));
+}
+
+#[test]
+fn pre_commit_hook_runs_the_same_checks_as_ci() {
+    // A hook weaker than CI lets a commit pass locally and fail remotely — the failure it
+    // exists to prevent. Only the mutation scope may differ (staged diff vs full sweep).
+    for command in [
+        "cargo fmt --all -- --check",
+        "cargo clippy --all-targets --all-features -- -D warnings",
+        "cargo test --all-features --all",
+    ] {
+        assert!(
+            PRE_COMMIT_HOOK.contains(command),
+            "pre-commit hook must run `{command}` exactly as CI does"
+        );
+        assert!(
+            CI_WORKFLOW.contains(command),
+            "CI must run `{command}`; update the hook if this moved"
+        );
+    }
+
+    // The cargo-mutants version is pinned in both places and must not drift.
+    assert!(PRE_COMMIT_HOOK.contains("CARGO_MUTANTS_VERSION=\"27.1.0\""));
+    assert!(PRE_COMMIT_HOOK.contains("cargo mutants --in-diff"));
+}
+
+#[test]
 fn coverage_uses_pinned_tarpaulin_with_the_unprivileged_llvm_engine() {
-    let coverage = between(CI_WORKFLOW, "  coverage:\n", "  benchmarks:\n");
+    let coverage = job(CI_WORKFLOW, "coverage");
 
     assert!(coverage.contains("cargo install cargo-tarpaulin --version =0.37.2"));
     assert!(!coverage.contains("cargo install --locked cargo-tarpaulin"));

@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+#
+# Pre-commit gate for open-agent-sdk.
+#
+# Install with:
+#   git config core.hooksPath .githooks
+#
+# The fmt/clippy/test commands below are deliberately identical to the ones in
+# .github/workflows/ci.yml. A hook that runs weaker checks than CI lets a commit pass locally
+# and fail remotely, which is exactly what it exists to prevent; tests/ci_workflow_policy_test.rs
+# asserts the two stay in step.
+#
+# The mutation step is the one deliberate difference: CI sweeps the whole tree, while the hook
+# scopes to the staged Rust diff. That matters for cost — a full sweep takes minutes, while
+# --in-diff costs roughly 30s for a single changed file. A surviving mutant is a test that
+# asserts correct behaviour while being unable to distinguish it from incorrect behaviour, so
+# it fails the commit like any other error. cargo-mutants exits 2 on survivors, which is
+# enough to gate on.
+
+set -euo pipefail
+
+# Keep in sync with .github/workflows/ci.yml.
+CARGO_MUTANTS_VERSION="27.1.0"
+
+echo "pre-commit: cargo fmt --all -- --check"
+cargo fmt --all -- --check
+
+echo "pre-commit: cargo clippy --all-targets --all-features -- -D warnings"
+cargo clippy --all-targets --all-features -- -D warnings
+
+echo "pre-commit: cargo test --all-features --all"
+cargo test --all-features --all
+
+staged_diff="target/pre-commit-staged.diff"
+mkdir -p target
+git diff --cached -- '*.rs' > "$staged_diff"
+
+if [ ! -s "$staged_diff" ]; then
+    echo "pre-commit: no staged Rust changes, skipping mutation sweep"
+    exit 0
+fi
+
+if ! command -v cargo-mutants > /dev/null 2>&1; then
+    echo "pre-commit: cargo-mutants is required but not installed." >&2
+    echo "            install it with: cargo install cargo-mutants --version '=${CARGO_MUTANTS_VERSION}'" >&2
+    exit 1
+fi
+
+echo "pre-commit: cargo mutants --in-diff $staged_diff -j 4"
+cargo mutants --in-diff "$staged_diff" -j 4

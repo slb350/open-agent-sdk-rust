@@ -87,8 +87,11 @@ jobs:
         with:
           toolchain: "1.85"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # --all-targets so dev-dependencies are covered too. Checking only the library lets a
+      # dev-dependency that requires a newer compiler land unnoticed, which silently breaks
+      # `cargo test` for anyone on the MSRV.
       - name: Check with MSRV
-        run: cargo check --all-features --all
+        run: cargo check --all-features --all-targets --workspace
 
   # Security audit: Check for known vulnerabilities
   security:
@@ -108,6 +111,24 @@ jobs:
         run: cargo install cargo-audit --version '=0.22.2' --no-default-features
       - name: Run security audit
         run: cargo audit --deny warnings
+
+  # Mutation testing: A green suite proves the tests ran, not that they would notice if the
+  # code were wrong. cargo-mutants exits 2 when mutants survive, so it gates without extra
+  # plumbing; survivors print as "MISSED <file>:<line>: <mutation>" lines in this job's log.
+  mutants:
+    name: Mutation Testing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: taiki-e/install-action@b6b84cf49ebfe0176417bdce007c624f0db37f20 # v2.86.2
+        with:
+          tool: cargo-mutants@27.1.0
+      - name: Run mutation sweep
+        run: cargo mutants --no-shuffle -j 4
 
   # Documentation: Validate docs build for docs.rs
   docs:

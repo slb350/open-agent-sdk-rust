@@ -63,7 +63,7 @@ pub struct AgentOptionsBuilder {
     api_key: Option<String>,
     /// Optional max turns; defaults to 1
     max_turns: Option<u32>,
-    /// Optional max tokens; defaults to Some(4096)
+    /// Optional max tokens; unset means no client-imposed cap
     max_tokens: Option<u32>,
     /// Optional temperature; defaults to 0.7
     temperature: Option<f32>,
@@ -211,6 +211,10 @@ impl AgentOptionsBuilder {
     ///
     /// Constrains response length. Lower values reduce costs but may truncate
     /// responses. Higher values allow longer, more complete answers.
+    ///
+    /// Leaving this unset omits `max_tokens` from the request entirely, so the server applies
+    /// its own limit. That is the right default for long-context and reasoning models, which
+    /// a client-side cap would cut off mid-response.
     ///
     /// # Example
     ///
@@ -471,9 +475,11 @@ impl AgentOptionsBuilder {
             ));
         }
 
-        // Validate max_tokens if set
-        let max_tokens = self.max_tokens.or(Some(4096));
-        if let Some(tokens) = max_tokens {
+        // Validate max_tokens if set. An unset value is passed through as None so the field is
+        // omitted from the wire request entirely, letting the server apply its own limit —
+        // there is otherwise no way to express "no cap", and a client-imposed default truncates
+        // long-context and reasoning models mid-response.
+        if let Some(tokens) = self.max_tokens {
             if tokens == 0 {
                 return Err(crate::Error::invalid_input(
                     "max_tokens must be greater than 0",
@@ -491,7 +497,7 @@ impl AgentOptionsBuilder {
             api_key: self.api_key.unwrap_or_else(|| "not-needed".to_string()),
             // Default to single-turn for simplicity
             max_turns: self.max_turns.unwrap_or(1),
-            max_tokens,
+            max_tokens: self.max_tokens,
             temperature,
             // Conservative timeout that works for most requests
             timeout: self.timeout.unwrap_or(60),

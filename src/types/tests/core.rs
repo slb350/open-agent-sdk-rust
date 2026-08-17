@@ -38,7 +38,8 @@
         assert_eq!(options.system_prompt, "");
         assert_eq!(options.api_key, "not-needed");
         assert_eq!(options.max_turns, 1);
-        assert_eq!(options.max_tokens, Some(4096));
+        // Unset means "no client-imposed cap" — the field is omitted from the wire request.
+        assert_eq!(options.max_tokens, None);
         assert_eq!(options.temperature, 0.7);
         assert_eq!(options.timeout, 60);
         assert!(!options.auto_execute_tools);

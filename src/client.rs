@@ -352,29 +352,34 @@ async fn stream_request(
         .map_err(Error::Http)?;
 
     if !response.status().is_success() {
-        let status = response.status();
+        let status = response.status().as_u16();
         let body = response.text().await.unwrap_or_else(|error| {
             eprintln!("WARNING: Failed to read error response body: {error}");
             "Unknown error (failed to read response body)".to_string()
         });
-        return Err(Error::api(format!("API error {status}: {body}")));
+        return Err(Error::api_status(status, body));
     }
 
-    let stream =
-        parse_sse_stream(response).scan(ToolCallAggregator::new(), |aggregator, chunk_result| {
-            let result = match chunk_result {
-                Ok(chunk) => match aggregator.process_chunk(chunk) {
-                    Ok(blocks) if blocks.is_empty() => Some(None),
-                    Ok(blocks) => Some(Some(Ok(blocks))),
-                    Err(error) => Some(Some(Err(error))),
-                },
-                Err(error) => Some(Some(Err(error))),
-            };
-            futures::future::ready(result)
-        });
+    // Append a `None` sentinel after the chunk stream so the aggregator gets an explicit
+    // end-of-transport signal. Servers that stop sending without ever setting `finish_reason`
+    // (llama.cpp, vLLM, several local gateways) would otherwise leave their content stranded
+    // in the aggregator's buffers and yield a silently empty response.
+    let terminated = parse_sse_stream(response)
+        .map(Some)
+        .chain(futures::stream::iter([None]));
 
-    let flattened = stream
-        .filter_map(|item| async move { item })
+    // `scan` yields one batch per input item; batches are then flattened into individual
+    // blocks. An empty batch simply flattens to nothing, so chunks that only accumulate
+    // state need no special-casing here.
+    let flattened = terminated
+        .scan(ToolCallAggregator::new(), |aggregator, item| {
+            let batch = match item {
+                Some(Ok(chunk)) => aggregator.process_chunk(chunk),
+                Some(Err(error)) => Err(error),
+                None => aggregator.flush(),
+            };
+            futures::future::ready(Some(batch))
+        })
         .flat_map(|result| {
             futures::stream::iter(match result {
                 Ok(blocks) => blocks.into_iter().map(Ok).collect(),
