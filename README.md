@@ -28,6 +28,12 @@ From zero to working agent in under 5 minutes. Rust-native performance (zero-cos
 
 Open Agent SDK (Rust) provides a clean, streaming API for working with OpenAI-compatible local model servers. 100% feature parity with the Python SDK—complete with transport-boundary-safe SSE streaming, tool call aggregation, hooks, and automatic tool execution—built on Tokio for high-performance async I/O.
 
+**Streaming is tolerant of real-world servers.** SSE events are buffered across arbitrary HTTP
+transport chunk boundaries, and accumulated content is flushed when the stream ends — including
+when a server closes the connection or sends `data: [DONE]` without ever setting
+`finish_reason`, which llama.cpp, vLLM, and several local gateways do. Content is never
+silently dropped.
+
 ## Supported Providers
 
 ### Supported (OpenAI-Compatible Endpoints)
@@ -66,6 +72,47 @@ git clone https://github.com/slb350/open-agent-sdk-rust.git
 cd open-agent-sdk-rust
 cargo build
 ```
+
+### Upgrading from 0.6.x
+
+v0.7.0 has two breaking changes. Most projects need no edits at all; the compiler catches
+the first, and the second is a behaviour change with no compile error.
+
+**1. `Error::Api` carries the HTTP status.** It changed from a tuple variant to a struct
+variant, so any pattern match must be updated:
+
+```rust
+// Before (0.6.x)
+if let Error::Api(msg) = &err { eprintln!("{msg}"); }
+
+// After (0.7.0)
+if let Error::Api { message, status } = &err {
+    eprintln!("{message} (status: {status:?})");
+}
+```
+
+Constructing errors is unchanged — `Error::api(msg)` still works and yields `status: None`.
+Use the new `Error::api_status(status, msg)` when you have a status code, because
+`is_retryable_error` classifies on the status and treats a statusless API error as permanent.
+
+**2. `max_tokens` is no longer defaulted to 4096.** Leaving `.max_tokens()` unset now omits
+the field from the request so the server applies its own limit. This is a silent behaviour
+change: if you relied on the implicit cap, set it explicitly.
+
+```rust
+let options = AgentOptions::builder()
+    .model("qwen2.5-32b-instruct")
+    .base_url("http://localhost:1234/v1")
+    .max_tokens(4096)  // add this to keep the old behaviour
+    .build()?;
+```
+
+Leaving it unset is recommended for long-context and reasoning models, which a 4096-token
+client-side cap truncates mid-response.
+
+Also fixed in 0.7.0, with no action required: streamed content is no longer discarded when a
+server ends its stream without ever sending `finish_reason` (llama.cpp, vLLM, and several
+local gateways do this), and `429` is now correctly treated as retryable.
 
 ### Simple Query (LM Studio)
 
@@ -914,7 +961,37 @@ use open_agent::{OpenAIContent, OpenAIContentPart};
 use open_agent::{Error, Result};
 ```
 
-`Error` is the SDK's unified error type, covering HTTP errors, parse failures, configuration errors, and I/O errors. `Result<T>` is an alias for `std::result::Result<T, Error>`.
+`Error` is the SDK's unified error type; `Result<T>` is an alias for `std::result::Result<T, Error>`.
+
+| Variant | Meaning |
+| --- | --- |
+| `Http(reqwest::Error)` | Transport failure — connection refused, DNS, TLS, network timeout |
+| `Json(serde_json::Error)` | Serialization or deserialization failure |
+| `Config(String)` | Invalid configuration caught by `AgentOptions::build()` |
+| `Api { status: Option<u16>, message: String }` | Error response from the model server |
+| `Stream(String)` | SSE parsing or stream processing failure |
+| `Tool(String)` | Tool execution or registration failure |
+| `InvalidInput(String)` | User-provided input failed validation |
+| `Timeout` | Request exceeded the configured timeout |
+| `Other(String)` | Anything else |
+
+`Api` carries the HTTP status as structured data so retry logic never has to parse the
+message text:
+
+```rust
+use open_agent::Error;
+
+// From an HTTP error response — this is what the client constructs internally
+let err = Error::api_status(429, "Rate limit exceeded");
+assert_eq!(err.status_code(), Some(429));
+assert_eq!(err.to_string(), "API error 429: Rate limit exceeded");
+
+// Without a status
+let err = Error::api("Model 'gpt-4' not found");
+assert_eq!(err.status_code(), None);
+```
+
+`status_code()` returns `None` for every non-`Api` variant, so it is safe to call on any error.
 
 ### Newtype Wrappers
 
