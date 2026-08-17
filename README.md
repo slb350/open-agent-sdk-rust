@@ -18,7 +18,7 @@
 **How fast?**
 From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 390 active tests.
 
-[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.7.0)](https://crates.io/crates/open-agent-sdk)
+[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.7.1)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -59,7 +59,7 @@ silently dropped.
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.7.0"
+open-agent-sdk = "0.7.1"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -1259,6 +1259,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.7.0 - end-of-stream flushing for servers that omit `finish_reason`, structured `Error::Api` with status-based retry classification, no implicit `max_tokens` cap, a mandatory mutation-testing gate, plus transport-boundary-safe SSE streaming, complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, GitHub-hosted Linux/macOS CI, non-locking cancellation, and multimodal image support
+**Status**: v0.7.1 - end-of-stream flushing for servers that omit `finish_reason`, structured `Error::Api` with status-based retry classification, no implicit `max_tokens` cap, a mandatory mutation-testing gate, plus transport-boundary-safe SSE streaming, complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, GitHub-hosted Linux/macOS CI, non-locking cancellation, and multimodal image support
 
 Star this repo if you're building AI agents with local models in Rust!

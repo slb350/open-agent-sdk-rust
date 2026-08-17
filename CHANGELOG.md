@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-08-17
+
+Documentation only. No code, API, or behaviour changes from 0.7.0 — this release exists
+because crates.io renders the README captured at publish time, and 0.7.0 shipped without
+upgrade guidance for its two breaking changes.
+
+### Documentation
+
+- **Added an "Upgrading from 0.6.x" guide** to the README covering both v0.7.0 breaks: the `Error::Api` tuple-to-struct variant change (caught by the compiler, shown with before/after) and the `max_tokens` default removal (a silent behaviour change with no compile error, so it carries the louder callout). Also notes the two fixes that need no caller action.
+- **Documented the `Error` variants** in a table. The README previously described `Error` in a single sentence and never listed a variant, so the `Api { status, message }` shape introduced in 0.7.0 was not discoverable there at all. Added worked examples for `Error::api_status` and `Error::status_code`.
+- **Described end-of-stream flushing in the Overview**, where streaming behaviour is explained, instead of only in the trailing status line.
+
 ## [0.7.0] - 2026-08-17
 
 ### Breaking
