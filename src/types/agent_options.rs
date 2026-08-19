@@ -118,6 +118,16 @@ pub struct AgentOptions {
     /// when `auto_execute_tools` is true.
     max_tool_iterations: u32,
 
+    /// Whether the model's reasoning channel is surfaced to the caller.
+    ///
+    /// Reasoning models stream chain-of-thought separately from content
+    /// (`reasoning_content` on DeepSeek, `reasoning` on OpenRouter). It is never
+    /// merged into assistant text regardless of this setting; the flag only decides
+    /// whether it is buffered and emitted as `StreamEvent::Reasoning` or discarded
+    /// as it arrives. `false` by default, because a caller that does not want it
+    /// should not pay to buffer it.
+    include_reasoning: bool,
+
     /// Lifecycle hooks for observing and intercepting agent operations.
     ///
     /// Hooks allow you to inject custom logic at various points:
@@ -156,6 +166,7 @@ impl std::fmt::Debug for AgentOptions {
             .field("tools", &format!("{} tools", self.tools.len()))
             .field("auto_execute_tools", &self.auto_execute_tools)
             .field("max_tool_iterations", &self.max_tool_iterations)
+            .field("include_reasoning", &self.include_reasoning)
             .field("hooks", &self.hooks)
             .finish()
     }
@@ -195,6 +206,8 @@ impl Default for AgentOptions {
             max_tool_iterations: 5,
             // Empty hooks for no-op behavior
             hooks: Hooks::new(),
+            // Reasoning is dropped unless a caller explicitly asks for it
+            include_reasoning: false,
         }
     }
 }
@@ -280,5 +293,10 @@ impl AgentOptions {
     /// Returns a reference to the hooks configuration.
     pub fn hooks(&self) -> &Hooks {
         &self.hooks
+    }
+
+    /// Returns whether the reasoning channel is surfaced to the caller.
+    pub fn include_reasoning(&self) -> bool {
+        self.include_reasoning
     }
 }

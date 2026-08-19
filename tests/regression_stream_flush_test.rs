@@ -8,34 +8,34 @@
 
 mod common;
 
-use common::{DONE, options_for, sse_server, text_chunk, text_of, tool_chunk};
-use futures::StreamExt;
-use open_agent::{ContentBlock, query};
+use common::{DONE, blocks_of, collect_events, text_chunk, text_of, text_of_events, tool_chunk};
+use open_agent::ContentBlock;
 
-/// Serves `body` as an SSE response and collects every block `query()` yields.
+/// Serves `body` as an SSE response and collects every content block `query()` yields.
+///
+/// The terminating `StreamEvent::Finish` is filtered out here; it has its own coverage in
+/// `regression_finish_reason_test.rs`.
 async fn collect_blocks(body: String) -> Vec<ContentBlock> {
-    let server = sse_server(body).await;
-    let options = options_for(&server);
-
-    let mut stream = query("hi", &options).await.expect("start query");
-    let mut blocks = Vec::new();
-    while let Some(block) = stream.next().await {
-        blocks.push(block.expect("stream yields no errors"));
-    }
-    blocks
+    blocks_of(&collect_events(body, false).await)
 }
 
 #[tokio::test]
 async fn text_is_not_lost_when_stream_ends_without_finish_reason() {
     let body = text_chunk("IMPORTANT PAYLOAD", None) + DONE;
-    assert_eq!(text_of(&collect_blocks(body).await), "IMPORTANT PAYLOAD");
+    assert_eq!(
+        text_of_events(&collect_events(body, false).await),
+        "IMPORTANT PAYLOAD"
+    );
 }
 
 #[tokio::test]
 async fn multi_chunk_text_is_flushed_when_the_transport_simply_ends() {
     // No [DONE] sentinel at all: the connection just closes.
     let body = text_chunk("Hello", None) + &text_chunk(" world", None);
-    assert_eq!(text_of(&collect_blocks(body).await), "Hello world");
+    assert_eq!(
+        text_of_events(&collect_events(body, false).await),
+        "Hello world"
+    );
 }
 
 #[tokio::test]

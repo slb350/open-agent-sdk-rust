@@ -1,6 +1,6 @@
-/// A pinned, boxed stream of content blocks from the model.
+/// A pinned, boxed stream of events from the model.
 ///
-/// This type alias represents an asynchronous stream that yields `ContentBlock` items.
+/// This type alias represents an asynchronous stream that yields [`StreamEvent`] items.
 /// Each item is wrapped in a `Result` to handle potential errors during streaming.
 ///
 /// The stream is:
@@ -8,13 +8,21 @@
 /// - **Boxed**: Allows dynamic dispatch and hides the concrete stream implementation
 /// - **Send**: Can be safely transferred between threads
 ///
-/// # Content Blocks
+/// # Events
 ///
-/// The stream can yield several types of content blocks:
+/// - [`StreamEvent::Block`]: a completed [`ContentBlock`] — assistant text, or a fully
+///   assembled tool call
+/// - [`StreamEvent::Reasoning`]: chain-of-thought text, only when
+///   [`AgentOptions::include_reasoning`] is enabled
+/// - [`StreamEvent::Finish`]: exactly once, as the final item, carrying the
+///   [`FinishReason`]
 ///
-/// - **TextBlock**: Incremental text responses from the model
-/// - **ToolUseBlock**: Requests to execute a tool with specific parameters
-/// - **ToolResultBlock**: Results from tool execution (in manual mode)
+/// # Migrating from `ContentStream` (0.7.x and earlier)
+///
+/// The stream used to yield bare `ContentBlock`s. Wrap the old match in
+/// [`StreamEvent::into_block`] to get the previous behaviour, then handle
+/// [`StreamEvent::Finish`] where the distinction between a clean stop and a truncated
+/// response matters.
 ///
 /// # Error Handling
 ///
@@ -30,7 +38,7 @@
 /// # Examples
 ///
 /// ```rust,no_run
-/// use open_agent::{query, AgentOptions, ContentBlock};
+/// use open_agent::{query, AgentOptions, ContentBlock, FinishReason, StreamEvent};
 /// use futures::StreamExt;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
@@ -42,22 +50,22 @@
 /// let mut stream = query("Hello!", &options).await?;
 ///
 /// while let Some(result) = stream.next().await {
-///     match result {
-///         Ok(ContentBlock::Text(text)) => print!("{}", text.text),
-///         Ok(_) => {}, // Other block types
-///         Err(e) => eprintln!("Stream error: {}", e),
+///     match result? {
+///         StreamEvent::Block(ContentBlock::Text(text)) => print!("{}", text.text),
+///         StreamEvent::Finish(reason) => println!("\nstopped: {reason}"),
+///         _ => {}
 ///     }
 /// }
 /// # Ok(())
 /// # }
 /// ```
-pub type ContentStream = Pin<Box<dyn Stream<Item = Result<ContentBlock>> + Send>>;
+pub type EventStream = Pin<Box<dyn Stream<Item = Result<StreamEvent>> + Send>>;
 
 /// Simple query function for single-turn interactions without conversation history.
 ///
 /// This is a stateless convenience function for simple queries that don't require
 /// multi-turn conversations. It creates a temporary HTTP client, sends a single
-/// prompt, and returns a stream of content blocks.
+/// prompt, and returns a stream of events.
 ///
 /// For multi-turn conversations or more control over the interaction, use [`Client`] instead.
 ///
@@ -68,8 +76,9 @@ pub type ContentStream = Pin<Box<dyn Stream<Item = Result<ContentBlock>> + Send>
 ///
 /// # Returns
 ///
-/// Returns a `ContentStream` that yields content blocks as they arrive from the model.
-/// The stream must be polled to completion to receive all blocks.
+/// Returns an [`EventStream`] that yields events as they arrive from the model. The stream
+/// must be polled to completion to receive all content and the terminating
+/// [`StreamEvent::Finish`].
 ///
 /// # Behavior
 ///
@@ -79,7 +88,7 @@ pub type ContentStream = Pin<Box<dyn Stream<Item = Result<ContentBlock>> + Send>
 /// 4. Makes HTTP POST request to `/chat/completions`
 /// 5. Parses Server-Sent Events (SSE) response stream
 /// 6. Aggregates chunks into complete content blocks
-/// 7. Returns stream that yields blocks as they complete
+/// 7. Returns stream that yields events as they complete, ending with `Finish`
 ///
 /// # Error Handling
 ///
@@ -101,7 +110,7 @@ pub type ContentStream = Pin<Box<dyn Stream<Item = Result<ContentBlock>> + Send>
 /// ## Basic Usage
 ///
 /// ```rust,no_run
-/// use open_agent::{query, AgentOptions};
+/// use open_agent::{query, AgentOptions, ContentBlock, FinishReason, StreamEvent};
 /// use futures::StreamExt;
 ///
 /// #[tokio::main]
@@ -114,14 +123,13 @@ pub type ContentStream = Pin<Box<dyn Stream<Item = Result<ContentBlock>> + Send>
 ///
 ///     let mut stream = query("What's the capital of France?", &options).await?;
 ///
-///     while let Some(block) = stream.next().await {
-///         match block? {
-///             open_agent::ContentBlock::Text(text) => {
-///                 print!("{}", text.text);
+///     while let Some(event) = stream.next().await {
+///         match event? {
+///             StreamEvent::Block(ContentBlock::Text(text)) => print!("{}", text.text),
+///             StreamEvent::Finish(FinishReason::Length) => {
+///                 eprintln!("response truncated at the token cap");
 ///             }
-///             open_agent::ContentBlock::ToolUse(_)
-///             | open_agent::ContentBlock::ToolResult(_)
-///             | open_agent::ContentBlock::Image(_) => {}
+///             _ => {}
 ///         }
 ///     }
 ///
@@ -132,7 +140,7 @@ pub type ContentStream = Pin<Box<dyn Stream<Item = Result<ContentBlock>> + Send>
 /// ## With Tools
 ///
 /// ```rust,no_run
-/// use open_agent::{query, AgentOptions, Tool, ContentBlock};
+/// use open_agent::{query, AgentOptions, Tool, ContentBlock, StreamEvent};
 /// use futures::StreamExt;
 /// use serde_json::json;
 ///
@@ -152,15 +160,15 @@ pub type ContentStream = Pin<Box<dyn Stream<Item = Result<ContentBlock>> + Send>
 ///
 /// let mut stream = query("Calculate 2+2", &options).await?;
 ///
-/// while let Some(block) = stream.next().await {
-///     match block? {
-///         ContentBlock::ToolUse(tool_use) => {
+/// while let Some(event) = stream.next().await {
+///     match event?.into_block() {
+///         Some(ContentBlock::ToolUse(tool_use)) => {
 ///             println!("Model wants to use: {}", tool_use.name());
 ///             // Note: You'll need to manually execute tools and continue
 ///             // the conversation. For automatic execution, use Client.
 ///         }
-///         ContentBlock::Text(text) => print!("{}", text.text),
-///         ContentBlock::ToolResult(_) | ContentBlock::Image(_) => {}
+///         Some(ContentBlock::Text(text)) => print!("{}", text.text),
+///         _ => {}
 ///     }
 /// }
 /// # Ok(())
@@ -184,7 +192,7 @@ pub type ContentStream = Pin<Box<dyn Stream<Item = Result<ContentBlock>> + Send>
 ///     Ok(mut stream) => {
 ///         while let Some(result) = stream.next().await {
 ///             match result {
-///                 Ok(block) => println!("Block: {:?}", block),
+///                 Ok(event) => println!("Event: {:?}", event),
 ///                 Err(e) => {
 ///                     eprintln!("Stream error: {}", e);
 ///                     break;
@@ -196,7 +204,7 @@ pub type ContentStream = Pin<Box<dyn Stream<Item = Result<ContentBlock>> + Send>
 /// }
 /// # }
 /// ```
-pub async fn query(prompt: &str, options: &AgentOptions) -> Result<ContentStream> {
+pub async fn query(prompt: &str, options: &AgentOptions) -> Result<EventStream> {
     // Create HTTP client with configured timeout
     // The timeout applies to the entire request, not individual chunks
     let client = reqwest::Client::builder()

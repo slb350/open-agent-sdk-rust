@@ -89,7 +89,7 @@
 //! The client maintains several pieces of state:
 //!
 //! - **history**: Full conversation history (`Vec<Message>`)
-//! - **current_stream**: Active SSE stream being consumed (`Option<ContentStream>`)
+//! - **current_stream**: Active SSE stream being consumed (`Option<EventStream>`)
 //! - **interrupted**: Atomic flag for cancellation (`Arc<AtomicBool>`)
 //! - **auto_exec_buffer**: Buffered blocks for auto-execution mode (`Vec<ContentBlock>`)
 //! - **auto_exec_index**: Current position in buffer (usize)
@@ -145,7 +145,7 @@
 //! ## Simple Single-Turn Query
 //!
 //! ```rust,no_run
-//! use open_agent::{query, AgentOptions};
+//! use open_agent::{query, AgentOptions, ContentBlock};
 //! use futures::StreamExt;
 //!
 //! #[tokio::main]
@@ -157,8 +157,8 @@
 //!
 //!     let mut stream = query("What is Rust?", &options).await?;
 //!
-//!     while let Some(block) = stream.next().await {
-//!         if let open_agent::ContentBlock::Text(text) = block? {
+//!     while let Some(event) = stream.next().await {
+//!         if let Some(ContentBlock::Text(text)) = event?.into_block() {
 //!             print!("{}", text.text);
 //!         }
 //!     }
@@ -313,10 +313,11 @@
 //! ```
 
 use crate::types::{
-    AgentOptions, ContentBlock, Message, MessageRole, OpenAIContent, OpenAIContentPart,
-    OpenAIFunction, OpenAIMessage, OpenAIRequest, OpenAIToolCall, TextBlock,
+    AgentOptions, ContentBlock, FinishReason, Message, MessageRole, OpenAIContent,
+    OpenAIContentPart, OpenAIFunction, OpenAIMessage, OpenAIRequest, OpenAIToolCall, StreamEvent,
+    TextBlock,
 };
-use crate::utils::{ToolCallAggregator, parse_sse_stream};
+use crate::utils::{StreamAccumulator, parse_sse_stream};
 use crate::{Error, Result};
 use futures::stream::{Stream, StreamExt};
 use std::pin::Pin;
@@ -340,7 +341,7 @@ async fn stream_request(
     http_client: &reqwest::Client,
     options: &AgentOptions,
     request: &OpenAIRequest,
-) -> Result<ContentStream> {
+) -> Result<EventStream> {
     let url = format!("{}/chat/completions", options.base_url());
     let response = http_client
         .post(&url)
@@ -360,29 +361,32 @@ async fn stream_request(
         return Err(Error::api_status(status, body));
     }
 
-    // Append a `None` sentinel after the chunk stream so the aggregator gets an explicit
+    // Append a `None` sentinel after the chunk stream so the accumulator gets an explicit
     // end-of-transport signal. Servers that stop sending without ever setting `finish_reason`
     // (llama.cpp, vLLM, several local gateways) would otherwise leave their content stranded
-    // in the aggregator's buffers and yield a silently empty response.
+    // in the accumulator's buffers and yield a silently empty response. The sentinel is also
+    // what emits the terminating `StreamEvent::Finish`, so every stream reports how it ended.
     let terminated = parse_sse_stream(response)
         .map(Some)
         .chain(futures::stream::iter([None]));
 
+    let accumulator = StreamAccumulator::new().capture_reasoning(options.include_reasoning());
+
     // `scan` yields one batch per input item; batches are then flattened into individual
-    // blocks. An empty batch simply flattens to nothing, so chunks that only accumulate
+    // events. An empty batch simply flattens to nothing, so chunks that only accumulate
     // state need no special-casing here.
     let flattened = terminated
-        .scan(ToolCallAggregator::new(), |aggregator, item| {
+        .scan(accumulator, |accumulator, item| {
             let batch = match item {
-                Some(Ok(chunk)) => aggregator.process_chunk(chunk),
+                Some(Ok(chunk)) => accumulator.process_chunk(chunk),
                 Some(Err(error)) => Err(error),
-                None => aggregator.flush(),
+                None => accumulator.finalize(),
             };
             futures::future::ready(Some(batch))
         })
         .flat_map(|result| {
             futures::stream::iter(match result {
-                Ok(blocks) => blocks.into_iter().map(Ok).collect(),
+                Ok(events) => events.into_iter().map(Ok).collect(),
                 Err(error) => vec![Err(error)],
             })
         });

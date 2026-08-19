@@ -18,7 +18,7 @@
 **How fast?**
 From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 390 active tests.
 
-[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.7.1)](https://crates.io/crates/open-agent-sdk)
+[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.8.0)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -33,6 +33,12 @@ transport chunk boundaries, and accumulated content is flushed when the stream e
 when a server closes the connection or sends `data: [DONE]` without ever setting
 `finish_reason`, which llama.cpp, vLLM, and several local gateways do. Content is never
 silently dropped.
+
+**Every stream reports why it ended.** The stream from `query()` terminates with exactly one
+`StreamEvent::Finish` carrying a `FinishReason`, so a response cut off at the token cap
+(`Length`) is distinguishable from one the model chose to end (`Stop`) and from a server that
+never said (`Unspecified`) — three cases that look identical from the content alone. On
+`Client`, the same information is available from `client.finish_reason()`.
 
 ## Supported Providers
 
@@ -59,7 +65,7 @@ silently dropped.
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.7.1"
+open-agent-sdk = "0.8.0"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -72,6 +78,76 @@ git clone https://github.com/slb350/open-agent-sdk-rust.git
 cd open-agent-sdk-rust
 cargo build
 ```
+
+### Upgrading from 0.7.x
+
+v0.8.0 has one breaking change, and the compiler catches it.
+
+**`query()` yields `StreamEvent` instead of `ContentBlock`.** The stream needed room for
+something that is not content: the reason generation stopped. Every stream now ends with
+exactly one `StreamEvent::Finish`.
+
+```rust
+// Before (0.7.x)
+while let Some(block) = stream.next().await {
+    match block? {
+        ContentBlock::Text(text) => print!("{}", text.text),
+        _ => {}
+    }
+}
+
+// After (0.8.0) — smallest possible edit
+while let Some(event) = stream.next().await {
+    match event?.into_block() {
+        Some(ContentBlock::Text(text)) => print!("{}", text.text),
+        _ => {}
+    }
+}
+```
+
+If you parse structured output, the reason you upgraded is the `Finish` event — match it
+rather than discarding it:
+
+```rust
+use open_agent::{ContentBlock, FinishReason, StreamEvent};
+
+let mut answer = String::new();
+while let Some(event) = stream.next().await {
+    match event? {
+        StreamEvent::Block(ContentBlock::Text(text)) => answer.push_str(&text.text),
+        // Truncated at the token cap: the JSON is missing because generation ran out of
+        // budget, not because the model refused. Retry with a larger cap.
+        StreamEvent::Finish(FinishReason::Length) => return Err("truncated".into()),
+        // The model finished and still did not produce JSON. Retrying will not help.
+        StreamEvent::Finish(FinishReason::Stop) => {}
+        // The server never said. Neither conclusion is available.
+        StreamEvent::Finish(FinishReason::Unspecified) => {}
+        _ => {}
+    }
+}
+```
+
+`ContentStream` was renamed `EventStream`. `ContentBlock` is unchanged — no new variant and
+no wire-shape change, so exhaustive matches over it and its `serde` representation still work.
+
+**`Client` is unaffected.** `client.receive()` still yields `ContentBlock`; the finish reason
+is recorded on the client instead:
+
+```rust
+client.send("Reply with JSON.").await?;
+while let Some(block) = client.receive().await? { /* ... */ }
+
+if client.finish_reason().is_some_and(FinishReason::is_truncated) {
+    // Retry with a larger max_tokens.
+}
+```
+
+New in 0.8.0, with no action required: reasoning-model side channels
+(`reasoning_content` on DeepSeek, `reasoning` on OpenRouter) are now explicitly parsed and
+routed away from assistant text rather than dropped as unknown fields, so deliberation prose
+can never be spliced into a response you parse as JSON. Opt into seeing it with
+`.include_reasoning(true)`, which surfaces it as `StreamEvent::Reasoning` and
+`client.reasoning()`.
 
 ### Upgrading from 0.6.x
 
@@ -117,7 +193,7 @@ local gateways do this), and `429` is now correctly treated as retryable.
 ### Simple Query (LM Studio)
 
 ```rust
-use open_agent::{query, AgentOptions, ContentBlock};
+use open_agent::{query, AgentOptions, ContentBlock, FinishReason, StreamEvent};
 use futures::StreamExt;
 
 #[tokio::main]
@@ -131,9 +207,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut stream = query("Analyze this text...", &options).await?;
 
-    while let Some(block) = stream.next().await {
-        match block? {
-            ContentBlock::Text(text) => print!("{}", text.text),
+    while let Some(event) = stream.next().await {
+        match event? {
+            StreamEvent::Block(ContentBlock::Text(text)) => print!("{}", text.text),
+            // Always emitted, exactly once, as the last event.
+            StreamEvent::Finish(FinishReason::Length) => eprintln!("\n[truncated]"),
             _ => {}
         }
     }
@@ -768,6 +846,7 @@ let options = AgentOptions::builder()
 let mut stream = query(user_prompt, &options).await?;
 // Clean message types (TextBlock, ToolUseBlock)
 // Automatic streaming and tool call handling
+// Terminating StreamEvent::Finish tells you why generation stopped
 ```
 
 **Value**: Familiar patterns + Less boilerplate + Rust performance
@@ -803,6 +882,7 @@ AgentOptions::builder()
     .temperature(f32)                    // Sampling temperature (default: 0.7)
     .timeout(u64)                        // Request timeout in seconds (default: 60)
     .api_key(str)                        // API key (default: "not-needed")
+    .include_reasoning(bool)             // Surface reasoning as StreamEvent::Reasoning (default: false)
     .build()?
 ```
 
@@ -811,11 +891,46 @@ AgentOptions::builder()
 Simple single-turn query function.
 
 ```rust
-pub async fn query(prompt: &str, options: &AgentOptions)
-    -> Result<Pin<Box<dyn Stream<Item = Result<ContentBlock>> + Send>>>
+pub async fn query(prompt: &str, options: &AgentOptions) -> Result<EventStream>
+
+// where
+pub type EventStream = Pin<Box<dyn Stream<Item = Result<StreamEvent>> + Send>>;
 ```
 
-Returns a stream yielding `ContentBlock` items. Use `futures::StreamExt` to iterate.
+Returns a stream yielding `StreamEvent` items. Use `futures::StreamExt` to iterate.
+
+### StreamEvent and FinishReason
+
+```rust
+pub enum StreamEvent {
+    Block(ContentBlock),   // Assistant text, or a fully assembled tool call
+    Reasoning(String),     // Chain of thought; only with .include_reasoning(true)
+    Finish(FinishReason),  // Exactly once per stream, always last
+}
+
+pub enum FinishReason {
+    Stop,               // "stop"           — completed naturally
+    Length,             // "length"         — cut off at the token limit
+    ToolCalls,          // "tool_calls"     — finished in order to call tools
+    ContentFilter,      // "content_filter" — halted by a content filter
+    Other(String),      // anything else, preserved verbatim
+    MaxToolIterations,  // the SDK's auto-execution loop hit max_tool_iterations
+    Unspecified,        // the stream ended and the server never said
+}
+```
+
+Both are `#[non_exhaustive]`; match with a `_` arm. `StreamEvent` provides `as_block()`,
+`into_block()`, `as_text()`, `as_reasoning()`, and `finish_reason()`. `FinishReason` provides
+`from_wire()`, `as_str()`, `is_truncated()`, and `Display`.
+
+`Unspecified` is not an error — it is the normal behaviour of llama.cpp, vLLM, and several
+local gateways, which stream content and then close without setting `finish_reason`. It is
+kept distinct from `Stop` because "the model finished" and "the SDK has no information" call
+for different handling.
+
+`MaxToolIterations` is the one variant that does not come from a server: in auto-execution
+mode the SDK, not the model, ends the run when it hits `max_tool_iterations`. It is reported
+only by `client.finish_reason()` and never appears in a `StreamEvent::Finish`.
 
 ### Client
 
@@ -848,6 +963,13 @@ if let Some(t) = client.get_tool("my_tool") { /* ... */ }
 
 // Obtain a shareable interrupt handle (Arc<AtomicBool>) for use across tasks
 let handle = client.interrupt_handle();
+
+// Why the most recent stream stopped; None until one completes, reset on the next send()
+if let Some(reason) = client.finish_reason() { println!("stopped: {reason}"); }
+
+// Reasoning captured from the most recent turn (requires .include_reasoning(true));
+// accumulates across every round of an auto-execution tool loop
+if let Some(reasoning) = client.reasoning() { println!("thought: {reasoning}"); }
 ```
 
 ### MessageRole
@@ -1259,6 +1381,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.7.1 - end-of-stream flushing for servers that omit `finish_reason`, structured `Error::Api` with status-based retry classification, no implicit `max_tokens` cap, a mandatory mutation-testing gate, plus transport-boundary-safe SSE streaming, complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, GitHub-hosted Linux/macOS CI, non-locking cancellation, and multimodal image support
+**Status**: v0.8.0 - finish reasons surfaced on every stream, explicit reasoning-channel separation, end-of-stream flushing for servers that omit `finish_reason`, structured `Error::Api` with status-based retry classification, no implicit `max_tokens` cap, a mandatory mutation-testing gate, plus transport-boundary-safe SSE streaming, complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, GitHub-hosted Linux/macOS CI, non-locking cancellation, and multimodal image support
 
 Star this repo if you're building AI agents with local models in Rust!

@@ -1,3 +1,17 @@
+    /// Wraps injected content blocks as the `StreamEvent::Block`s a real stream would carry.
+    ///
+    /// These tests exercise `receive()` against a hand-built stream, so they stand in for the
+    /// driver rather than the server; the terminating `Finish` event is added by tests that
+    /// assert on it.
+    fn block_stream(items: Vec<Result<ContentBlock>>) -> EventStream {
+        Box::pin(futures::stream::iter(
+            items
+                .into_iter()
+                .map(|item| item.map(StreamEvent::Block))
+                .collect::<Vec<_>>(),
+        ))
+    }
+
     #[test]
     fn test_client_creation() {
         let options = AgentOptions::builder()
@@ -158,8 +172,7 @@
                 " the capital of France.",
             ))),
         ];
-        let stream = futures::stream::iter(blocks);
-        client.current_stream = Some(Box::pin(stream));
+        client.current_stream = Some(block_stream(blocks));
 
         // Consume the stream via receive()
         let mut received = Vec::new();
@@ -219,7 +232,7 @@
         let tool_use =
             crate::types::ToolUseBlock::new("call_1", "calculator", serde_json::json!({"a": 2}));
         let blocks = vec![Ok(ContentBlock::ToolUse(tool_use))];
-        client.current_stream = Some(Box::pin(futures::stream::iter(blocks)));
+        client.current_stream = Some(block_stream(blocks));
 
         // Caller consumes the tool use block
         let block = client.receive().await.unwrap().unwrap();
@@ -270,7 +283,7 @@
             Ok(ContentBlock::Text(TextBlock::new("Once upon"))),
             Ok(ContentBlock::Text(TextBlock::new(" a time..."))),
         ];
-        client.current_stream = Some(Box::pin(futures::stream::iter(blocks)));
+        client.current_stream = Some(block_stream(blocks));
 
         // Read one block
         let block = client.receive().await.unwrap().unwrap();
@@ -307,7 +320,7 @@
 
         // Stream with one block
         let blocks = vec![Ok(ContentBlock::Text(TextBlock::new("Hi there!")))];
-        client.current_stream = Some(Box::pin(futures::stream::iter(blocks)));
+        client.current_stream = Some(block_stream(blocks));
 
         // Consume the block
         let block = client.receive().await.unwrap().unwrap();
@@ -345,7 +358,7 @@
             Ok(ContentBlock::Text(TextBlock::new("Second"))),
             Ok(ContentBlock::Text(TextBlock::new("Third"))),
         ];
-        client.current_stream = Some(Box::pin(futures::stream::iter(blocks)));
+        client.current_stream = Some(block_stream(blocks));
 
         // Read only the first block
         let block = client.receive().await.unwrap().unwrap();
@@ -380,7 +393,7 @@
             Ok(ContentBlock::Text(TextBlock::new("Partial"))),
             Err(Error::stream("connection reset")),
         ];
-        client.current_stream = Some(Box::pin(futures::stream::iter(blocks)));
+        client.current_stream = Some(block_stream(blocks));
 
         // First receive succeeds
         let block = client.receive().await.unwrap().unwrap();
@@ -412,7 +425,7 @@
 
         // Inject stream, consume one block (buffer has content)
         let blocks = vec![Ok(ContentBlock::Text(TextBlock::new("Hi there")))];
-        client.current_stream = Some(Box::pin(futures::stream::iter(blocks)));
+        client.current_stream = Some(block_stream(blocks));
         client.receive().await.unwrap();
         assert_eq!(client.manual_receive_buffer.len(), 1);
 
@@ -468,9 +481,9 @@
         client.history.push(Message::user("Use the calculator"));
 
         let tool_use = ToolUseBlock::new("call-1", "calculate", serde_json::json!({"value": 42}));
-        client.current_stream = Some(Box::pin(futures::stream::iter(vec![Ok(
-            ContentBlock::ToolUse(tool_use.clone()),
-        )])));
+        client.current_stream = Some(block_stream(vec![Ok(ContentBlock::ToolUse(
+            tool_use.clone(),
+        ))]));
 
         let result = client.auto_execute_loop().await;
         assert!(

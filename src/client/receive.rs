@@ -460,4 +460,60 @@ impl Client {
         &self.options
     }
 
+    /// Returns why the most recent stream stopped generating.
+    ///
+    /// `None` until a stream completes; the value is cleared when the next request starts, so
+    /// read it *after* the `receive()` loop drains, not during it.
+    ///
+    /// This is what distinguishes a response cut off at the token cap
+    /// ([`FinishReason::Length`]) from one the model chose to end ([`FinishReason::Stop`]) and
+    /// from a server that never said ([`FinishReason::Unspecified`]) — three cases that look
+    /// identical from the content alone, and that call for different handling when the caller
+    /// is parsing structured output.
+    ///
+    /// In auto-execution mode this reports the last generation of the tool loop, which is the
+    /// one that produced the text the caller receives — except when the loop itself stopped
+    /// at `max_tool_iterations`, which reports [`FinishReason::MaxToolIterations`] because
+    /// the SDK, not the model, ended the operation.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// # use open_agent::{Client, AgentOptions, FinishReason};
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let mut client = Client::new(AgentOptions::default())?;
+    /// let mut answer = String::new();
+    /// client.send("Reply with JSON.").await?;
+    /// while let Some(block) = client.receive().await? {
+    ///     if let open_agent::ContentBlock::Text(text) = block {
+    ///         answer.push_str(&text.text);
+    ///     }
+    /// }
+    ///
+    /// if client.finish_reason().is_some_and(FinishReason::is_truncated) {
+    ///     // The JSON is missing because generation ran out of budget, not because the
+    ///     // model refused. Retry with a larger cap instead of giving up.
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn finish_reason(&self) -> Option<&FinishReason> {
+        self.last_finish_reason.as_ref()
+    }
+
+    /// Returns the reasoning text captured from the most recent stream.
+    ///
+    /// Always `None` unless
+    /// [`AgentOptions::include_reasoning`](crate::AgentOptions::include_reasoning) is enabled.
+    /// Reasoning is kept out of [`Client::history`], so enabling capture never changes what is
+    /// replayed to the model on the next turn.
+    ///
+    /// Cleared when the caller starts a new turn. Unlike [`Client::finish_reason`], it
+    /// *accumulates* across an auto-execution tool loop rather than being overwritten each
+    /// round: the deliberation that chose the tools is the part worth keeping, so discarding
+    /// all but the final round would throw away most of what was asked for.
+    pub fn reasoning(&self) -> Option<&str> {
+        (!self.last_reasoning.is_empty()).then_some(self.last_reasoning.as_str())
+    }
+
 }

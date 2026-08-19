@@ -45,10 +45,17 @@ impl Client {
             auto_exec_buffer: Vec::new(),                  // Empty buffer for auto mode
             auto_exec_index: 0,                            // Start at beginning of buffer
             manual_receive_buffer: Vec::new(),             // Empty buffer for manual mode
+            last_finish_reason: None,                      // No stream has completed yet
+            last_reasoning: String::new(),                 // No reasoning captured yet
         })
     }
 
     async fn start_request(&mut self) -> Result<()> {
+        // Clear per-stream observations so a caller reading them between `send()` and the end
+        // of the receive loop cannot see the previous turn's values.
+        self.last_finish_reason = None;
+        self.last_reasoning.clear();
+
         // Build messages array for API request
         // This includes system prompt + full conversation history
         let mut messages = Vec::new();

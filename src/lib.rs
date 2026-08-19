@@ -16,6 +16,7 @@
 //! - **Privacy-First**: All data stays local on your machine
 //! - **High Performance**: Native async/await with Tokio runtime
 //! - **Streaming Responses**: Real-time token-by-token streaming
+//! - **Finish Reasons**: Every stream reports why generation stopped
 //! - **Tool Calling**: Define and execute tools with automatic schema generation
 //! - **Lifecycle Hooks**: Intercept and control execution at key points
 //! - **Interrupts**: Gracefully cancel long-running operations
@@ -28,7 +29,7 @@
 //! For single-turn interactions without conversation state:
 //!
 //! ```rust,no_run
-//! use open_agent::{query, AgentOptions, ContentBlock};
+//! use open_agent::{query, AgentOptions, ContentBlock, FinishReason, StreamEvent};
 //! use futures::StreamExt;
 //!
 //! #[tokio::main]
@@ -43,21 +44,19 @@
 //!     // Send a single query and stream the response
 //!     let mut stream = query("What's the capital of France?", &options).await?;
 //!
-//!     // Process each content block as it arrives
-//!     while let Some(block) = stream.next().await {
-//!         match block? {
-//!             ContentBlock::Text(text_block) => {
+//!     // Process each event as it arrives; the stream always ends with one Finish
+//!     while let Some(event) = stream.next().await {
+//!         match event? {
+//!             StreamEvent::Block(ContentBlock::Text(text_block)) => {
 //!                 print!("{}", text_block.text);
 //!             }
-//!             ContentBlock::ToolUse(tool_block) => {
+//!             StreamEvent::Block(ContentBlock::ToolUse(tool_block)) => {
 //!                 println!("Tool called: {}", tool_block.name());
 //!             }
-//!             ContentBlock::ToolResult(_) => {
-//!                 // Tool results can be ignored in simple queries
+//!             StreamEvent::Finish(FinishReason::Length) => {
+//!                 eprintln!("response was truncated at the token cap");
 //!             }
-//!             ContentBlock::Image(_) => {
-//!                 // Images not expected in this example
-//!             }
+//!             _ => {}
 //!         }
 //!     }
 //!
@@ -170,7 +169,7 @@ pub mod retry;
 
 // --- Core Client API ---
 
-pub use client::{Client, query};
+pub use client::{Client, EventStream, query};
 
 // --- Provider Configuration ---
 
@@ -198,9 +197,9 @@ pub use tools::{Tool, ToolBuilder, tool};
 // --- Core Types ---
 
 pub use types::{
-    AgentOptions, AgentOptionsBuilder, BaseUrl, ContentBlock, ImageBlock, ImageDetail, Message,
-    MessageRole, ModelName, OpenAIContent, OpenAIContentPart, Temperature, TextBlock,
-    ToolResultBlock, ToolUseBlock,
+    AgentOptions, AgentOptionsBuilder, BaseUrl, ContentBlock, FinishReason, ImageBlock,
+    ImageDetail, Message, MessageRole, ModelName, OpenAIContent, OpenAIContentPart, StreamEvent,
+    Temperature, TextBlock, ToolResultBlock, ToolUseBlock,
 };
 
 // ============================================================================
@@ -214,13 +213,14 @@ pub use types::{
 /// - Configuration: AgentOptions, AgentOptionsBuilder
 /// - Client: Client, query()
 /// - Content: ContentBlock, TextBlock, ToolUseBlock
+/// - Streaming: StreamEvent, FinishReason
 /// - Tools: Tool, tool()
 /// - Hooks: Hooks, HookDecision, hook event types
 /// - Errors: Error, Result
 pub mod prelude {
     pub use crate::{
-        AgentOptions, AgentOptionsBuilder, BaseUrl, Client, ContentBlock, Error, HookDecision,
-        Hooks, ModelName, PostToolUseEvent, PreToolUseEvent, Result, Temperature, TextBlock, Tool,
-        ToolUseBlock, UserPromptSubmitEvent, query, tool,
+        AgentOptions, AgentOptionsBuilder, BaseUrl, Client, ContentBlock, Error, FinishReason,
+        HookDecision, Hooks, ModelName, PostToolUseEvent, PreToolUseEvent, Result, StreamEvent,
+        Temperature, TextBlock, Tool, ToolUseBlock, UserPromptSubmitEvent, query, tool,
     };
 }

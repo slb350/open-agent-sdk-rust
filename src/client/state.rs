@@ -12,6 +12,7 @@
 /// - **Active Stream**: Currently active SSE stream being consumed
 /// - **Interrupt Flag**: Thread-safe cancellation signal
 /// - **Auto-Execution Buffer**: Cached blocks for auto-execution mode
+/// - **Last Finish Reason**: Why the most recent stream stopped, via `finish_reason()`
 ///
 /// # Operating Modes
 ///
@@ -209,7 +210,7 @@ pub struct Client {
     ///
     /// The stream is set by `send()` and consumed by `receive()`. When the stream
     /// is exhausted, `receive()` returns `Ok(None)` and sets this back to `None`.
-    current_stream: Option<ContentStream>,
+    current_stream: Option<EventStream>,
 
     /// Reusable HTTP client for making API requests.
     ///
@@ -257,4 +258,23 @@ pub struct Client {
     ///
     /// **Only used when `options.auto_execute_tools == false`**.
     manual_receive_buffer: Vec<ContentBlock>,
+
+    /// Why the most recent stream stopped generating.
+    ///
+    /// Set from the terminating `StreamEvent::Finish` as `receive()` drains the stream, and
+    /// reset when a new request starts. `None` means no stream has completed since the last
+    /// `send()` — read it after the receive loop, not during.
+    ///
+    /// In auto-execution mode this reports the final generation of the loop, which is the one
+    /// that produced the text the caller sees.
+    last_finish_reason: Option<FinishReason>,
+
+    /// Reasoning text accumulated from the most recent stream.
+    ///
+    /// Stays empty unless `options.include_reasoning()` is enabled. Kept out of `history` so
+    /// chain-of-thought is never replayed back to the model as if it were assistant output.
+    ///
+    /// Accumulates across the rounds of an auto-execution tool loop; `auto_execute_loop`
+    /// carries it over each internal `send("")` that `start_request` would otherwise clear.
+    last_reasoning: String,
 }

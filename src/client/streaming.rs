@@ -9,20 +9,36 @@ impl Client {
             return Ok(None);
         }
 
-        // Poll the current stream if one exists
-        if let Some(stream) = &mut self.current_stream {
+        // Drain non-content events (finish reason, reasoning) into client state and keep
+        // polling, so `receive()` continues to hand the caller content blocks only.
+        loop {
+            // No active stream
+            let Some(stream) = &mut self.current_stream else {
+                return Ok(None);
+            };
+
             match stream.next().await {
-                Some(Ok(block)) => Ok(Some(block)),
-                Some(Err(e)) => Err(e),
+                Some(Ok(StreamEvent::Block(block))) => return Ok(Some(block)),
+                Some(Ok(StreamEvent::Reasoning(reasoning))) => {
+                    // Recorded for `reasoning()`, deliberately never pushed to history.
+                    // Traces run to tens of kilobytes, so take the buffer by move when there
+                    // is nothing to append to — which is every stream outside the auto loop.
+                    if self.last_reasoning.is_empty() {
+                        self.last_reasoning = reasoning;
+                    } else {
+                        self.last_reasoning.push_str(&reasoning);
+                    }
+                }
+                Some(Ok(StreamEvent::Finish(reason))) => {
+                    self.last_finish_reason = Some(reason);
+                }
+                Some(Err(e)) => return Err(e),
                 None => {
                     // Natural EOF — mark stream as fully consumed
                     self.current_stream = None;
-                    Ok(None)
+                    return Ok(None);
                 }
             }
-        } else {
-            // No active stream
-            Ok(None)
         }
     }
 
@@ -202,7 +218,13 @@ impl Client {
             iteration += 1;
             if iteration > max_iterations {
                 // Max iterations reached - stop execution and return what we have
-                // This prevents infinite tool-calling loops
+                // This prevents infinite tool-calling loops.
+                //
+                // The SDK, not the model, ended this operation. The last stream's reason was
+                // `ToolCalls` — true of that generation, but misleading as the answer to
+                // "why did this stop?", which is the question `finish_reason()` exists to
+                // answer. Report the reason we are responsible for.
+                self.last_finish_reason = Some(FinishReason::MaxToolIterations);
                 if !text_blocks.is_empty() {
                     let assistant_msg = Message::assistant(text_blocks.clone());
                     self.history.push(assistant_msg);
@@ -353,8 +375,15 @@ impl Client {
             // ========================================================================
             // STEP 7: Continue conversation to get next response
             // ========================================================================
-            // Send empty string to continue - the history contains all context
+            // Send empty string to continue - the history contains all context.
+            //
+            // `send()` starts a new stream, which resets the per-stream observations. That is
+            // right for the finish reason (the last round's is the one that matters) but wrong
+            // for reasoning: the deliberation that chose these tools is exactly the part worth
+            // keeping, so carry it across the boundary and let the next stream append to it.
+            let carried_reasoning = std::mem::take(&mut self.last_reasoning);
             self.send("").await?;
+            self.last_reasoning = carried_reasoning;
 
             // Loop continues to collect and process the next response
             // This will either be more tool calls or the final text answer

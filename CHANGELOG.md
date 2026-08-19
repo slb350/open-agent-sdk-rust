@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-08-18
+
+Two pieces of information the SDK held internally and never handed over: why generation
+stopped, and what a reasoning model streamed on its side channel. A caller parsing
+structured output could not tell a token-capped truncation from a clean stop from a silent
+server, and reasoning was dropped by accident rather than by decision.
+
+### Breaking
+
+- **`query()` yields `StreamEvent`, not `ContentBlock`**: the item type of the stream returned by `query()` changed from `ContentBlock` to the new `StreamEvent` enum, and the `ContentStream` type alias was renamed `EventStream`. `finish_reason` had nowhere to go in a stream of content, because it is not content. Every stream now ends with exactly one `StreamEvent::Finish` carrying a `FinishReason`. Existing loops migrate by wrapping the match in `event?.into_block()`; loops that care about truncation match `StreamEvent::Finish` instead. `Client::receive()` is unchanged — it still yields `ContentBlock` and records the finish reason on the client.
+- **`ContentBlock` itself is unchanged**: no new variant, no wire-shape change, so downstream exhaustive matches over `ContentBlock` and its `serde` representation still compile and still round-trip.
+
+### Added
+
+- **`FinishReason`**: `Stop`, `Length`, `ToolCalls`, `ContentFilter`, `Other(String)` for provider-specific values, `MaxToolIterations` for the one case the SDK rather than the server decides, and `Unspecified` for a stream that ended without the server ever saying. `Unspecified` is deliberately distinct from `Stop`: reporting a silent server as a clean stop would claim knowledge the SDK does not have, and it is exactly the servers that omit `finish_reason` (llama.cpp, vLLM, several local gateways) that the 0.7.0 flush fix exists for. `is_truncated()` answers the question a caller parsing JSON actually has. `#[non_exhaustive]`.
+- **`StreamEvent`**: `Block(ContentBlock)`, `Reasoning(String)`, `Finish(FinishReason)`, with `as_block`/`into_block`/`as_text`/`as_reasoning`/`finish_reason` accessors so the common cases stay one line. `#[non_exhaustive]`, so a future channel does not force another breaking release.
+- **`Client::finish_reason()`**: why the most recent stream stopped, cleared when the next request starts. In auto-execution mode it reports the final generation of the tool loop — the one that produced the text the caller sees — except when the loop stopped at `max_tool_iterations`, where it reports `FinishReason::MaxToolIterations`. Without that case the SDK's own cut-off surfaced as the model's `ToolCalls`, an accurate answer to a different question than the one `finish_reason()` exists to ask.
+- **`Client::reasoning()`**: reasoning text captured from the most recent turn, `None` unless capture is enabled. It accumulates across the rounds of an auto-execution tool loop rather than being overwritten each round; every round is its own stream, and keeping only the last would discard the deliberation that chose the tools — most of what was asked for.
+- **`AgentOptions::include_reasoning(bool)`**: opts into `StreamEvent::Reasoning`. Defaults to `false`, in which case reasoning deltas are read off the wire and discarded immediately rather than buffered — a caller that does not want a long chain of thought should not pay to hold it.
+
+### Fixed
+
+- **Reasoning is now dropped by decision instead of by accident**: `OpenAIDelta` declared only `role`, `content`, and `tool_calls`, so DeepSeek's `reasoning_content` and OpenRouter's `reasoning` were discarded because serde ignores unknown fields — nothing in the code expressed the intent, and any future change to delta handling could have started splicing deliberation prose into the text a caller parses as JSON. Both fields are now declared and routed through `OpenAIDelta::reasoning_delta()` into a buffer that `text_buffer` has no path to. A gateway that mirrors the same trace on both field names is counted once.
+- **Parallel tool calls are emitted in index order**: `flush` drained the `HashMap` of partial tool calls directly, so with more than one tool call in a response the emission order was whatever the hash iteration produced and varied between runs. It now sorts by the API-provided index.
+
+### Changed
+
+- **`ToolCallAggregator` is now `StreamAccumulator`**, and `flush()` gained a sibling `finalize()`. The type accumulates text, reasoning, tool calls, and the finish reason, so the old name described a third of it. `flush()` still drains buffered content; `finalize()` is what the stream driver calls at end of transport, and it is the only thing that emits `Finish`. Recording the reason in `process_chunk` but emitting it only in `finalize` is what guarantees `Finish` is last even when a server keeps sending after its own `finish_reason`. Both types are internal (`mod utils` is private), so this is not a public break.
+- **New code lives in real modules, not `include!` fragments**: `cargo-mutants` walks `mod` declarations but does not expand `include!`, so the crate's fragment architecture was invisible to the mutation gate — the full sweep found 103 mutants across only 5 files, and a `--in-diff` sweep over this change found 1. `src/utils/{accumulator,sse}.rs` and `src/types/stream_event.rs` are declared with `mod` and re-exported, which keeps every path unchanged and brings the sweep to 146 mutants. The remaining fragments are untouched.
+- **`src/types/openai.rs` split**: the streaming chunk and delta types moved to `src/types/openai_stream.rs`, keeping both halves inside the 600-line soft limit after the reasoning fields were added. It is a real module too, since `OpenAIDelta::reasoning_delta` is exactly the kind of channel-precedence logic a mutant flips.
+- **Partial tool calls are held in a `BTreeMap`**: ordering now falls out of the container instead of a sort at flush time, which also drops the hash of a `u32` on every tool-call delta.
+
+### Testing
+
+- Added `tests/regression_finish_reason_test.rs` (10 tests): each well-known reason surfaces, `Unspecified` is distinct from `Stop`, an unrecognised reason survives verbatim, exactly one `Finish` is emitted and it is last, an empty stream still reports one, and `Client::finish_reason()` both reports and resets.
+- Added `tests/regression_reasoning_channel_test.rs` (10 tests): reasoning from either channel never reaches a text block, a reasoning-only response yields no text block at all, reasoning is dropped unless requested, opting in emits it ahead of the text it produced, a mirrored trace is not double-counted, reasoning never enters history, and unknown delta fields are still ignored.
+- Added `src/utils/accumulator.rs` and `src/types/stream_event.rs` unit tests (26 tests) covering finish-reason mapping and precedence, no double-emission after `finish_reason`, channel separation, and index-ordered tool call emission.
+- The flush-without-`finish_reason` regressions from 0.7.0 are unchanged in intent and still pass; they now assert over the content blocks filtered out of the event stream.
+- Added coverage for both cases a quality review surfaced: the auto-execution loop reporting its own iteration cap rather than the model's `ToolCalls`, and reasoning surviving every round of that loop. Both were RED against the first implementation.
+- `cargo mutants --no-shuffle -j 4`: 149 mutants, 124 caught, 25 unviable, 0 missed.
+
 ## [0.7.1] - 2026-08-17
 
 Documentation only. No code, API, or behaviour changes from 0.7.0 — this release exists

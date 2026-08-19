@@ -1,9 +1,10 @@
 //! Simple query example
 //!
-//! Demonstrates basic usage of the query function
+//! Demonstrates basic usage of the query function, including reading the terminating
+//! `StreamEvent::Finish` to learn why generation stopped.
 
 use futures::StreamExt;
-use open_agent::{AgentOptions, ContentBlock, query};
+use open_agent::{AgentOptions, ContentBlock, FinishReason, StreamEvent, query};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -23,26 +24,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     print!("Response: ");
 
-    while let Some(block) = stream.next().await {
-        match block? {
-            ContentBlock::Text(text) => {
+    while let Some(event) = stream.next().await {
+        match event? {
+            StreamEvent::Block(ContentBlock::Text(text)) => {
                 print!("{}", text.text);
                 std::io::Write::flush(&mut std::io::stdout())?;
             }
-            ContentBlock::ToolUse(tool) => {
+            StreamEvent::Block(ContentBlock::ToolUse(tool)) => {
                 println!("\nTool called: {} (id: {})", tool.name(), tool.id());
                 println!("Arguments: {}", tool.input());
             }
-            ContentBlock::ToolResult(_) => {
-                // Tool results not expected in simple query
+            // The stream always ends with exactly one Finish event. `Length` means the
+            // response was cut off at the token cap rather than finished — worth knowing
+            // before treating a partial answer as the model's final word.
+            StreamEvent::Finish(FinishReason::Length) => {
+                println!("\n[truncated at the token cap]");
             }
-            ContentBlock::Image(_) => {
-                // Images not relevant for this example
+            StreamEvent::Finish(reason) => {
+                println!("\n[stopped: {reason}]");
             }
+            _ => {}
         }
     }
 
-    println!("\n\nQuery complete!");
+    println!("\nQuery complete!");
 
     Ok(())
 }

@@ -75,6 +75,8 @@ pub struct AgentOptionsBuilder {
     auto_execute_tools: Option<bool>,
     /// Optional max iterations; defaults to 5
     max_tool_iterations: Option<u32>,
+    /// Optional reasoning capture; defaults to false
+    include_reasoning: Option<bool>,
     /// Lifecycle hooks; defaults to empty
     hooks: Hooks,
 }
@@ -229,6 +231,35 @@ impl AgentOptionsBuilder {
     /// ```
     pub fn max_tokens(mut self, tokens: u32) -> Self {
         self.max_tokens = Some(tokens);
+        self
+    }
+
+    /// Sets whether the model's reasoning channel is surfaced to the caller.
+    ///
+    /// Reasoning models stream their chain of thought on a side channel —
+    /// `reasoning_content` on DeepSeek, `reasoning` on OpenRouter. That text is **never**
+    /// merged into assistant content, whatever this is set to; splicing deliberation prose
+    /// into a response a caller parses as JSON is exactly the corruption the SDK keeps out.
+    /// This flag only decides whether the reasoning is buffered and emitted as
+    /// [`StreamEvent::Reasoning`](crate::StreamEvent::Reasoning) — readable from
+    /// [`Client::reasoning()`](crate::Client::reasoning) — or read off the wire and dropped.
+    ///
+    /// Defaults to `false`: a caller that does not want a long chain of thought should not
+    /// pay to buffer it.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use open_agent::AgentOptions;
+    /// let options = AgentOptions::builder()
+    ///     .model("deepseek-reasoner")
+    ///     .base_url("http://localhost:1234/v1")
+    ///     .include_reasoning(true)  // Emit reasoning as its own stream event
+    ///     .build()
+    ///     .unwrap();
+    /// ```
+    pub fn include_reasoning(mut self, include: bool) -> Self {
+        self.include_reasoning = Some(include);
         self
     }
 
@@ -509,6 +540,8 @@ impl AgentOptionsBuilder {
             max_tool_iterations: self.max_tool_iterations.unwrap_or(5),
             // Hooks were built up during configuration, use as-is
             hooks: self.hooks,
+            // Reasoning is dropped unless a caller explicitly asks for it
+            include_reasoning: self.include_reasoning.unwrap_or(false),
         })
     }
 }

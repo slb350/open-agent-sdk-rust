@@ -6,7 +6,8 @@
 
 #![allow(dead_code)] // Each test binary uses only the helpers it needs.
 
-use open_agent::{AgentOptions, ContentBlock, Message};
+use futures::StreamExt;
+use open_agent::{AgentOptions, ContentBlock, FinishReason, Message, StreamEvent, query};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -34,10 +35,16 @@ pub async fn sse_server(body: impl Into<String>) -> MockServer {
 /// Only the required fields are set, so anything a test does not configure keeps its default
 /// — which is what makes this usable for asserting on omitted request fields.
 pub fn options_for(server: &MockServer) -> AgentOptions {
+    options_with_reasoning(server, false)
+}
+
+/// Builds minimal `AgentOptions` pointing at `server`, selecting reasoning capture.
+pub fn options_with_reasoning(server: &MockServer, include_reasoning: bool) -> AgentOptions {
     AgentOptions::builder()
         .model("m")
         .base_url(format!("{}/v1", server.uri()))
         .api_key("k")
+        .include_reasoning(include_reasoning)
         .build()
         .expect("minimal options build")
 }
@@ -70,7 +77,7 @@ pub fn tool_chunk(id: &str, name: &str, arguments: &str) -> String {
 }
 
 /// Wraps one choice in a full chunk object and formats it as an SSE `data:` frame.
-fn sse_frame(choice: serde_json::Value) -> String {
+pub fn sse_frame(choice: serde_json::Value) -> String {
     let chunk = serde_json::json!({
         "id": "1",
         "object": "chat.completion.chunk",
@@ -98,4 +105,84 @@ pub fn text_of(blocks: &[ContentBlock]) -> String {
 /// Concatenates the text of a message's text blocks, for identifying messages in assertions.
 pub fn message_text(message: &Message) -> String {
     text_of(&message.content)
+}
+
+/// Builds a single SSE `data:` frame carrying a reasoning delta on `field`.
+///
+/// `field` is the channel name the server uses: DeepSeek streams `reasoning_content`,
+/// OpenRouter streams `reasoning`.
+pub fn reasoning_chunk(field: &str, value: &str, finish: Option<&str>) -> String {
+    sse_frame(serde_json::json!({
+        "index": 0,
+        "delta": { field: value },
+        "finish_reason": finish,
+    }))
+}
+
+/// Builds a frame whose delta carries reasoning and content simultaneously.
+pub fn mixed_chunk(reasoning_field: &str, reasoning: &str, content: &str) -> String {
+    sse_frame(serde_json::json!({
+        "index": 0,
+        "delta": { reasoning_field: reasoning, "content": content },
+        "finish_reason": serde_json::Value::Null,
+    }))
+}
+
+/// Serves `body` as an SSE response and collects every event `query()` yields.
+///
+/// `include_reasoning` selects whether reasoning deltas are surfaced or dropped.
+pub async fn collect_events(body: String, include_reasoning: bool) -> Vec<StreamEvent> {
+    let server = sse_server(body).await;
+    let options = options_with_reasoning(&server, include_reasoning);
+
+    let mut stream = query("hi", &options).await.expect("start query");
+    let mut events = Vec::new();
+    while let Some(event) = stream.next().await {
+        events.push(event.expect("stream yields no errors"));
+    }
+    events
+}
+
+/// Extracts the content blocks from a collected event sequence.
+pub fn blocks_of(events: &[StreamEvent]) -> Vec<ContentBlock> {
+    events
+        .iter()
+        .filter_map(|event| event.as_block().cloned())
+        .collect()
+}
+
+/// Concatenates every reasoning event in a collected event sequence.
+pub fn reasoning_of(events: &[StreamEvent]) -> String {
+    events
+        .iter()
+        .filter_map(StreamEvent::as_reasoning)
+        .collect()
+}
+
+/// Concatenates the text of every text block in a collected event sequence.
+pub fn text_of_events(events: &[StreamEvent]) -> String {
+    events.iter().filter_map(StreamEvent::as_text).collect()
+}
+
+/// Returns the finish reason of a collected event sequence.
+///
+/// Asserts the stream's two structural guarantees along the way: exactly one `Finish` event,
+/// and it is the last one. Every event-collecting test gets that check for free.
+pub fn sole_finish_reason(events: &[StreamEvent]) -> FinishReason {
+    let reasons: Vec<&FinishReason> = events
+        .iter()
+        .filter_map(StreamEvent::finish_reason)
+        .collect();
+    assert_eq!(
+        reasons.len(),
+        1,
+        "expected exactly one Finish event, got {events:?}"
+    );
+    assert!(
+        events
+            .last()
+            .is_some_and(|event| event.finish_reason().is_some()),
+        "Finish must be the last event, got {events:?}"
+    );
+    reasons[0].clone()
 }
