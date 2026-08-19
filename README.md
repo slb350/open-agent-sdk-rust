@@ -16,7 +16,7 @@
 - **Control** - pick your model (Qwen, Llama, Mistral, etc.)
 
 **How fast?**
-From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 390 active tests.
+From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 443 active tests.
 
 [![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.8.0)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
@@ -127,8 +127,10 @@ while let Some(event) = stream.next().await {
 }
 ```
 
-`ContentStream` was renamed `EventStream`. `ContentBlock` is unchanged — no new variant and
-no wire-shape change, so exhaustive matches over it and its `serde` representation still work.
+`ContentStream` was renamed `EventStream`. `ToolCallAggregator` was renamed `StreamAccumulator`
+— if you imported it directly, update the import; the API is otherwise unchanged. `ContentBlock`
+is unchanged — no new variant and no wire-shape change, so exhaustive matches over it and its
+`serde` representation still work.
 
 **`Client` is unaffected.** `client.receive()` still yields `ContentBlock`; the finish reason
 is recorded on the client instead:
@@ -1231,7 +1233,7 @@ open-agent-sdk-rust/
 │   ├── tools/             # Tool, schema, builder, handler, factory, and tests
 │   ├── types.rs           # Public core-type module orchestration
 │   ├── types/             # Options, messages, images, wire types, validated newtypes, and tests
-│   ├── utils.rs           # SSE parsing and tool call aggregation
+│   ├── utils.rs           # SSE parsing and stream accumulation (StreamAccumulator)
 │   └── utils/             # Utility unit tests
 ├── examples/
 │   ├── simple_query.rs              # Basic streaming query
@@ -1262,7 +1264,7 @@ open-agent-sdk-rust/
 │   ├── hooks_integration_test.rs
 │   ├── image_serialization_test.rs
 │   ├── package_manifest_test.rs     # Package exclusion coverage (CLAUDE.md, .markdownlint.json)
-│   ├── ci_workflow_policy_test.rs   # GitHub CI runner, coverage, and security policy guards
+│   ├── ci_workflow_policy_test.go   # GitHub CI runner, coverage, and security policy guards
 │   ├── security_bypass_test.rs
 │   ├── send_message_test.rs         # Manual-mode history regression (v0.6.2)
 │   ├── source_file_size_test.rs      # Repository Rust hard-limit guard
@@ -1324,19 +1326,11 @@ cargo mutants --no-shuffle -j 4
 
 **Test Coverage:**
 
-- 124 unit tests (lib)
-- 113 active integration tests across 22 test files (12 additional tests are `#[ignore]`d by default)
-  - Hooks integration tests
-  - Auto-execution tests
-  - Image serialization tests
-  - Defensive validation tests
-  - Backward compatibility tests
-  - Advanced integration tests
-  - Edge cases, security bypass, debug logging, send message, tool call content tests
-  - Streaming, retry classification, and `max_tokens` regression tests
-- 153 active doctests (17 additional doctests are `ignore`d)
+- 148 unit tests (lib)
+- 136 active integration tests across 22 test files
+- 159 active doctests
 
-Total: 390 active unit, integration, and documentation tests
+Total: 443 active unit, integration, and documentation tests
 
 **Mutation testing** is part of the gate, not an optional extra: a green suite proves the
 tests ran, not that they would notice if the code were wrong. CI runs the full sweep on every
