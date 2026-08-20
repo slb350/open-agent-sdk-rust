@@ -528,9 +528,9 @@ fn an_error_without_a_kind_still_reports_its_message() {
 }
 
 #[test]
-fn finalize_after_a_flush_does_not_re_emit_content() {
+fn content_emits_on_arrival_and_is_never_re_emitted() {
     let mut accumulator = AnthropicAccumulator::new();
-    accumulator
+    let delta = accumulator
         .process_event(text_delta(0, "body"))
         .expect("no error");
     let flushed = accumulator
@@ -538,7 +538,8 @@ fn finalize_after_a_flush_does_not_re_emit_content() {
         .expect("no error");
     let finalized = accumulator.finalize().expect("no error");
 
-    assert_eq!(text_of(&flushed), "body");
+    assert_eq!(text_of(&delta), "body");
+    assert_eq!(text_of(&flushed), "", "the drain must not repeat it");
     assert_eq!(text_of(&finalized), "");
     assert_eq!(finalized.len(), 1, "only Finish remains: {finalized:?}");
 }

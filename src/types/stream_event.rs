@@ -175,10 +175,14 @@ impl std::fmt::Display for FinishReason {
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum StreamEvent {
-    /// A completed content block: assistant text, or a fully assembled tool call.
+    /// One content fragment: a piece of assistant text as it arrives, or a fully assembled
+    /// tool call.
+    ///
+    /// Text arrives split across as many events as the server sent deltas, in order. Join
+    /// them to reconstruct the answer.
     Block(ContentBlock),
 
-    /// Accumulated reasoning/chain-of-thought text from the model's side channel.
+    /// One fragment of reasoning/chain-of-thought text from the model's side channel.
     ///
     /// Opt in with
     /// [`AgentOptions::builder().include_reasoning(true)`](crate::AgentOptionsBuilder::include_reasoning).

@@ -250,10 +250,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         client.send(query).await?;
 
+        // One label, then the answer streams in behind it fragment by fragment.
+        let mut labelled = false;
+
         while let Some(block) = client.receive().await? {
             match block {
                 ContentBlock::Text(text) => {
-                    println!("Assistant: {}", text.text);
+                    if !labelled {
+                        print!("Assistant: ");
+                        labelled = true;
+                    }
+                    print!("{}", text.text);
+                    std::io::Write::flush(&mut std::io::stdout())?;
                 }
                 ContentBlock::ToolUse(tool_use) => {
                     // This shouldn't happen in auto-execution mode

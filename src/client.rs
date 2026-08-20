@@ -46,7 +46,7 @@
 //!     │
 //!     ├─> Response streamed as Server-Sent Events (SSE)
 //!     │
-//!     ├─> SSE chunks aggregated into ContentBlocks
+//!     ├─> SSE chunks decoded: text and reasoning forwarded, tool calls assembled
 //!     │
 //!     └─> Blocks emitted to caller (or buffered for auto-execution)
 //! ```
@@ -184,7 +184,7 @@
 //! client.send("What's the capital of France?").await?;
 //! while let Some(block) = client.receive().await? {
 //!     if let ContentBlock::Text(text) = block {
-//!         println!("{}", text.text);
+//!         print!("{}", text.text);
 //!     }
 //! }
 //!
@@ -192,7 +192,7 @@
 //! client.send("What's its population?").await?;
 //! while let Some(block) = client.receive().await? {
 //!     if let ContentBlock::Text(text) = block {
-//!         println!("{}", text.text);
+//!         print!("{}", text.text);
 //!     }
 //! }
 //! # Ok(())
@@ -274,7 +274,7 @@
 //! // Tools are executed automatically - you only get final text response
 //! while let Some(block) = client.receive().await? {
 //!     if let ContentBlock::Text(text) = block {
-//!         println!("{}", text.text);
+//!         print!("{}", text.text);
 //!     }
 //! }
 //! # Ok(())
@@ -319,7 +319,8 @@ use crate::types::{
     StreamEvent, TextBlock,
 };
 use crate::utils::{
-    AnthropicAccumulator, StreamAccumulator, drive, parse_anthropic_sse_stream, parse_sse_stream,
+    AnthropicAccumulator, StreamAccumulator, coalesce_text_blocks, drive,
+    parse_anthropic_sse_stream, parse_sse_stream,
 };
 use crate::{Error, Result};
 use futures::stream::{Stream, StreamExt};

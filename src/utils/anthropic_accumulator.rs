@@ -23,7 +23,7 @@ use crate::{Error, Result};
 
 /// Aggregates [`AnthropicEvent`]s into completed [`StreamEvent`]s.
 pub struct AnthropicAccumulator {
-    /// Everything accumulated so far, and the policy for draining it.
+    /// The tool calls under assembly, and the policy for draining them.
     buffers: StreamBuffers,
 }
 
@@ -46,9 +46,9 @@ impl AnthropicAccumulator {
 
     /// Processes one event and returns any events it completed.
     ///
-    /// Returns an empty vector while generation is ongoing, and the drained buffers when the
-    /// server reports `stop_reason`. Never returns [`StreamEvent::Finish`]; only
-    /// [`AnthropicAccumulator::finalize`] emits that.
+    /// Returns the text and reasoning fragments the event carried, and the assembled tool
+    /// calls once the server reports `stop_reason`. Never returns [`StreamEvent::Finish`];
+    /// only [`AnthropicAccumulator::finalize`] emits that.
     ///
     /// # Errors
     ///
@@ -59,14 +59,10 @@ impl AnthropicAccumulator {
             AnthropicEvent::ContentBlockStart {
                 index,
                 content_block,
-            } => {
-                self.open_block(index, content_block);
-                Ok(Vec::new())
-            }
+            } => Ok(self.open_block(index, content_block).into_iter().collect()),
 
             AnthropicEvent::ContentBlockDelta { index, delta } => {
-                self.append_delta(index, delta);
-                Ok(Vec::new())
+                Ok(self.append_delta(index, delta).into_iter().collect())
             }
 
             AnthropicEvent::MessageDelta { delta } => match delta.stop_reason {
@@ -79,7 +75,7 @@ impl AnthropicAccumulator {
 
             AnthropicEvent::Error { error } => Err(stream_error(&error)),
 
-            // `content_block_stop` closes a block whose content is already buffered, and
+            // `content_block_stop` closes a block whose content has already been forwarded, and
             // `message_stop` follows the `message_delta` that carried the stop reason.
             // Neither adds information, and flushing on them would emit content twice.
             AnthropicEvent::MessageStart {}
@@ -90,25 +86,26 @@ impl AnthropicAccumulator {
         }
     }
 
-    /// Records a block's identity, and any content it already carried.
-    fn open_block(&mut self, index: u32, block: AnthropicBlockStart) {
+    /// Records a block's identity, and forwards any content it already carried.
+    fn open_block(&mut self, index: u32, block: AnthropicBlockStart) -> Option<StreamEvent> {
         match block {
-            AnthropicBlockStart::Text { text } => self.buffers.push_text(&text),
-            AnthropicBlockStart::Thinking { thinking } => self.buffers.push_reasoning(&thinking),
+            AnthropicBlockStart::Text { text } => self.buffers.push_text(text),
+            AnthropicBlockStart::Thinking { thinking } => self.buffers.push_reasoning(thinking),
             AnthropicBlockStart::ToolUse { id, name } => {
                 let call = self.buffers.tool_call(index);
                 call.id = Some(id);
                 call.name = Some(name);
+                None
             }
-            AnthropicBlockStart::RedactedThinking {} | AnthropicBlockStart::Unknown => {}
+            AnthropicBlockStart::RedactedThinking {} | AnthropicBlockStart::Unknown => None,
         }
     }
 
     /// Routes one fragment to the channel its own tag names.
-    fn append_delta(&mut self, index: u32, delta: AnthropicDelta) {
+    fn append_delta(&mut self, index: u32, delta: AnthropicDelta) -> Option<StreamEvent> {
         match delta {
-            AnthropicDelta::TextDelta { text } => self.buffers.push_text(&text),
-            AnthropicDelta::ThinkingDelta { thinking } => self.buffers.push_reasoning(&thinking),
+            AnthropicDelta::TextDelta { text } => self.buffers.push_text(text),
+            AnthropicDelta::ThinkingDelta { thinking } => self.buffers.push_reasoning(thinking),
             AnthropicDelta::InputJsonDelta { partial_json } => {
                 // A fragment for a block that never opened has no id or name to emit under,
                 // so there is nothing to attach it to. Dropping it is the only option that
@@ -116,8 +113,9 @@ impl AnthropicAccumulator {
                 if let Some(call) = self.buffers.open_tool_call(index) {
                     call.arguments.push_str(&partial_json);
                 }
+                None
             }
-            AnthropicDelta::SignatureDelta {} | AnthropicDelta::Unknown => {}
+            AnthropicDelta::SignatureDelta {} | AnthropicDelta::Unknown => None,
         }
     }
 

@@ -10,8 +10,8 @@
 ///
 /// # Events
 ///
-/// - [`StreamEvent::Block`]: a completed [`ContentBlock`] — assistant text, or a fully
-///   assembled tool call
+/// - [`StreamEvent::Block`]: one [`ContentBlock`] — a fragment of assistant text as it
+///   arrives, or a fully assembled tool call
 /// - [`StreamEvent::Reasoning`]: chain-of-thought text, only when
 ///   [`AgentOptions::include_reasoning`] is enabled
 /// - [`StreamEvent::Finish`]: exactly once, as the final item, carrying the
@@ -88,8 +88,9 @@ pub type EventStream = Pin<Box<dyn Stream<Item = Result<StreamEvent>> + Send>>;
 /// 4. Makes an HTTP POST request to the path the configured
 ///    [`ApiProtocol`](crate::ApiProtocol) selects
 /// 5. Parses Server-Sent Events (SSE) response stream
-/// 6. Aggregates chunks into complete content blocks
-/// 7. Returns stream that yields events as they complete, ending with `Finish`
+/// 6. Forwards each text and reasoning fragment as it arrives, and assembles tool calls,
+///    whose arguments are not valid JSON until the last fragment lands
+/// 7. Returns stream that yields events as they arrive, ending with `Finish`
 ///
 /// # Error Handling
 ///

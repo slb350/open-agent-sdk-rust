@@ -2,14 +2,20 @@
 //!
 //! [`StreamAccumulator`](super::StreamAccumulator) and
 //! [`AnthropicAccumulator`](super::AnthropicAccumulator) decode different wire vocabularies,
-//! but what they do with the results is the same: concatenate text, concatenate or discard
-//! reasoning, assemble tool calls by index, remember the first stop reason, and drain the lot
-//! in one fixed order. Only the decoding differs, so only the decoding lives per protocol.
+//! but what they do with the results is the same: forward text and reasoning to the caller as
+//! each fragment lands, assemble tool calls by index, remember the first stop reason, and
+//! drain what is left in one fixed order. Only the decoding differs, so only the decoding
+//! lives per protocol.
+//!
+//! Text and reasoning pass straight through because a fragment of either is already
+//! meaningful. Tool calls cannot: their arguments arrive split at arbitrary byte positions and
+//! are not valid JSON until the last fragment lands, so they are the only thing still held to
+//! the drain.
 //!
 //! Four of the crate's documented invariants are decided here rather than twice over:
 //! `Finish` is emitted exactly once and only by [`StreamBuffers::finalize`],
-//! [`FinishReason::Unspecified`] stays distinct from [`FinishReason::Stop`], reasoning has no
-//! path into the text buffer, and parallel tool calls emit in ascending index order.
+//! [`FinishReason::Unspecified`] stays distinct from [`FinishReason::Stop`], reasoning never
+//! reaches the content channel, and parallel tool calls emit in ascending index order.
 
 use std::collections::BTreeMap;
 
@@ -35,14 +41,7 @@ pub struct PartialToolCall {
 
 /// The accumulated state of one streaming response.
 pub struct StreamBuffers {
-    /// Assistant text, concatenated across content fragments.
-    text: String,
-
-    /// Reasoning, concatenated across thinking fragments. Stays empty unless
-    /// `capture_reasoning` is set.
-    reasoning: String,
-
-    /// Whether reasoning fragments are retained for emission or dropped on arrival.
+    /// Whether reasoning fragments are emitted or dropped on arrival.
     capture_reasoning: bool,
 
     /// Tool calls under construction, keyed by the index the wire gave them. Ordered rather
@@ -57,32 +56,37 @@ impl StreamBuffers {
     /// Creates empty buffers with reasoning capture disabled.
     pub fn new() -> Self {
         Self {
-            text: String::new(),
-            reasoning: String::new(),
             capture_reasoning: false,
             tool_calls: BTreeMap::new(),
             finish_reason: None,
         }
     }
 
-    /// Sets whether reasoning fragments are retained for emission.
+    /// Sets whether reasoning fragments are emitted.
     pub fn set_capture_reasoning(&mut self, capture: bool) {
         self.capture_reasoning = capture;
     }
 
-    /// Appends a fragment of assistant text.
-    pub fn push_text(&mut self, text: &str) {
-        self.text.push_str(text);
+    /// Turns a fragment of assistant text into the event that carries it.
+    ///
+    /// `None` for an empty fragment: the first chunk of an OpenAI stream routinely carries an
+    /// empty content string alongside the role, and a block per such chunk would hand callers
+    /// a stream of empty strings to filter out.
+    pub fn push_text(&self, text: impl Into<String>) -> Option<StreamEvent> {
+        let text = text.into();
+        (!text.is_empty()).then(|| StreamEvent::Block(ContentBlock::Text(TextBlock::new(text))))
     }
 
-    /// Appends a fragment of reasoning, or drops it when capture is disabled.
+    /// Turns a fragment of reasoning into an event, or drops it when capture is disabled.
     ///
-    /// The check lives here so that no caller can reach the text buffer with reasoning by
+    /// The check lives here so that no decoder can route reasoning into the content channel by
     /// forgetting it, which is what makes the separation a property of this type.
-    pub fn push_reasoning(&mut self, reasoning: &str) {
-        if self.capture_reasoning {
-            self.reasoning.push_str(reasoning);
-        }
+    pub fn push_reasoning(&self, reasoning: impl Into<String>) -> Option<StreamEvent> {
+        // Converted only when capture is on, so a discarded trace costs nothing to discard.
+        self.capture_reasoning
+            .then(|| reasoning.into())
+            .filter(|reasoning: &String| !reasoning.is_empty())
+            .map(StreamEvent::Reasoning)
     }
 
     /// The tool call at `index`, opening one if this is the first fragment for it.
@@ -112,11 +116,11 @@ impl StreamBuffers {
         }
     }
 
-    /// Drains accumulated content into completed events.
+    /// Drains the assembled tool calls, in ascending index order.
     ///
-    /// Emits reasoning first (it precedes the answer it produced), then text, then tool calls
-    /// in ascending index order. Empty when nothing has accumulated since the last drain,
-    /// which is what makes it safe to call unconditionally without double-emitting.
+    /// Text and reasoning have already reached the caller by the time this runs. Empty when
+    /// nothing has accumulated since the last drain, which is what makes it safe to call
+    /// unconditionally without double-emitting.
     ///
     /// # Errors
     ///
@@ -124,19 +128,6 @@ impl StreamBuffers {
     /// means the stream was truncated or corrupted mid-call.
     pub fn flush(&mut self) -> Result<Vec<StreamEvent>> {
         let mut events = Vec::new();
-
-        // Always empty unless capture was requested, so this costs nothing by default.
-        if !self.reasoning.is_empty() {
-            events.push(StreamEvent::Reasoning(std::mem::take(&mut self.reasoning)));
-        }
-
-        // `take` moves the buffer into the block and leaves an empty String behind, so the
-        // whole response body is not copied.
-        if !self.text.is_empty() {
-            events.push(StreamEvent::Block(ContentBlock::Text(TextBlock::new(
-                std::mem::take(&mut self.text),
-            ))));
-        }
 
         for partial in std::mem::take(&mut self.tool_calls).into_values() {
             // A call missing either half has nothing to emit under. It should not happen

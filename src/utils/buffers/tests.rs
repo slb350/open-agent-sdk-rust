@@ -13,27 +13,42 @@ fn nothing_accumulated_flushes_to_nothing() {
 }
 
 #[test]
-fn reasoning_precedes_text_which_precedes_tool_calls() {
+fn text_and_reasoning_emit_on_arrival_while_tool_calls_wait_for_the_drain() {
     let mut buffers = StreamBuffers::new();
     buffers.set_capture_reasoning(true);
-    buffers.push_reasoning("thinking");
-    buffers.push_text("answer");
+
+    let reasoning = buffers.push_reasoning("thinking").expect("reasoning event");
+    let text = buffers.push_text("answer").expect("text event");
     let call = buffers.tool_call(0);
     call.id = Some("call_1".to_string());
     call.name = Some("search".to_string());
 
-    let events = buffers.flush().expect("flush");
+    assert!(
+        matches!(reasoning, StreamEvent::Reasoning(_)),
+        "{reasoning:?}"
+    );
+    assert!(
+        matches!(text, StreamEvent::Block(ContentBlock::Text(_))),
+        "{text:?}"
+    );
 
-    assert!(matches!(events[0], StreamEvent::Reasoning(_)), "{events:?}");
+    // Ordering is the caller's arrival order for those two; the drain holds only the call.
+    let events = buffers.flush().expect("flush");
+    assert_eq!(events.len(), 1, "{events:?}");
     assert!(
-        matches!(events[1], StreamEvent::Block(ContentBlock::Text(_))),
+        matches!(events[0], StreamEvent::Block(ContentBlock::ToolUse(_))),
         "{events:?}"
     );
-    assert!(
-        matches!(events[2], StreamEvent::Block(ContentBlock::ToolUse(_))),
-        "{events:?}"
-    );
-    assert_eq!(events.len(), 3, "{events:?}");
+}
+
+#[test]
+fn an_empty_fragment_produces_no_event() {
+    let mut buffers = StreamBuffers::new();
+    buffers.set_capture_reasoning(true);
+
+    assert!(buffers.push_text("").is_none());
+    assert!(buffers.push_reasoning("").is_none());
+    assert!(buffers.push_text("x").is_some());
 }
 
 #[test]
@@ -61,23 +76,15 @@ fn tool_calls_emit_in_ascending_index_order_regardless_of_arrival() {
 #[test]
 fn reasoning_is_dropped_on_arrival_unless_capture_is_enabled() {
     let mut buffers = StreamBuffers::new();
-    buffers.push_reasoning("deliberation");
-    buffers.push_text("answer");
 
-    let events = buffers.flush().expect("flush");
+    assert!(buffers.push_reasoning("deliberation").is_none());
 
-    assert!(
-        !events
-            .iter()
-            .any(|event| matches!(event, StreamEvent::Reasoning(_))),
-        "{events:?}"
-    );
     // The critical half: dropping it must not mean merging it into the answer.
-    assert_eq!(events.len(), 1, "{events:?}");
-    match &events[0] {
+    match buffers.push_text("answer").expect("text event") {
         StreamEvent::Block(ContentBlock::Text(text)) => assert_eq!(text.text, "answer"),
         other => panic!("expected text, got {other:?}"),
     }
+    assert!(buffers.flush().expect("flush").is_empty());
 }
 
 #[test]
@@ -105,7 +112,9 @@ fn an_unreported_finish_reason_is_unspecified_and_not_stop() {
 #[test]
 fn finalize_after_a_flush_does_not_re_emit_content() {
     let mut buffers = StreamBuffers::new();
-    buffers.push_text("answer");
+    let call = buffers.tool_call(0);
+    call.id = Some("call_1".to_string());
+    call.name = Some("search".to_string());
 
     let flushed = buffers.flush().expect("flush");
     assert_eq!(flushed.len(), 1, "{flushed:?}");

@@ -22,7 +22,8 @@
 //! - **Two Wire Protocols**: OpenAI chat completions or Anthropic messages, per endpoint
 //! - **Local or Hosted**: Zero-cost inference on your own hardware, or a vendor endpoint
 //! - **High Performance**: Native async/await with Tokio runtime
-//! - **Streaming Responses**: Real-time token-by-token streaming
+//! - **Streaming Responses**: Text and reasoning reach the caller fragment by fragment,
+//!   while the stream is still open
 //! - **Finish Reasons**: Every stream reports why generation stopped
 //! - **Reasoning Channel**: Extended thinking and reasoning deltas kept out of content
 //! - **Tool Calling**: Define and execute tools with automatic schema generation
@@ -181,6 +182,13 @@ pub mod retry;
 // --- Core Client API ---
 
 pub use client::{Client, EventStream, query};
+
+// --- Stream Assembly ---
+//
+// The counterpart to fragment-by-fragment delivery: the join the SDK applies before writing a
+// turn to history, exported so a caller holding collected blocks can apply the same one.
+
+pub use utils::coalesce_text_blocks;
 
 // --- Provider Configuration ---
 

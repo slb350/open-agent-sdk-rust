@@ -55,12 +55,13 @@ async fn tool_calls_are_flushed_when_stream_ends_without_finish_reason() {
 }
 
 #[tokio::test]
-async fn finish_reason_stream_still_emits_exactly_one_text_block() {
-    // The flush must not double-emit content that finish_reason already flushed.
+async fn content_is_emitted_exactly_once_when_a_finish_reason_arrives() {
+    // Each delta emits on arrival, so the end-of-stream drain must add nothing: a drain that
+    // still carried content would repeat the whole response after it.
     let body = text_chunk("Hello", None) + &text_chunk(" world", Some("stop")) + DONE;
     let blocks = collect_blocks(body).await;
 
-    assert_eq!(blocks.len(), 1, "expected exactly one block: {blocks:?}");
+    assert_eq!(blocks.len(), 2, "one block per delta: {blocks:?}");
     assert_eq!(text_of(&blocks), "Hello world");
 }
 

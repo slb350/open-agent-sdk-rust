@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-08-19
+
+Streaming that actually streams. Every release since 0.1.0 advertised token-by-token
+delivery, and every release since 0.1.0 concatenated the whole response and handed it over in
+one block when the stream ended.
+
+### Breaking
+
+- **Text and reasoning now reach the caller fragment by fragment.** A response that used to
+  arrive as one `StreamEvent::Block(ContentBlock::Text(..))` at the end of the stream now
+  arrives as one event per delta, in order, while the stream is still open. The same applies
+  to `StreamEvent::Reasoning` and to `Client::receive()`, which yields a block per fragment.
+
+  Code that concatenates what it receives is unaffected. Code that treated the first text
+  block as the entire answer — `blocks[0]`, `blocks.len() == 1`, or a `match` that returns on
+  the first `Text` — now sees a prefix of the answer instead. Join the fragments:
+
+  ```rust
+  let mut answer = String::new();
+  while let Some(event) = stream.next().await {
+      if let StreamEvent::Block(ContentBlock::Text(text)) = event? {
+          answer.push_str(&text.text);
+      }
+  }
+  ```
+
+  Empty deltas emit nothing, so the common first chunk of an OpenAI stream (an empty content
+  string alongside the role) does not turn into an empty block.
+
+### Added
+
+- **`coalesce_text_blocks`**, exported. It is the join the SDK applies before writing an
+  assistant turn to history, so a caller that collects blocks and wants whole ones does not
+  have to hand-write it.
+
+### Unchanged
+
+- **Conversation history still records one text block per assistant turn.** The fragments are
+  joined before the turn is written, so what is replayed to the server on the next request is
+  byte-identical to what 0.9.x sent. A message per fragment would multiply the assistant
+  turns in every subsequent request.
+- **Tool calls still emit whole, at the end of the stream, in ascending index order.** Their
+  arguments arrive split at arbitrary byte positions and are not valid JSON until the last
+  fragment lands, so a tool call is the one thing that cannot stream.
+- Exactly one `StreamEvent::Finish`, and it is still the last event.
+
+### Internal
+
+- `StreamBuffers` no longer holds text or reasoning at all: `push_text` and `push_reasoning`
+  return the event that carries the fragment, and `flush` drains only the assembled tool
+  calls. Both protocol accumulators forward what those calls return.
+- `Client::push_assistant` is now the only place streamed blocks become a `Message`, so the
+  join cannot be forgotten by a new call site. It was four places, one of which the wire
+  builder would have silently garbled by joining text blocks with newlines.
+
 ## [0.9.1] - 2026-08-19
 
 Documentation only. No API or behaviour change: 0.9.0's published rustdoc still described the

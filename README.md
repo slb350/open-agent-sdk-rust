@@ -16,9 +16,9 @@
 - **Control** - pick your model (Qwen, Llama, Mistral, Claude, etc.)
 
 **How fast?**
-From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 554 active tests.
+From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 569 active tests.
 
-[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.9.1)](https://crates.io/crates/open-agent-sdk)
+[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.10.0)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -29,7 +29,7 @@ From zero to working agent in under 5 minutes. Rust-native performance (zero-cos
 Open Agent SDK (Rust) provides a clean, streaming API for working with local and cloud model servers over two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint. 100% feature parity with the Python SDK—complete with transport-boundary-safe SSE streaming, tool call aggregation, hooks, and automatic tool execution—built on Tokio for high-performance async I/O.
 
 **Streaming is tolerant of real-world servers.** SSE events are buffered across arbitrary HTTP
-transport chunk boundaries, and accumulated content is flushed when the stream ends — including
+transport chunk boundaries, and anything still held is flushed when the stream ends — including
 when a server closes the connection or sends `data: [DONE]` without ever setting
 `finish_reason`, which llama.cpp, vLLM, and several local gateways do. Content is never
 silently dropped.
@@ -82,7 +82,7 @@ explicitly when an endpoint asks for them.
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.9.1"
+open-agent-sdk = "0.10.0"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -95,6 +95,47 @@ git clone https://github.com/slb350/open-agent-sdk-rust.git
 cd open-agent-sdk-rust
 cargo build
 ```
+
+### Upgrading from 0.9.x
+
+v0.10.0 has one breaking change, and the compiler does **not** catch it: the types are
+unchanged, only how many events carry the same text.
+
+**Text and reasoning arrive fragment by fragment.** A response that used to arrive as one
+`ContentBlock::Text` at the end of the stream now arrives as one block per delta, in order,
+while the stream is still open — which is what the SDK has always claimed streaming meant.
+Code that concatenates what it receives needs no change. Code that read the first text block
+as the whole answer now reads a prefix of it:
+
+```rust
+// Before: happened to work, because there was only ever one text block.
+if let Some(StreamEvent::Block(ContentBlock::Text(text))) = stream.next().await.transpose()? {
+    println!("{}", text.text);   // now prints the first few tokens only
+}
+
+// After: join the fragments, printing them as they land.
+let mut answer = String::new();
+while let Some(event) = stream.next().await {
+    if let StreamEvent::Block(ContentBlock::Text(text)) = event? {
+        print!("{}", text.text);
+        answer.push_str(&text.text);
+    }
+}
+```
+
+If you already collect blocks and want the old shape back, `coalesce_text_blocks` is the join
+the SDK applies internally, now exported:
+
+```rust
+use open_agent::coalesce_text_blocks;
+
+let whole = coalesce_text_blocks(&collected);   // adjacent text joined, tool calls untouched
+```
+
+Conversation history is unaffected — the fragments are joined before the assistant turn is
+written, so the next request replays exactly what 0.9.x replayed. Tool calls are unaffected:
+their arguments are only valid JSON once the last fragment lands, so they still emit whole at
+the end of the stream, in ascending index order.
 
 ### Upgrading from 0.8.x
 
@@ -284,7 +325,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(block) = client.receive().await? {
         match block {
             ContentBlock::Text(text) => {
-                println!("Assistant: {}", text.text);
+                print!("{}", text.text);
             }
             ContentBlock::ToolUse(tool_use) => {
                 println!("Tool used: {}", tool_use.name());
@@ -376,7 +417,7 @@ while let Some(block) = client.receive().await? {
             client.send("").await?;
         }
         ContentBlock::Text(text) => {
-            println!("{}", text.text);
+            print!("{}", text.text);
         }
         _ => {}
     }
@@ -1293,7 +1334,8 @@ open-agent-sdk-rust/
 │   ├── types/             # Options, messages, images, OpenAI + Anthropic wire types, ApiProtocol
 │   ├── utils.rs           # SSE parsing, stream accumulation, and the shared stream driver
 │   └── utils/             # accumulator.rs + anthropic_accumulator.rs (wire decoding),
-│                          # buffers.rs (the shared drain), driver.rs, sse.rs
+│                          # buffers.rs (the shared drain), coalesce.rs (text joining for
+│                          # history), driver.rs, sse.rs
 ├── examples/
 │   ├── simple_query.rs              # Basic streaming query
 │   ├── anthropic_query.rs           # Anthropic messages endpoint via ApiProtocol
@@ -1313,6 +1355,7 @@ open-agent-sdk-rust/
 │   └── performance.rs               # Criterion benchmarks (token estimation, history ops)
 ├── tests/
 │   ├── integration_tests.rs         # Core integration tests
+│   ├── regression_incremental_streaming_test.rs  # Per-fragment delivery; joined history
 │   ├── advanced_integration_test.rs
 │   ├── anthropic_protocol_test.rs   # Path, headers, body, and event vocabulary per protocol
 │   ├── auto_execution_test.rs
@@ -1403,11 +1446,11 @@ cargo mutants --no-shuffle -j 4
 
 **Test Coverage:**
 
-- 242 unit tests (lib)
-- 149 active integration tests across 25 test files
-- 163 active doctests
+- 248 unit tests (lib)
+- 157 active integration tests across 26 test files
+- 164 active doctests
 
-Total: 554 active unit, integration, and documentation tests
+Total: 569 active unit, integration, and documentation tests
 
 **Mutation testing** is part of the gate, not an optional extra: a green suite proves the
 tests ran, not that they would notice if the code were wrong. CI runs the full sweep on every
@@ -1455,6 +1498,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.9.1 - Anthropic messages protocol alongside OpenAI chat completions selected per endpoint with `ApiProtocol`, extended thinking on the existing reasoning channel, omittable `temperature`, plus from v0.8.0 finish reasons surfaced on every stream, explicit reasoning-channel separation, end-of-stream flushing for servers that omit `finish_reason`, structured `Error::Api` with status-based retry classification, no implicit `max_tokens` cap, a mandatory mutation-testing gate, plus transport-boundary-safe SSE streaming, complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, GitHub-hosted Linux/macOS CI, non-locking cancellation, and multimodal image support
+**Status**: v0.10.0 - Incremental text and reasoning delivery, plus from v0.9.0 the Anthropic messages protocol alongside OpenAI chat completions selected per endpoint with `ApiProtocol`, extended thinking on the existing reasoning channel, omittable `temperature`, plus from v0.8.0 finish reasons surfaced on every stream, explicit reasoning-channel separation, end-of-stream flushing for servers that omit `finish_reason`, structured `Error::Api` with status-based retry classification, no implicit `max_tokens` cap, a mandatory mutation-testing gate, plus transport-boundary-safe SSE streaming, complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, GitHub-hosted Linux/macOS CI, non-locking cancellation, and multimodal image support
 
 Star this repo if you're building AI agents with local models in Rust!

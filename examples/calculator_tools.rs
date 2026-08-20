@@ -90,15 +90,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut client = Client::new(options.clone())?;
         client.send(query).await?;
 
+        // Text arrives fragment by fragment, so the label is printed once, at the first
+        // fragment, and the rest streams in behind it.
+        let mut labelled = false;
+
         // Process responses and handle tool calls
         while let Some(block) = client.receive().await? {
             match block {
                 ContentBlock::Text(text) => {
-                    if !text.text.trim().is_empty() {
-                        println!("Assistant: {}", text.text);
+                    if !text.text.trim().is_empty() && !labelled {
+                        print!("Assistant: ");
+                        labelled = true;
                     }
+                    print!("{}", text.text);
+                    std::io::Write::flush(&mut std::io::stdout())?;
                 }
                 ContentBlock::ToolUse(tool_use) => {
+                    if labelled {
+                        println!();
+                        labelled = false;
+                    }
                     println!("🔧 Tool call: {}", tool_use.name());
                     println!("   Arguments: {}", tool_use.input());
 

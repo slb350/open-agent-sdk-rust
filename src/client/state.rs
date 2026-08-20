@@ -67,7 +67,7 @@
 /// client.send("What's the capital of France?").await?;
 /// while let Some(block) = client.receive().await? {
 ///     if let ContentBlock::Text(text) = block {
-///         println!("{}", text.text); // "Paris is the capital of France."
+///         print!("{}", text.text); // fragments of "Paris is the capital of France."
 ///     }
 /// }
 ///
@@ -75,7 +75,7 @@
 /// client.send("What's its population?").await?;
 /// while let Some(block) = client.receive().await? {
 ///     if let ContentBlock::Text(text) = block {
-///         println!("{}", text.text); // "Paris has approximately 2.2 million people."
+///         print!("{}", text.text); // fragments of the answer, in order
 ///     }
 /// }
 /// # Ok(())
@@ -115,7 +115,7 @@
 ///             client.send("").await?;
 ///         }
 ///         ContentBlock::Text(text) => {
-///             println!("{}", text.text); // "The result is 4."
+///             print!("{}", text.text); // fragments of "The result is 4."
 ///         }
 ///         ContentBlock::ToolResult(_) | ContentBlock::Image(_) => {}
 ///     }
@@ -150,7 +150,7 @@
 /// // Tools execute automatically - you only receive final text
 /// while let Some(block) = client.receive().await? {
 ///     if let ContentBlock::Text(text) = block {
-///         println!("{}", text.text); // "The result is 4."
+///         print!("{}", text.text); // fragments of "The result is 4."
 ///     }
 /// }
 /// # Ok(())

@@ -74,11 +74,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Try to receive response
             let mut block_count = 0;
+            let mut text = String::new();
             while let Some(block) = client.receive().await? {
                 block_count += 1;
                 match block {
-                    ContentBlock::Text(text) => {
-                        println!("✓ Received text block: {}", text.text);
+                    // Text arrives one fragment per delta; report the whole answer once the
+                    // stream drains rather than a line per token.
+                    ContentBlock::Text(fragment) => {
+                        text.push_str(&fragment.text);
                     }
                     ContentBlock::ToolUse(tool_use) => {
                         println!(
@@ -96,8 +99,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
 
+            if !text.is_empty() {
+                println!("✓ Received text: {text}");
+            }
+
             println!("\n✓ Test completed successfully!");
-            println!("  Total blocks received: {}", block_count);
+            println!("  Total blocks received: {block_count} (text arrives one per delta)");
             println!(
                 "  Check the debug logs above to verify tool_calls and tool_call_id are populated"
             );

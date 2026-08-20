@@ -204,8 +204,8 @@ impl Client {
             if tool_blocks.is_empty() {
                 // Add assistant's final text response to history
                 if !text_blocks.is_empty() {
-                    let assistant_msg = Message::assistant(text_blocks.clone());
-                    self.history.push(assistant_msg);
+                    // History gets the joined turn; the caller keeps the fragments.
+                    self.push_assistant(&text_blocks);
                 }
                 // Return text blocks to caller via buffered receive()
                 return Ok(text_blocks);
@@ -226,8 +226,7 @@ impl Client {
                 // answer. Report the reason we are responsible for.
                 self.last_finish_reason = Some(FinishReason::MaxToolIterations);
                 if !text_blocks.is_empty() {
-                    let assistant_msg = Message::assistant(text_blocks.clone());
-                    self.history.push(assistant_msg);
+                    self.push_assistant(&text_blocks);
                 }
                 return Ok(text_blocks);
             }
@@ -239,8 +238,7 @@ impl Client {
             // This preserves the full context for future turns
             let mut all_blocks = text_blocks.clone();
             all_blocks.extend(tool_blocks.clone());
-            let assistant_msg = Message::assistant(all_blocks);
-            self.history.push(assistant_msg);
+            self.push_assistant(&all_blocks);
 
             // ========================================================================
             // STEP 6: Execute all tools and collect results

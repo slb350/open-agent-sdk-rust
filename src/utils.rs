@@ -11,9 +11,10 @@
 //!
 //! - [`sse`] decodes the SSE wire format, buffering across arbitrary HTTP transport chunk
 //!   boundaries so an event split mid-JSON (or mid-UTF-8) still parses.
-//! - [`accumulator`] and [`anthropic_accumulator`] reassemble the per-event deltas — text,
-//!   reasoning, and tool call arguments all arrive fragmented — and decide when a complete
-//!   block can be emitted. One per wire protocol, since only the vocabulary differs.
+//! - [`accumulator`] and [`anthropic_accumulator`] decode the per-event deltas, forwarding
+//!   text and reasoning as each fragment lands and reassembling tool call arguments, which are
+//!   not valid JSON until the last one does. One per wire protocol, since only the vocabulary
+//!   differs.
 //! - [`driver`] owns everything that does not: the end-of-transport sentinel, threading the
 //!   accumulator through the stream, and flattening its batches.
 //!
@@ -26,6 +27,7 @@
 mod accumulator;
 mod anthropic_accumulator;
 mod buffers;
+mod coalesce;
 mod driver;
 mod sse;
 
@@ -34,5 +36,6 @@ mod test_support;
 
 pub use accumulator::StreamAccumulator;
 pub use anthropic_accumulator::AnthropicAccumulator;
+pub use coalesce::coalesce_text_blocks;
 pub use driver::{EventAccumulator, drive};
 pub use sse::{parse_anthropic_sse_stream, parse_sse_stream};

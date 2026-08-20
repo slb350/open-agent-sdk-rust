@@ -188,8 +188,15 @@
         assert_eq!(client.history()[0].role, MessageRole::User);
         assert_eq!(client.history()[1].role, MessageRole::Assistant);
 
-        // Assistant message should contain both text blocks
-        assert_eq!(client.history()[1].content.len(), 2);
+        // Both fragments reach the caller, but history stores the turn as one block: a
+        // message per delta would replay a dozen assistant turns on the next request.
+        assert_eq!(client.history()[1].content.len(), 1);
+        match &client.history()[1].content[0] {
+            ContentBlock::Text(text) => {
+                assert_eq!(text.text, "Paris is the capital of France.");
+            }
+            other => panic!("expected one joined text block, got {other:?}"),
+        }
     }
 
     #[tokio::test]

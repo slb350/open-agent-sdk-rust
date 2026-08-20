@@ -100,7 +100,7 @@ impl Client {
     ///             client.send("").await?;
     ///         }
     ///         ContentBlock::Text(text) => {
-    ///             println!("{}", text.text);
+    ///             print!("{}", text.text);
     ///         }
     ///         ContentBlock::ToolResult(_) | ContentBlock::Image(_) => {}
     ///     }
@@ -171,6 +171,15 @@ impl Client {
     /// # Ok(())
     /// # }
     /// ```
+    /// Writes one assistant turn to history from the fragments a stream delivered.
+    ///
+    /// The single place streamed blocks become a `Message`, so the join that keeps history at
+    /// one text block per turn cannot be forgotten by a new call site.
+    pub(crate) fn push_assistant(&mut self, blocks: &[ContentBlock]) {
+        self.history
+            .push(Message::assistant(coalesce_text_blocks(blocks)));
+    }
+
     pub fn add_tool_result(&mut self, tool_use_id: &str, content: serde_json::Value) -> Result<()> {
         use crate::types::ToolResultBlock;
 
@@ -178,7 +187,7 @@ impl Client {
         // tool_calls message appears in history before this tool result.
         if !self.manual_receive_buffer.is_empty() {
             let blocks = std::mem::take(&mut self.manual_receive_buffer);
-            self.history.push(Message::assistant(blocks));
+            self.push_assistant(&blocks);
         }
 
         // Create a tool result block with the given ID and content

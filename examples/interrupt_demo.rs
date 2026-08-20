@@ -154,8 +154,8 @@ async fn concurrent_example() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(block) = client.receive().await? {
         if let ContentBlock::Text(text) = block {
             print!("{}", text.text);
+            std::io::Write::flush(&mut std::io::stdout())?;
             full_text.push_str(&text.text);
-            tokio::time::sleep(Duration::from_millis(50)).await; // Simulate processing
         }
     }
 
@@ -194,11 +194,15 @@ async fn retry_example() -> Result<(), Box<dyn std::error::Error>> {
         .send("Tell me everything about the history of computing")
         .await?;
 
-    let mut count = 0;
+    // Text arrives fragment by fragment, so "enough to judge the answer" is measured in
+    // characters rather than blocks: a block count would trip after three tokens.
+    let mut seen = 0;
     while let Some(block) = client.receive().await? {
-        if let ContentBlock::Text(_) = block {
-            count += 1;
-            if count == 3 {
+        if let ContentBlock::Text(text) = block {
+            print!("{}", text.text);
+            std::io::Write::flush(&mut std::io::stdout())?;
+            seen += text.text.len();
+            if seen >= 120 {
                 println!("\n⚠️  Oops, that was too broad. Interrupting...\n");
                 client.interrupt();
                 break;

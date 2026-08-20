@@ -90,7 +90,7 @@ impl Client {
     /// while let Some(block) = client.receive().await? {
     ///     match block {
     ///         ContentBlock::Text(text) => {
-    ///             println!("{}", text.text);
+    ///             print!("{}", text.text);
     ///         }
     ///         ContentBlock::ToolUse(tool_use) => {
     ///             println!("Executing: {}", tool_use.name());
@@ -124,7 +124,7 @@ impl Client {
     /// // Tools execute automatically - you only get final text
     /// while let Some(block) = client.receive().await? {
     ///     if let ContentBlock::Text(text) = block {
-    ///         println!("{}", text.text);
+    ///         print!("{}", text.text);
     ///     }
     /// }
     /// # Ok(())
@@ -225,7 +225,7 @@ impl Client {
                         // Either natural EOF or interrupt after stream already
                         // finished — commit the (complete) assistant message.
                         let blocks = std::mem::take(&mut self.manual_receive_buffer);
-                        self.history.push(Message::assistant(blocks));
+                        self.push_assistant(&blocks);
                     }
                     Ok(None)
                 }

@@ -88,13 +88,13 @@ fn finalize_replays_the_reported_finish_reason() {
 #[test]
 fn finalize_reports_unspecified_when_the_server_never_said() {
     let mut accumulator = StreamAccumulator::new();
-    accumulator
+    let mut events = accumulator
         .process_chunk(chunk(text_delta("stranded"), None))
         .expect("chunk processes");
+    events.extend(accumulator.finalize().expect("finalize"));
 
-    let events = accumulator.finalize().expect("finalize");
-
-    // The 0.7.0 flush fix: content must survive a stream that never reports a reason.
+    // The 0.7.0 flush fix, now carried by delivery on arrival: content must survive a stream
+    // that never reports a reason.
     assert_eq!(text_of(&events), "stranded");
     assert_eq!(
         events.last().and_then(StreamEvent::finish_reason),
@@ -247,10 +247,11 @@ fn the_openrouter_channel_is_read_when_deepseeks_is_absent() {
 }
 
 #[test]
-fn reasoning_accumulates_across_chunks() {
+fn reasoning_arrives_fragment_by_fragment_in_order() {
     let mut accumulator = StreamAccumulator::new().capture_reasoning(true);
+    let mut reasoning = Vec::new();
     for fragment in ["one ", "two ", "three"] {
-        accumulator
+        let events = accumulator
             .process_chunk(chunk(
                 OpenAIDelta {
                     reasoning_content: Some(fragment.to_string()),
@@ -259,10 +260,15 @@ fn reasoning_accumulates_across_chunks() {
                 None,
             ))
             .expect("chunk processes");
+        reasoning.extend(
+            events
+                .iter()
+                .filter_map(|event| event.as_reasoning().map(str::to_string)),
+        );
     }
 
-    let events = accumulator.finalize().expect("finalize");
-    assert_eq!(events[0].as_reasoning(), Some("one two three"));
+    assert_eq!(reasoning, vec!["one ", "two ", "three"]);
+    assert_eq!(reasoning.concat(), "one two three");
 }
 
 #[test]
