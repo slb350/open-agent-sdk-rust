@@ -193,5 +193,5 @@ fn test_builder_pattern_chain() {
 
     assert!(result.is_ok());
     let options = result.unwrap();
-    assert_eq!(options.temperature(), 0.7);
+    assert_eq!(options.temperature(), Some(0.7));
 }

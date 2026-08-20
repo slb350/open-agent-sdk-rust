@@ -7,6 +7,7 @@ fn development_only_files_are_excluded_from_package() {
         ".markdownlint.json",
         ".githooks/",
         "mutants.out/",
+        "scripts/",
     ] {
         assert!(
             manifest.contains(&format!("    \"{path}\",")),

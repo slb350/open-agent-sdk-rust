@@ -5,6 +5,82 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-08-19
+
+A second wire protocol. Several vendors publish their subscription coding tiers only behind
+an Anthropic-shaped `/messages` endpoint, so "which protocol" stopped being a property of
+the SDK and became a property of the endpoint.
+
+### Breaking
+
+- **`AgentOptions::temperature()` returns `Option<f32>`, and unset now means unset.** It
+  previously defaulted to 0.7 and was always sent. A growing number of models reject the
+  parameter outright — Anthropic's accepted range stops at 1.0, and `kimi-for-coding`'s `k3`
+  answers `only temperature 1 is allowed for this model` with a 400 — so a client-invented
+  default turns a working request into a hard error the caller never asked for. `None` omits
+  the field and the server decides, exactly as `max_tokens` has behaved since 0.7.0. The
+  builder method is unchanged: `.temperature(0.2)` still sets one.
+
+### Added
+
+- **`ApiProtocol`**, selecting the wire protocol per endpoint: `OpenAiChat` (the default,
+  and what every endpoint supported before this release speaks) or `Anthropic`. Set it with
+  `AgentOptions::builder().protocol(ApiProtocol::Anthropic)`. It selects the request path,
+  the auth header, the request body and the streaming vocabulary together.
+- **Anthropic messages support**: `POST {base_url}/messages` with `x-api-key` and
+  `anthropic-version`, the full streaming event vocabulary (`message_start`,
+  `content_block_start`/`_delta`/`_stop`, `message_delta`, `message_stop`, `ping`, `error`),
+  and extended thinking routed to the existing reasoning channel. Tool calls assemble from
+  `input_json_delta` fragments and emit as ordinary `ContentBlock::ToolUse` blocks.
+- **`anthropic_finish_reason()`**, mapping Anthropic stop reasons onto `FinishReason`.
+  `FinishReason::from_wire` is OpenAI-shaped and files every Anthropic spelling under
+  `Other`, so a caller branching on `Length` would never see a truncation.
+- **The Anthropic wire types are exported** — `AnthropicRequest`, `AnthropicMessage`,
+  `AnthropicEvent`, `AnthropicBlockStart`, `AnthropicDelta`, `AnthropicMessageDelta`,
+  `AnthropicErrorBody` — for the same reason the OpenAI ones are: a gateway, a recording
+  proxy or a test double needs to name what goes over the wire. `OpenAIRequest`,
+  `OpenAIMessage`, `OpenAIFunction` and `OpenAIToolCall` are now exported too, since
+  `AnthropicRequest::from_openai` takes one.
+
+### Fixed
+
+- A `data:` URI carrying parameters between the media type and `;base64,` — say
+  `data:image/png;charset=utf-8;base64,...` — reached an Anthropic request with
+  `image/png;charset=utf-8` as its media type, which the API rejects, for an image
+  `ImageBlock::from_url` had already accepted. Both now read the media type up to the first
+  `;`.
+
+### Internal
+
+- `OpenAIRequest` stays the single internal request representation. Both call sites build
+  one, and the translation to Anthropic happens once, at the transport boundary, so there is
+  no second request builder to drift.
+- The end-of-transport sentinel, the accumulator threading and the batch flattening moved
+  into `utils::drive`, shared by both protocols behind an `EventAccumulator` trait. That
+  machinery is a fix for a real defect — content stranded in the buffers when a server never
+  reports why it stopped — and a second transcription of it would be a second place for that
+  defect to return.
+- A mid-stream Anthropic `error` event is mapped onto the HTTP status it would have carried
+  had it arrived before the stream opened (`overloaded_error` → 529, `rate_limit_error` →
+  429, `api_error` → 500), because the retry layer classifies on `Error::status_code()` and
+  a mid-stream error has none of its own. Anything else stays a non-retryable stream error.
+- Both accumulators drain one shared `StreamBuffers` instead of a copy each. Four documented
+  invariants — exactly one `Finish` and it is last, `Unspecified` distinct from `Stop`,
+  reasoning with no path into the text buffer, ascending tool-call order — were asserted in
+  two implementations that had already drifted; they are decided in one place now, and only
+  the wire decoding stays per protocol.
+- Each accumulator carries its own `EventAccumulator` implementation, so `utils::driver`
+  names neither protocol and a third one is a new module rather than an edit to that one.
+- The tool-argument parse error names the tool for both protocols:
+  `Failed to parse tool call arguments for '<name>': <error>`. The OpenAI-side message was
+  `Failed to parse tool arguments: <error>`.
+- The mutation gate moved behind `scripts/mutants-run.sh`, which decides the verdict from
+  `missed.txt` rather than the exit code — cargo-mutants reports exit 3 (Timeout) ahead of
+  exit 2 (FoundProblems), so a run with one hang and one genuine survivor also exits 3. The
+  pre-commit hook now offloads its sweep to a LAN build host and falls back locally with a
+  warning; CI still runs it on the GitHub runner. `scripts/` is excluded from the published
+  crate.
+
 ## [0.8.0] - 2026-08-18
 
 Two pieces of information the SDK held internally and never handed over: why generation

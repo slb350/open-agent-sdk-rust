@@ -1,10 +1,10 @@
 [package]
 name = "open-agent-sdk"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Stephen Brandon"]
-description = "Production-ready Rust SDK for building AI agents with local OpenAI-compatible servers (LMStudio, Ollama, llama.cpp, vLLM). Features streaming, tools, hooks, retry logic, and comprehensive examples."
+description = "Production-ready Rust SDK for building AI agents over two wire protocols: OpenAI chat completions (LMStudio, Ollama, llama.cpp, vLLM, OpenRouter) and Anthropic messages. Features streaming, tools, hooks, retry logic, and comprehensive examples."
 documentation = "https://docs.rs/open-agent-sdk"
 homepage = "https://github.com/slb350/open-agent-sdk-rust"
 repository = "https://github.com/slb350/open-agent-sdk-rust"
@@ -19,6 +19,7 @@ exclude = [
     ".markdownlint.json",
     "CLAUDE.md",
     "mutants.out/",
+    "scripts/",
     "tests/fixtures/",
 ]
 

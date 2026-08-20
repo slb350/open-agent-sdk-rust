@@ -1,9 +1,14 @@
-//! Transport-safe decoding of an SSE response body into [`OpenAIChunk`]s.
+//! Transport-safe decoding of an SSE response body into one wire protocol's events.
+//!
+//! The framing, the `[DONE]` sentinel and the error classification are identical for both
+//! protocols, so they live once in `parse_events`; the two public entry points differ only in
+//! the payload type they ask it to deserialize.
 
-use crate::types::OpenAIChunk;
+use crate::types::{AnthropicEvent, OpenAIChunk};
 use crate::{Error, Result};
 use eventsource_stream::{EventStreamError, Eventsource};
 use futures::stream::{Stream, StreamExt};
+use serde::de::DeserializeOwned;
 use std::pin::Pin;
 
 /// Parses a raw HTTP response body as a Server-Sent Events (SSE) stream.
@@ -91,6 +96,34 @@ use std::pin::Pin;
 pub fn parse_sse_stream(
     body: reqwest::Response,
 ) -> Pin<Box<dyn Stream<Item = Result<OpenAIChunk>> + Send>> {
+    parse_events(body)
+}
+
+/// Parses an SSE response body as a stream of [`AnthropicEvent`]s.
+///
+/// The Anthropic sibling of [`parse_sse_stream`]. Anthropic labels each frame with an
+/// `event:` line as well as its `data:` payload, but the payload repeats the type in its own
+/// `type` field, so only the payload is parsed and the two can never disagree about what an
+/// event is.
+///
+/// Anthropic does not terminate with `data: [DONE]` — `message_stop` ends the response and
+/// the connection closes — but the sentinel is skipped here as it is for OpenAI, because
+/// some compatible third-party endpoints send both.
+pub fn parse_anthropic_sse_stream(
+    body: reqwest::Response,
+) -> Pin<Box<dyn Stream<Item = Result<AnthropicEvent>> + Send>> {
+    parse_events(body)
+}
+
+/// Decodes an SSE body into `T`, one item per complete event.
+///
+/// The shared half of both public parsers: the SSE framing, the `[DONE]` sentinel and the
+/// error classification are protocol-independent, and only the payload type differs. Written
+/// once so a fix to the transport handling cannot land in one protocol and miss the other.
+fn parse_events<T>(body: reqwest::Response) -> Pin<Box<dyn Stream<Item = Result<T>> + Send>>
+where
+    T: DeserializeOwned + Send + 'static,
+{
     let stream = body
         .bytes_stream()
         .eventsource()

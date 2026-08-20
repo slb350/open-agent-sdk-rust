@@ -1,6 +1,9 @@
 const CI_WORKFLOW: &str = include_str!("../.github/workflows/ci.yml");
 const SCHEDULED_AUDIT_WORKFLOW: &str = include_str!("../.github/workflows/scheduled-audit.yml");
 const PRE_COMMIT_HOOK: &str = include_str!("../.githooks/pre-commit");
+const MUTANTS_RUN: &str = include_str!("../scripts/mutants-run.sh");
+const MUTANTS_REMOTE: &str = include_str!("../scripts/mutants-remote.sh");
+const MUTANTS_STAGED: &str = include_str!("../scripts/mutants-staged.sh");
 
 /// Extracts the body of the named job from a workflow.
 ///
@@ -92,13 +95,48 @@ fn mutation_sweep_runs_on_every_push_with_a_pinned_toolchain() {
     // The sweep must be unconditional: a mutation gate that only runs on pull requests lets
     // survivors land through direct pushes.
     assert!(!mutants.contains("if:"));
-    assert!(mutants.contains("cargo mutants --no-shuffle -j 4"));
+    // Through the shared verdict script, and unscoped, so CI sweeps the whole tree.
+    assert!(mutants.contains("run: ./scripts/mutants-run.sh"));
+    assert!(!mutants.contains("--in-diff"));
     // Exact tool version, and an immutable SHA pin with a version comment for the installer.
     assert!(mutants.contains("tool: cargo-mutants@27.1.0"));
     assert!(mutants.contains(
         "uses: taiki-e/install-action@b6b84cf49ebfe0176417bdce007c624f0db37f20 # v2.86.2"
     ));
     assert!(mutants.contains("toolchain: stable"));
+}
+
+#[test]
+fn the_mutation_verdict_comes_from_missed_txt_not_the_exit_code() {
+    // cargo-mutants reports exit 3 (Timeout) in preference to exit 2 (FoundProblems), so a run
+    // with one hanging mutant and one genuine survivor also exits 3. Deciding on the exit code
+    // alone waves that survivor through. A timeout is a detection and must pass; a survivor
+    // must fail.
+    assert!(MUTANTS_RUN.contains("missed.txt"));
+    assert!(
+        MUTANTS_RUN.contains(r#"if [ -s "$MISSED" ]"#),
+        "a non-empty missed.txt must fail the run"
+    );
+    assert!(
+        MUTANTS_RUN.contains(r#"if [ "$status" -eq 3 ]"#),
+        "a timeout with nothing missed must pass"
+    );
+}
+
+#[test]
+fn the_remote_sweep_never_silently_skips_itself() {
+    // An unreachable host must fall back to a local run and say so. A commit gate that quietly
+    // disables itself because the LAN blipped is worse than a slow one.
+    assert!(MUTANTS_REMOTE.contains("is unreachable"));
+    assert!(MUTANTS_REMOTE.contains("run_local"));
+    // The transport does not re-derive the verdict; it invokes the shared script and
+    // propagates its exit code.
+    assert!(MUTANTS_REMOTE.contains("./scripts/mutants-run.sh"));
+    assert!(MUTANTS_REMOTE.contains(r#"exit "$status""#));
+    // The staged diff lands under target/, the one directory the sync excludes, so it has to
+    // be named as a file the run needs.
+    assert!(MUTANTS_STAGED.contains("MUTANTS_EXTRA_FILES"));
+    assert!(MUTANTS_STAGED.contains("--in-diff"));
 }
 
 #[test]
@@ -122,7 +160,9 @@ fn pre_commit_hook_runs_the_same_checks_as_ci() {
 
     // The cargo-mutants version is pinned in both places and must not drift.
     assert!(PRE_COMMIT_HOOK.contains("CARGO_MUTANTS_VERSION=\"27.1.0\""));
-    assert!(PRE_COMMIT_HOOK.contains("cargo mutants --in-diff"));
+    // Scoped to the staged diff, through the same verdict script CI uses.
+    assert!(PRE_COMMIT_HOOK.contains("./scripts/mutants-staged.sh"));
+    assert!(MUTANTS_STAGED.contains("./scripts/mutants-remote.sh"));
 }
 
 #[test]

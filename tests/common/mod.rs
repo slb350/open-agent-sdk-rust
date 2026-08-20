@@ -91,6 +91,82 @@ pub fn sse_frame(choice: serde_json::Value) -> String {
 /// The SSE terminator most OpenAI-compatible servers send.
 pub const DONE: &str = "data: [DONE]\n\n";
 
+/// Starts a mock server that answers the Anthropic messages endpoint with `body` as an SSE
+/// stream.
+///
+/// Mounted on `/v1/messages` specifically, so a request that went to the chat-completions
+/// path would 404 rather than quietly succeeding — which is what makes the path itself part
+/// of what these tests assert.
+pub async fn anthropic_sse_server(body: impl Into<String>) -> MockServer {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(body.into()),
+        )
+        .mount(&server)
+        .await;
+    server
+}
+
+/// Formats one Anthropic SSE frame, with both the `event:` label and the `data:` payload.
+///
+/// Real servers send both. Emitting only the payload here would let a parser that reads the
+/// label pass a test it should fail.
+pub fn anthropic_frame(event: &str, data: serde_json::Value) -> String {
+    format!("event: {event}\ndata: {data}\n\n")
+}
+
+/// A complete minimal Anthropic response: one text block, stopping for `stop_reason`.
+pub fn anthropic_text_response(text: &str, stop_reason: &str) -> String {
+    [
+        anthropic_frame(
+            "message_start",
+            serde_json::json!({
+                "type": "message_start",
+                "message": {
+                    "id": "msg_1", "type": "message", "role": "assistant", "content": [],
+                    "model": "m", "stop_reason": null, "stop_sequence": null,
+                    "usage": { "input_tokens": 1, "output_tokens": 1 },
+                },
+            }),
+        ),
+        anthropic_frame(
+            "content_block_start",
+            serde_json::json!({
+                "type": "content_block_start", "index": 0,
+                "content_block": { "type": "text", "text": "" },
+            }),
+        ),
+        anthropic_frame(
+            "content_block_delta",
+            serde_json::json!({
+                "type": "content_block_delta", "index": 0,
+                "delta": { "type": "text_delta", "text": text },
+            }),
+        ),
+        anthropic_frame(
+            "content_block_stop",
+            serde_json::json!({ "type": "content_block_stop", "index": 0 }),
+        ),
+        anthropic_frame(
+            "message_delta",
+            serde_json::json!({
+                "type": "message_delta",
+                "delta": { "stop_reason": stop_reason, "stop_sequence": null },
+                "usage": { "output_tokens": 2 },
+            }),
+        ),
+        anthropic_frame(
+            "message_stop",
+            serde_json::json!({ "type": "message_stop" }),
+        ),
+    ]
+    .concat()
+}
+
 /// Concatenates the text of every `ContentBlock::Text` in `blocks`.
 pub fn text_of(blocks: &[ContentBlock]) -> String {
     blocks

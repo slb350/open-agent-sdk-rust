@@ -83,13 +83,23 @@ include!("types/openai.rs");
 // re-exports keep every public path unchanged. The remaining fragments stay fragments
 // because they reach into module-private fields of types their siblings define, which real
 // modules could only reach by weakening that encapsulation.
+mod anthropic;
+mod anthropic_stream;
 mod openai_stream;
+mod protocol;
 mod stream_event;
 
 // Glob re-export: the wire types are consumed across the crate (and by unit tests) exactly
 // as the `include!` fragment used to expose them, so this keeps every path identical.
 pub use openai_stream::*;
 pub use stream_event::{FinishReason, StreamEvent};
+
+pub use anthropic::{AnthropicMessage, AnthropicRequest};
+pub use anthropic_stream::{
+    AnthropicBlockStart, AnthropicDelta, AnthropicErrorBody, AnthropicEvent, AnthropicMessageDelta,
+    anthropic_finish_reason,
+};
+pub use protocol::ApiProtocol;
 
 #[cfg(test)]
 mod tests {

@@ -65,7 +65,7 @@ pub struct AgentOptionsBuilder {
     max_turns: Option<u32>,
     /// Optional max tokens; unset means no client-imposed cap
     max_tokens: Option<u32>,
-    /// Optional temperature; defaults to 0.7
+    /// Optional temperature; unset omits the parameter and lets the server choose
     temperature: Option<f32>,
     /// Optional timeout; defaults to 60 seconds
     timeout: Option<u64>,
@@ -77,6 +77,8 @@ pub struct AgentOptionsBuilder {
     max_tool_iterations: Option<u32>,
     /// Optional reasoning capture; defaults to false
     include_reasoning: Option<bool>,
+    /// Optional wire protocol; defaults to OpenAI chat completions
+    protocol: Option<ApiProtocol>,
     /// Lifecycle hooks; defaults to empty
     hooks: Hooks,
 }
@@ -267,8 +269,11 @@ impl AgentOptionsBuilder {
     ///
     /// Controls randomness:
     /// - 0.0: Deterministic, always picks most likely tokens
-    /// - 0.7: Balanced (default)
+    /// - 0.7: Balanced
     /// - 1.0+: More creative/random
+    ///
+    /// Leaving it unset omits the parameter from the request, which is the default and the
+    /// only thing that works against a model that rejects it outright.
     ///
     /// # Example
     ///
@@ -283,6 +288,28 @@ impl AgentOptionsBuilder {
     /// ```
     pub fn temperature(mut self, temp: f32) -> Self {
         self.temperature = Some(temp);
+        self
+    }
+
+    /// Sets the wire protocol the endpoint speaks.
+    ///
+    /// Defaults to [`ApiProtocol::OpenAiChat`]. Set [`ApiProtocol::Anthropic`] for an
+    /// endpoint exposing the messages API, including the Anthropic-compatible tiers several
+    /// third-party vendors publish.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use open_agent::{AgentOptions, ApiProtocol};
+    /// let options = AgentOptions::builder()
+    ///     .model("k3")
+    ///     .base_url("https://api.kimi.com/coding/v1")
+    ///     .protocol(ApiProtocol::Anthropic)
+    ///     .build()
+    ///     .unwrap();
+    /// ```
+    pub fn protocol(mut self, protocol: ApiProtocol) -> Self {
+        self.protocol = Some(protocol);
         self
     }
 
@@ -498,13 +525,14 @@ impl AgentOptionsBuilder {
             ));
         }
 
-        // Validate temperature is in valid range (0.0 to 2.0)
-        let temperature = self.temperature.unwrap_or(0.7);
-        if !(0.0..=2.0).contains(&temperature) {
-            return Err(crate::Error::invalid_input(
-                "temperature must be between 0.0 and 2.0",
-            ));
-        }
+        // Validate temperature when one was set, through the `Temperature` newtype that
+        // exists for exactly this check rather than a second copy of its range and message.
+        // Unset is passed through as None so the field is omitted from the wire request,
+        // which is the only way to express "the server decides" — and the only thing that
+        // works against a model that rejects the parameter. The accepted range is OpenAI's;
+        // Anthropic's stops at 1.0, and rejecting 1.5 here would be this SDK inventing a
+        // limit for an endpoint that already has one and reports it.
+        self.temperature.map(Temperature::new).transpose()?;
 
         // Validate max_tokens if set. An unset value is passed through as None so the field is
         // omitted from the wire request entirely, letting the server apply its own limit —
@@ -529,7 +557,7 @@ impl AgentOptionsBuilder {
             // Default to single-turn for simplicity
             max_turns: self.max_turns.unwrap_or(1),
             max_tokens: self.max_tokens,
-            temperature,
+            temperature: self.temperature,
             // Conservative timeout that works for most requests
             timeout: self.timeout.unwrap_or(60),
             // Tools vector was built up during configuration, use as-is
@@ -542,6 +570,8 @@ impl AgentOptionsBuilder {
             hooks: self.hooks,
             // Reasoning is dropped unless a caller explicitly asks for it
             include_reasoning: self.include_reasoning.unwrap_or(false),
+            // OpenAI chat completions: the only protocol the SDK spoke before 0.9.0
+            protocol: self.protocol.unwrap_or_default(),
         })
     }
 }

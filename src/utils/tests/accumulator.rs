@@ -1,4 +1,7 @@
-use crate::types::{OpenAIChoice, OpenAIDelta, OpenAIFunctionDelta, OpenAIToolCallDelta};
+use crate::types::{
+    ContentBlock, OpenAIChoice, OpenAIDelta, OpenAIFunctionDelta, OpenAIToolCallDelta,
+};
+use crate::utils::test_support::text_of;
 
 /// Builds a chunk carrying one choice with the given delta and finish reason.
 fn chunk(delta: OpenAIDelta, finish_reason: Option<&str>) -> OpenAIChunk {
@@ -48,10 +51,6 @@ fn tool_call_delta(index: u32, id: &str, name: &str, arguments: &str) -> OpenAID
     }
 }
 
-/// Concatenates every text block in an event batch.
-fn text_of(events: &[StreamEvent]) -> String {
-    events.iter().filter_map(StreamEvent::as_text).collect()
-}
 
 // ============================================================================
 // FINISH REASON
@@ -350,8 +349,11 @@ fn truncated_tool_arguments_surface_as_a_stream_error() {
         .expect("chunk processes");
 
     let error = accumulator.finalize().expect_err("invalid JSON must error");
+    // The message names the tool, so a response with several calls says which one failed.
     assert!(
-        error.to_string().contains("Failed to parse tool arguments"),
+        error
+            .to_string()
+            .contains("Failed to parse tool call arguments for 'search'"),
         "unexpected error: {error}"
     );
 }

@@ -16,9 +16,9 @@
 - **Control** - pick your model (Qwen, Llama, Mistral, etc.)
 
 **How fast?**
-From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 443 active tests.
+From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 554 active tests.
 
-[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.8.0)](https://crates.io/crates/open-agent-sdk)
+[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.9.0)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -26,7 +26,7 @@ From zero to working agent in under 5 minutes. Rust-native performance (zero-cos
 
 ## Overview
 
-Open Agent SDK (Rust) provides a clean, streaming API for working with OpenAI-compatible local model servers. 100% feature parity with the Python SDK—complete with transport-boundary-safe SSE streaming, tool call aggregation, hooks, and automatic tool execution—built on Tokio for high-performance async I/O.
+Open Agent SDK (Rust) provides a clean, streaming API for working with local and cloud model servers over two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint. 100% feature parity with the Python SDK—complete with transport-boundary-safe SSE streaming, tool call aggregation, hooks, and automatic tool execution—built on Tokio for high-performance async I/O.
 
 **Streaming is tolerant of real-world servers.** SSE events are buffered across arbitrary HTTP
 transport chunk boundaries, and accumulated content is flushed when the stream ends — including
@@ -42,7 +42,10 @@ never said (`Unspecified`) — three cases that look identical from the content 
 
 ## Supported Providers
 
-### Supported (OpenAI-Compatible Endpoints)
+The protocol is a property of the endpoint, set with `.protocol(..)` and defaulting to
+`ApiProtocol::OpenAiChat`.
+
+### `ApiProtocol::OpenAiChat` — `POST {base_url}/chat/completions`, bearer auth
 
 - **LM Studio** - `http://localhost:1234/v1`
 - **Ollama** - `http://localhost:11434/v1`
@@ -50,13 +53,27 @@ never said (`Unspecified`) — three cases that look identical from the content 
 - **vLLM** - OpenAI-compatible API
 - **Text Generation WebUI** - OpenAI extension
 - **Any OpenAI-compatible local endpoint**
+- **Cloud vendors** - OpenAI, OpenRouter, z.ai (`https://api.z.ai/api/coding/paas/v4`)
 - **Local gateways proxying cloud models** - e.g., Ollama or custom gateways that route to cloud providers
 
 **Note on LM Studio:** LM Studio is particularly well-tested with this SDK and provides reliable OpenAI-compatible API support. If you're looking for a user-friendly local model server with excellent compatibility, LM Studio is highly recommended.
 
+### `ApiProtocol::Anthropic` — `POST {base_url}/messages`, `x-api-key` + `anthropic-version`
+
+- **Anthropic**
+- **Moonshot Kimi for Coding** - `https://api.kimi.com/coding/v1`
+- **MiniMax** - `https://api.minimax.io/anthropic/v1`
+
+Extended thinking arrives on the existing reasoning channel (`StreamEvent::Reasoning`, opt in
+with `.include_reasoning(true)`), and tool calls as ordinary `ContentBlock::ToolUse` blocks.
+
+Third-party Anthropic-compatible endpoints are not uniform, and the SDK invents nothing on
+their behalf: `api.kimi.com/coding/v1` requires `max_tokens` and answers a bare
+`invalid_request_error` 400 without it, and accepts no `temperature` but 1. Set both
+explicitly when an endpoint asks for them.
+
 ### Not Supported (Use Official SDKs)
 
-- **Claude/OpenAI direct** - Use their official SDKs, unless you proxy through a local OpenAI-compatible gateway
 - **Cloud provider SDKs** - Bedrock, Vertex, Azure, etc. (proxied via local gateway is fine)
 
 ## Quick Start
@@ -65,7 +82,7 @@ never said (`Unspecified`) — three cases that look identical from the content 
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.8.0"
+open-agent-sdk = "0.9.0"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -79,9 +96,34 @@ cd open-agent-sdk-rust
 cargo build
 ```
 
+### Upgrading from 0.8.x
+
+v0.9.0 has one breaking change, and the compiler catches it.
+
+**`AgentOptions::temperature()` returns `Option<f32>`, and unset now means unset.** It used
+to default to 0.7 and was always sent. A growing number of models reject the parameter
+outright — Anthropic's range stops at 1.0, and Moonshot's `k3` answers
+`only temperature 1 is allowed for this model` with a 400 — so a client-invented default
+turns a working request into a hard error. `None` omits the field and the server decides,
+exactly as `max_tokens` has behaved since 0.7.0. The builder is unchanged:
+`.temperature(0.2)` still sets one. Callers that relied on the old default now pass it
+explicitly.
+
+Reaching an Anthropic messages endpoint is additive:
+
+```rust
+let options = AgentOptions::builder()
+    .model("k3")
+    .base_url("https://api.kimi.com/coding/v1")
+    .api_key(&key)
+    .protocol(ApiProtocol::Anthropic)
+    .max_tokens(200_000)   // this endpoint requires it
+    .build()?;
+```
+
 ### Upgrading from 0.7.x
 
-v0.8.0 has one breaking change, and the compiler catches it.
+v0.8.0 had one breaking change, and the compiler caught it.
 
 **`query()` yields `StreamEvent` instead of `ContentBlock`.** The stream needed room for
 something that is not content: the reason generation stopped. Every stream now ends with
@@ -881,7 +923,8 @@ AgentOptions::builder()
     .max_tool_iterations(u32)            // Max tool calls per query in auto mode
     .max_tokens(u32)                     // Tokens to generate (unset: omitted, server decides); getter returns Option<u32>
     .max_turns(u32)                      // Max conversation turns (default: 1)
-    .temperature(f32)                    // Sampling temperature (default: 0.7)
+    .temperature(f32)                    // Sampling temperature (unset: omitted, server decides)
+    .protocol(ApiProtocol)               // Wire protocol (default: ApiProtocol::OpenAiChat)
     .timeout(u64)                        // Request timeout in seconds (default: 60)
     .api_key(str)                        // API key (default: "not-needed")
     .include_reasoning(bool)             // Surface reasoning as StreamEvent::Reasoning (default: false)
@@ -1232,8 +1275,8 @@ open-agent-sdk-rust/
 │   ├── tools.rs           # Public tool module orchestration
 │   ├── tools/             # Tool, schema, builder, handler, factory, and tests
 │   ├── types.rs           # Public core-type module orchestration
-│   ├── types/             # Options, messages, images, wire types, validated newtypes, and tests
-│   ├── utils.rs           # SSE parsing and stream accumulation (StreamAccumulator)
+│   ├── types/             # Options, messages, images, OpenAI + Anthropic wire types, ApiProtocol
+│   ├── utils.rs           # SSE parsing, stream accumulation, and the shared stream driver
 │   └── utils/             # Utility unit tests
 ├── examples/
 │   ├── simple_query.rs              # Basic streaming query
@@ -1264,7 +1307,7 @@ open-agent-sdk-rust/
 │   ├── hooks_integration_test.rs
 │   ├── image_serialization_test.rs
 │   ├── package_manifest_test.rs     # Package exclusion coverage (CLAUDE.md, .markdownlint.json)
-│   ├── ci_workflow_policy_test.go   # GitHub CI runner, coverage, and security policy guards
+│   ├── ci_workflow_policy_test.rs   # GitHub CI runner, coverage, mutation, and security guards
 │   ├── security_bypass_test.rs
 │   ├── send_message_test.rs         # Manual-mode history regression (v0.6.2)
 │   ├── source_file_size_test.rs      # Repository Rust hard-limit guard
@@ -1326,11 +1369,11 @@ cargo mutants --no-shuffle -j 4
 
 **Test Coverage:**
 
-- 148 unit tests (lib)
-- 136 active integration tests across 22 test files
-- 159 active doctests
+- 242 unit tests (lib)
+- 149 active integration tests across 25 test files
+- 163 active doctests
 
-Total: 443 active unit, integration, and documentation tests
+Total: 554 active unit, integration, and documentation tests
 
 **Mutation testing** is part of the gate, not an optional extra: a green suite proves the
 tests ran, not that they would notice if the code were wrong. CI runs the full sweep on every
@@ -1341,7 +1384,10 @@ git config core.hooksPath .githooks
 ```
 
 The hook runs `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`,
-and a `cargo mutants --in-diff` sweep scoped to the staged Rust changes.
+and a `cargo mutants --in-diff` sweep scoped to the staged Rust changes. Both the hook and CI
+reach their verdict through `scripts/mutants-run.sh`, which reads `missed.txt` rather than the
+exit code — cargo-mutants reports a timeout in preference to a survivor, so a run with one of
+each would otherwise look like a timeout. The current sweep is 231 mutants, 0 missed.
 
 ## Requirements
 
@@ -1375,6 +1421,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.8.0 - finish reasons surfaced on every stream, explicit reasoning-channel separation, end-of-stream flushing for servers that omit `finish_reason`, structured `Error::Api` with status-based retry classification, no implicit `max_tokens` cap, a mandatory mutation-testing gate, plus transport-boundary-safe SSE streaming, complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, GitHub-hosted Linux/macOS CI, non-locking cancellation, and multimodal image support
+**Status**: v0.9.0 - Anthropic messages protocol alongside OpenAI chat completions selected per endpoint with `ApiProtocol`, extended thinking on the existing reasoning channel, omittable `temperature`, plus from v0.8.0 finish reasons surfaced on every stream, explicit reasoning-channel separation, end-of-stream flushing for servers that omit `finish_reason`, structured `Error::Api` with status-based retry classification, no implicit `max_tokens` cap, a mandatory mutation-testing gate, plus transport-boundary-safe SSE streaming, complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, GitHub-hosted Linux/macOS CI, non-locking cancellation, and multimodal image support
 
 Star this repo if you're building AI agents with local models in Rust!

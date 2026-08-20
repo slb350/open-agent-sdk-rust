@@ -80,11 +80,17 @@ pub struct AgentOptions {
     /// Sampling temperature for response generation (typically 0.0 to 2.0).
     ///
     /// - 0.0: Deterministic, always picks most likely tokens
-    /// - 0.7: Balanced creativity and consistency (default)
+    /// - 0.7: Balanced creativity and consistency
     /// - 1.0+: More random and creative responses
     ///
-    /// Lower temperatures are better for factual tasks, higher for creative ones.
-    temperature: f32,
+    /// `None` omits the field from the wire request entirely, leaving the server to apply
+    /// its own default. That is the default, and it is load-bearing rather than tidy: a
+    /// growing number of models reject the parameter outright — Anthropic's range stops at
+    /// 1.0, and several reasoning models 400 on any value at all — so a client-invented
+    /// temperature turns a working request into a hard error the caller never asked for.
+    /// This mirrors `max_tokens`, which stopped being defaulted in 0.7.0 for the same
+    /// reason.
+    temperature: Option<f32>,
 
     /// HTTP request timeout in seconds.
     ///
@@ -128,6 +134,13 @@ pub struct AgentOptions {
     /// should not pay to buffer it.
     include_reasoning: bool,
 
+    /// The wire protocol this endpoint speaks.
+    ///
+    /// Selects the request path, the auth header, the body shape and the streaming
+    /// vocabulary. Defaults to [`ApiProtocol::OpenAiChat`], which is what every endpoint the
+    /// SDK supported before 0.9.0 speaks, so an existing configuration keeps its behaviour.
+    protocol: ApiProtocol,
+
     /// Lifecycle hooks for observing and intercepting agent operations.
     ///
     /// Hooks allow you to inject custom logic at various points:
@@ -167,6 +180,7 @@ impl std::fmt::Debug for AgentOptions {
             .field("auto_execute_tools", &self.auto_execute_tools)
             .field("max_tool_iterations", &self.max_tool_iterations)
             .field("include_reasoning", &self.include_reasoning)
+            .field("protocol", &self.protocol)
             .field("hooks", &self.hooks)
             .finish()
     }
@@ -194,8 +208,9 @@ impl Default for AgentOptions {
             // No client-imposed cap; the server decides how long a response may be.
             // Callers who want a ceiling set one explicitly via `max_tokens()`.
             max_tokens: None,
-            // 0.7 balances creativity with consistency for general use
-            temperature: 0.7,
+            // Unset: the field is omitted and the server decides. A client-invented value
+            // is rejected outright by several current models.
+            temperature: None,
             // 60 seconds handles most requests without timing out prematurely
             timeout: 60,
             // No tools by default; users explicitly add capabilities
@@ -208,6 +223,8 @@ impl Default for AgentOptions {
             hooks: Hooks::new(),
             // Reasoning is dropped unless a caller explicitly asks for it
             include_reasoning: false,
+            // The only protocol the SDK spoke before 0.9.0
+            protocol: ApiProtocol::OpenAiChat,
         }
     }
 }
@@ -265,9 +282,14 @@ impl AgentOptions {
         self.max_tokens
     }
 
-    /// Returns the sampling temperature.
-    pub fn temperature(&self) -> f32 {
+    /// Returns the sampling temperature, or `None` when the server should choose.
+    pub fn temperature(&self) -> Option<f32> {
         self.temperature
+    }
+
+    /// Returns the wire protocol this endpoint speaks.
+    pub fn protocol(&self) -> ApiProtocol {
+        self.protocol
     }
 
     /// Returns the HTTP timeout in seconds.

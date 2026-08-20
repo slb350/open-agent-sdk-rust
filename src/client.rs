@@ -313,11 +313,13 @@
 //! ```
 
 use crate::types::{
-    AgentOptions, ContentBlock, FinishReason, Message, MessageRole, OpenAIContent,
-    OpenAIContentPart, OpenAIFunction, OpenAIMessage, OpenAIRequest, OpenAIToolCall, StreamEvent,
-    TextBlock,
+    AgentOptions, AnthropicRequest, ApiProtocol, ContentBlock, FinishReason, Message, MessageRole,
+    OpenAIContent, OpenAIContentPart, OpenAIFunction, OpenAIMessage, OpenAIRequest, OpenAIToolCall,
+    StreamEvent, TextBlock,
 };
-use crate::utils::{StreamAccumulator, parse_sse_stream};
+use crate::utils::{
+    AnthropicAccumulator, StreamAccumulator, drive, parse_anthropic_sse_stream, parse_sse_stream,
+};
 use crate::{Error, Result};
 use futures::stream::{Stream, StreamExt};
 use std::pin::Pin;
@@ -337,20 +339,41 @@ fn serialize_history_snapshot(history: &[Message]) -> Result<Vec<serde_json::Val
     history.iter().map(serialize_history_message).collect()
 }
 
+/// The API version header every Anthropic messages request must carry.
+///
+/// A dated constant rather than a configurable field: it names the request/response schema
+/// this SDK was written against, so it changes when the code does.
+const ANTHROPIC_VERSION: &str = "2023-06-01";
+
+/// Sends the request over whichever protocol `options` selects and returns its event stream.
+///
+/// The one place the two protocols differ. Both call sites build the same protocol-neutral
+/// [`OpenAIRequest`]; the translation, the auth header and the streaming vocabulary are all
+/// resolved here, so neither caller has to know which endpoint it is talking to.
 async fn stream_request(
     http_client: &reqwest::Client,
     options: &AgentOptions,
     request: &OpenAIRequest,
 ) -> Result<EventStream> {
-    let url = format!("{}/chat/completions", options.base_url());
-    let response = http_client
+    let protocol = options.protocol();
+    let url = format!("{}{}", options.base_url(), protocol.path());
+    let pending = http_client
         .post(&url)
-        .header("Authorization", format!("Bearer {}", options.api_key()))
-        .header("Content-Type", "application/json")
-        .json(request)
-        .send()
-        .await
-        .map_err(Error::Http)?;
+        .header("Content-Type", "application/json");
+
+    let pending = match protocol {
+        ApiProtocol::OpenAiChat => pending
+            .header("Authorization", format!("Bearer {}", options.api_key()))
+            .json(request),
+        // Anthropic authenticates with `x-api-key` rather than a bearer token, and rejects
+        // a request that does not name the schema version it was written against.
+        ApiProtocol::Anthropic => pending
+            .header("x-api-key", options.api_key())
+            .header("anthropic-version", ANTHROPIC_VERSION)
+            .json(&AnthropicRequest::from_openai(request)),
+    };
+
+    let response = pending.send().await.map_err(Error::Http)?;
 
     if !response.status().is_success() {
         let status = response.status().as_u16();
@@ -361,37 +384,17 @@ async fn stream_request(
         return Err(Error::api_status(status, body));
     }
 
-    // Append a `None` sentinel after the chunk stream so the accumulator gets an explicit
-    // end-of-transport signal. Servers that stop sending without ever setting `finish_reason`
-    // (llama.cpp, vLLM, several local gateways) would otherwise leave their content stranded
-    // in the accumulator's buffers and yield a silently empty response. The sentinel is also
-    // what emits the terminating `StreamEvent::Finish`, so every stream reports how it ended.
-    let terminated = parse_sse_stream(response)
-        .map(Some)
-        .chain(futures::stream::iter([None]));
-
-    let accumulator = StreamAccumulator::new().capture_reasoning(options.include_reasoning());
-
-    // `scan` yields one batch per input item; batches are then flattened into individual
-    // events. An empty batch simply flattens to nothing, so chunks that only accumulate
-    // state need no special-casing here.
-    let flattened = terminated
-        .scan(accumulator, |accumulator, item| {
-            let batch = match item {
-                Some(Ok(chunk)) => accumulator.process_chunk(chunk),
-                Some(Err(error)) => Err(error),
-                None => accumulator.finalize(),
-            };
-            futures::future::ready(Some(batch))
-        })
-        .flat_map(|result| {
-            futures::stream::iter(match result {
-                Ok(events) => events.into_iter().map(Ok).collect(),
-                Err(error) => vec![Err(error)],
-            })
-        });
-
-    Ok(Box::pin(flattened))
+    let capture = options.include_reasoning();
+    Ok(match protocol {
+        ApiProtocol::OpenAiChat => drive(
+            parse_sse_stream(response),
+            StreamAccumulator::new().capture_reasoning(capture),
+        ),
+        ApiProtocol::Anthropic => drive(
+            parse_anthropic_sse_stream(response),
+            AnthropicAccumulator::new().capture_reasoning(capture),
+        ),
+    })
 }
 
 include!("client/query.rs");

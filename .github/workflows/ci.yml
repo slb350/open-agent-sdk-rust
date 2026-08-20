@@ -113,8 +113,14 @@ jobs:
         run: cargo audit --deny warnings
 
   # Mutation testing: A green suite proves the tests ran, not that they would notice if the
-  # code were wrong. cargo-mutants exits 2 when mutants survive, so it gates without extra
-  # plumbing; survivors print as "MISSED <file>:<line>: <mutation>" lines in this job's log.
+  # code were wrong. The verdict comes from missed.txt rather than the exit code, because
+  # cargo-mutants reports exit 3 (Timeout) in preference to exit 2 (FoundProblems) — so a run
+  # with one hanging mutant and one genuine survivor also exits 3. scripts/mutants-run.sh owns
+  # that rule and is shared with the pre-commit hook, so the two cannot disagree; survivors
+  # print as "MISSED <file>:<line>: <mutation>" lines in this job's log.
+  #
+  # This runs on the GitHub runner, not on strix: only the local hook offloads, because a
+  # GitHub runner cannot reach the LAN.
   mutants:
     name: Mutation Testing
     runs-on: ubuntu-latest
@@ -128,7 +134,7 @@ jobs:
         with:
           tool: cargo-mutants@27.1.0
       - name: Run mutation sweep
-        run: cargo mutants --no-shuffle -j 4
+        run: ./scripts/mutants-run.sh
 
   # Documentation: Validate docs build for docs.rs
   docs:

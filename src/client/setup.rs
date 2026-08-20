@@ -255,7 +255,7 @@ impl Client {
             messages,
             stream: true, // Always stream for progressive rendering
             max_tokens: self.options.max_tokens(),
-            temperature: Some(self.options.temperature()),
+            temperature: self.options.temperature(),
             tools,
         };
 

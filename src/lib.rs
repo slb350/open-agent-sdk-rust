@@ -197,10 +197,24 @@ pub use tools::{Tool, ToolBuilder, tool};
 // --- Core Types ---
 
 pub use types::{
-    AgentOptions, AgentOptionsBuilder, BaseUrl, ContentBlock, FinishReason, ImageBlock,
-    ImageDetail, Message, MessageRole, ModelName, OpenAIContent, OpenAIContentPart, StreamEvent,
-    Temperature, TextBlock, ToolResultBlock, ToolUseBlock,
+    AgentOptions, AgentOptionsBuilder, ApiProtocol, BaseUrl, ContentBlock, FinishReason,
+    ImageBlock, ImageDetail, Message, MessageRole, ModelName, OpenAIContent, OpenAIContentPart,
+    StreamEvent, Temperature, TextBlock, ToolResultBlock, ToolUseBlock,
 };
+
+// --- Anthropic Wire Format ---
+//
+// Exported for the same reason the OpenAI wire types are: a caller building a gateway, a
+// recording proxy, or a test double needs to name what goes over the wire.
+
+pub use types::{
+    AnthropicBlockStart, AnthropicDelta, AnthropicErrorBody, AnthropicEvent, AnthropicMessage,
+    AnthropicMessageDelta, AnthropicRequest, anthropic_finish_reason,
+};
+
+// `AnthropicRequest::from_openai` takes an `OpenAIRequest`, so the request half of the
+// OpenAI wire format has to be nameable for that constructor to be callable at all.
+pub use types::{OpenAIFunction, OpenAIMessage, OpenAIRequest, OpenAIToolCall};
 
 // ============================================================================
 // CONVENIENCE PRELUDE
@@ -219,8 +233,9 @@ pub use types::{
 /// - Errors: Error, Result
 pub mod prelude {
     pub use crate::{
-        AgentOptions, AgentOptionsBuilder, BaseUrl, Client, ContentBlock, Error, FinishReason,
-        HookDecision, Hooks, ModelName, PostToolUseEvent, PreToolUseEvent, Result, StreamEvent,
-        Temperature, TextBlock, Tool, ToolUseBlock, UserPromptSubmitEvent, query, tool,
+        AgentOptions, AgentOptionsBuilder, ApiProtocol, BaseUrl, Client, ContentBlock, Error,
+        FinishReason, HookDecision, Hooks, ModelName, PostToolUseEvent, PreToolUseEvent, Result,
+        StreamEvent, Temperature, TextBlock, Tool, ToolUseBlock, UserPromptSubmitEvent, query,
+        tool,
     };
 }

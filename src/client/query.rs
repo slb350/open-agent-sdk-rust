@@ -257,7 +257,7 @@ pub async fn query(prompt: &str, options: &AgentOptions) -> Result<EventStream> 
         messages,
         stream: true, // Critical: enables SSE streaming
         max_tokens: options.max_tokens(),
-        temperature: Some(options.temperature()),
+        temperature: options.temperature(),
         tools,
     };
 
