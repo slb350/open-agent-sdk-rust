@@ -1,22 +1,30 @@
 //! # Open Agent SDK - Rust Implementation
 //!
-//! A production-ready, streaming-first Rust SDK for building AI agents with local OpenAI-compatible servers.
+//! A production-ready, streaming-first Rust SDK for building AI agents over two wire
+//! protocols: OpenAI chat completions and Anthropic messages.
 //!
 //! ## Overview
 //!
-//! This SDK provides a clean, ergonomic API for working with local LLM servers such as:
-//! - LM Studio
-//! - Ollama
-//! - llama.cpp
-//! - vLLM
+//! The protocol is a property of the endpoint. Select it with
+//! `AgentOptions::builder().protocol(..)`; it defaults to [`ApiProtocol::OpenAiChat`].
+//!
+//! [`ApiProtocol::OpenAiChat`] posts to `{base_url}/chat/completions` with bearer auth:
+//! - LM Studio, Ollama, llama.cpp, vLLM, and other local servers
+//! - OpenAI, OpenRouter, z.ai, and other hosted OpenAI-compatible endpoints
+//!
+//! [`ApiProtocol::Anthropic`] posts to `{base_url}/messages` with `x-api-key` and
+//! `anthropic-version`:
+//! - Anthropic
+//! - Moonshot Kimi for Coding, MiniMax, and other Anthropic-shaped endpoints
 //!
 //! ## Key Features
 //!
-//! - **Zero API Costs**: Run models on your own hardware
-//! - **Privacy-First**: All data stays local on your machine
+//! - **Two Wire Protocols**: OpenAI chat completions or Anthropic messages, per endpoint
+//! - **Local or Hosted**: Zero-cost inference on your own hardware, or a vendor endpoint
 //! - **High Performance**: Native async/await with Tokio runtime
 //! - **Streaming Responses**: Real-time token-by-token streaming
 //! - **Finish Reasons**: Every stream reports why generation stopped
+//! - **Reasoning Channel**: Extended thinking and reasoning deltas kept out of content
 //! - **Tool Calling**: Define and execute tools with automatic schema generation
 //! - **Lifecycle Hooks**: Intercept and control execution at key points
 //! - **Interrupts**: Gracefully cancel long-running operations
@@ -108,8 +116,10 @@
 //!
 //! The SDK is organized into several modules, each with a specific responsibility:
 //!
-//! - **client**: Core streaming query engine and multi-turn client
-//! - **types**: Data structures for messages, content blocks, and configuration
+//! - **client**: Core streaming query engine and multi-turn client, and the transport
+//!   boundary where the protocol is applied
+//! - **types**: Data structures for messages, content blocks, configuration, and the
+//!   OpenAI and Anthropic wire formats
 //! - **tools**: Tool definition system with automatic JSON schema generation
 //! - **hooks**: Lifecycle event system for intercepting execution
 //! - **config**: Provider-specific configuration helpers
@@ -150,11 +160,12 @@ mod hooks;
 mod tools;
 
 /// Core type definitions for messages, content blocks, and agent configuration.
-/// Includes builder patterns for ergonomic configuration and OpenAI API serialization.
+/// Includes builder patterns for ergonomic configuration, the `ApiProtocol` selector, and
+/// the OpenAI and Anthropic wire formats.
 mod types;
 
 /// Internal utilities for Server-Sent Events (SSE) parsing and tool call aggregation.
-/// Handles the low-level details of streaming response parsing.
+/// Handles the low-level details of streaming response parsing for both protocols.
 mod utils;
 
 // ============================================================================
@@ -224,7 +235,7 @@ pub use types::{OpenAIFunction, OpenAIMessage, OpenAIRequest, OpenAIToolCall};
 /// Import with `use open_agent::prelude::*;` to get everything you need for typical usage.
 ///
 /// This includes:
-/// - Configuration: AgentOptions, AgentOptionsBuilder
+/// - Configuration: AgentOptions, AgentOptionsBuilder, ApiProtocol
 /// - Client: Client, query()
 /// - Content: ContentBlock, TextBlock, ToolUseBlock
 /// - Streaming: StreamEvent, FinishReason

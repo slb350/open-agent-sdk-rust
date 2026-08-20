@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Documentation
+
+- v0.9.0 shipped with rustdoc and README copy that still described the SDK as
+  OpenAI-compatible only. Both landing pages, the `base_url` and `query()` docs, and the
+  `client`, `types`, `tools` and prelude module docs now cover both protocols.
+- `README.md`: the wire-types section covers both formats and the exported
+  `AnthropicRequest`/`OpenAIRequest` families, and the project-structure block matches the
+  tree again.
+- Two behaviours that were only written down in the maintainer notes: `ImageDetail` has no
+  Anthropic equivalent and is dropped in translation, and a mid-stream Anthropic `error`
+  event is mapped onto the status it would have carried earlier, which is what makes it
+  retryable.
+- New `examples/anthropic_query.rs`: a single-turn query against an Anthropic messages
+  endpoint.
+- `Cargo.toml` keywords: `local` swapped for `anthropic`, the five-keyword cap being what it
+  is.
+
 ## [0.9.0] - 2026-08-19
 
 A second wire protocol. Several vendors publish their subscription coding tiers only behind

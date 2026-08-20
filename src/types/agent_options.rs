@@ -9,7 +9,8 @@
 ///
 /// The options are organized into several functional areas:
 ///
-/// - **Model Configuration**: `model`, `base_url`, `api_key`, `temperature`, `max_tokens`
+/// - **Model Configuration**: `model`, `base_url`, `api_key`, `protocol`, `temperature`,
+///   `max_tokens`
 /// - **Conversation Control**: `system_prompt`, `max_turns`, `timeout`
 /// - **Tool Management**: `tools`, `auto_execute_tools`, `max_tool_iterations`
 /// - **Lifecycle Hooks**: `hooks` for monitoring and interception
@@ -49,11 +50,12 @@ pub struct AgentOptions {
     /// length, and response quality.
     model: String,
 
-    /// OpenAI-compatible API endpoint URL (e.g., "http://localhost:1234/v1").
+    /// API endpoint URL (e.g., "http://localhost:1234/v1").
     ///
-    /// The SDK communicates using the OpenAI chat completions API format,
-    /// which is widely supported by local inference servers (LM Studio,
-    /// llama.cpp, vLLM) and cloud providers.
+    /// The wire format is chosen by `protocol`: `OpenAiChat` posts to
+    /// `{base_url}/chat/completions`, which local inference servers (LM Studio,
+    /// llama.cpp, vLLM) and most cloud providers support; `Anthropic` posts to
+    /// `{base_url}/messages`.
     base_url: String,
 
     /// API authentication key for the provider.

@@ -149,9 +149,10 @@ impl AgentOptionsBuilder {
 
     /// Sets the API endpoint URL (required).
     ///
-    /// Must be an OpenAI-compatible endpoint. Common values:
+    /// The path and auth header come from [`protocol`](Self::protocol). Common values:
     /// - Local: "http://localhost:1234/v1" (LM Studio default)
     /// - OpenAI: <https://api.openai.com/v1>
+    /// - Anthropic: <https://api.anthropic.com/v1> (with `ApiProtocol::Anthropic`)
     /// - Custom: Your inference server URL
     ///
     /// # Example

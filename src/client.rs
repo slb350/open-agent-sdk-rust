@@ -1,8 +1,9 @@
 //! Client for streaming queries and multi-turn conversations
 //!
 //! This module provides the core streaming client implementation for the Open Agent SDK.
-//! It handles communication with OpenAI-compatible APIs, manages conversation history,
-//! and provides two modes of operation: manual and automatic tool execution.
+//! It handles communication with OpenAI-compatible and Anthropic messages endpoints,
+//! selected per endpoint with [`ApiProtocol`](crate::ApiProtocol), manages conversation
+//! history, and provides two modes of operation: manual and automatic tool execution.
 //!
 //! # Architecture Overview
 //!
@@ -41,7 +42,7 @@
 //!     │
 //!     ├─> Prompt added to history
 //!     │
-//!     ├─> HTTP request to OpenAI-compatible API
+//!     ├─> HTTP request to the configured endpoint (OpenAI chat or Anthropic messages)
 //!     │
 //!     ├─> Response streamed as Server-Sent Events (SSE)
 //!     │

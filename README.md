@@ -1,6 +1,6 @@
 # Open Agent SDK (Rust)
 
-> Build AI agents in Rust using your own hardware
+> Build AI agents in Rust, over OpenAI chat completions or Anthropic messages
 
 **What you can build:**
 
@@ -9,11 +9,11 @@
 - **Market analyzers** that research competitors and summarize findings
 - **Code reviewers**, **data analysts**, **research assistants**, and more
 
-**Why local?**
+**Why this SDK?**
 
-- **No API costs** - use your hardware, not OpenAI's
-- **Privacy** - your data never leaves your machine
-- **Control** - pick your model (Qwen, Llama, Mistral, etc.)
+- **Two protocols** - one API over OpenAI chat completions or Anthropic messages, chosen per endpoint
+- **Local or hosted** - run on your own hardware at no API cost and with no data leaving the machine, or point it at a vendor
+- **Control** - pick your model (Qwen, Llama, Mistral, Claude, etc.)
 
 **How fast?**
 From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 554 active tests.
@@ -387,7 +387,7 @@ while let Some(block) = client.receive().await? {
 
 - **Automatic execution** - Tools run automatically with safety limits
 - **Type-safe schemas** - Automatic JSON schema generation from parameters
-- **OpenAI-compatible** - Works with any OpenAI function calling endpoint
+- **Both protocols** - The same tool definitions serve OpenAI function calling and Anthropic tool use
 - **Clean builder API** - Fluent API for tool definition
 - **Hook integration** - PreToolUse/PostToolUse hooks work in both modes
 
@@ -395,7 +395,7 @@ See `examples/calculator_tools.rs` and `examples/auto_execution_demo.rs` for com
 
 ## Multimodal Vision Support
 
-Send images alongside text to vision-capable models like llava, qwen-vl, or minicpm-v. The SDK handles OpenAI Vision API formatting automatically.
+Send images alongside text to vision-capable models like llava, qwen-vl, or minicpm-v. The SDK formats images for whichever protocol the endpoint speaks.
 
 ### Simple Image + Text
 
@@ -483,7 +483,7 @@ let msg = Message::new(
 **Key Features:**
 
 - **`send_message()` API** - Send pre-built messages with images via `client.send_message(msg).await?`
-- **Automatic serialization** - Images converted to OpenAI Vision API format
+- **Automatic serialization** - Images converted to OpenAI Vision or Anthropic image blocks (`ImageDetail` has no Anthropic equivalent and is dropped there)
 - **Multiple sources** - URLs, local file paths, or base64 data
 - **Backward compatible** - Text-only messages still work with `send("text")`
 - **Data URIs supported** - Base64-encoded images transmitted seamlessly
@@ -915,7 +915,7 @@ let mut stream = query(user_prompt, &options).await?;
 AgentOptions::builder()
     .system_prompt(str)                  // System prompt
     .model(str)                          // Model name (required)
-    .base_url(str)                       // OpenAI-compatible endpoint (required)
+    .base_url(str)                       // Endpoint URL; the path comes from .protocol() (required)
     .tool(Tool)                          // Add a single tool for function calling
     .tools(Vec<Tool>)                    // Add multiple tools at once
     .hooks(Hooks)                        // Lifecycle hooks for monitoring/control
@@ -1112,15 +1112,24 @@ let model = get_model(Some("qwen2.5-32b"), false);  // use provided model
 let env_model = get_model(None, true);              // prefer OPEN_AGENT_MODEL env var
 ```
 
-### OpenAI Wire Types
+### Wire Types
 
-Low-level serialization types matching the OpenAI API request format, exported for callers that need to construct raw payloads:
+Low-level serialization types matching each protocol's request and streaming format, exported for callers that need to name what goes over the wire:
 
 ```rust
-use open_agent::{OpenAIContent, OpenAIContentPart};
+// OpenAI chat completions
+use open_agent::{
+    OpenAIContent, OpenAIContentPart, OpenAIFunction, OpenAIMessage, OpenAIRequest, OpenAIToolCall,
+};
+
+// Anthropic messages
+use open_agent::{
+    AnthropicBlockStart, AnthropicDelta, AnthropicErrorBody, AnthropicEvent, AnthropicMessage,
+    AnthropicMessageDelta, AnthropicRequest, anthropic_finish_reason,
+};
 ```
 
-`OpenAIContent` and `OpenAIContentPart` are used internally by the SDK when serializing messages to the OpenAI-compatible format. They are exported for advanced use cases where callers need to inspect or construct raw request content.
+`AnthropicRequest::from_openai` takes an `OpenAIRequest`, which is why the OpenAI request half is exported alongside the Anthropic types. `anthropic_finish_reason` maps Anthropic stop reasons onto `FinishReason`, and `query()`/`Client` apply it for you.
 
 ### Error and Result Types
 
@@ -1202,6 +1211,11 @@ structured data; the retryable set is **408, 429, 500, 502, 503, 504, 529**. Eve
 including API errors raised without a status — is non-retryable, so a `400 Bad Request` fails
 immediately rather than burning the full attempt budget.
 
+A mid-stream Anthropic `error` event arrives on a response that already returned 200, so it
+carries no status of its own. The SDK maps the two transient kinds onto the statuses they
+would have had earlier — `overloaded_error` to 529 and `rate_limit_error` to 429, with
+`api_error` to 500 — which is what lets `retry_with_backoff` see them as retryable.
+
 ```rust
 use open_agent::Error;
 
@@ -1272,14 +1286,17 @@ open-agent-sdk-rust/
 │   ├── hooks/             # Hook events, decisions, handlers, registry, and tests
 │   ├── lib.rs             # Public exports and prelude module
 │   ├── retry.rs           # Retry logic with exponential backoff
+│   ├── retry/             # Retry unit tests
 │   ├── tools.rs           # Public tool module orchestration
 │   ├── tools/             # Tool, schema, builder, handler, factory, and tests
 │   ├── types.rs           # Public core-type module orchestration
 │   ├── types/             # Options, messages, images, OpenAI + Anthropic wire types, ApiProtocol
 │   ├── utils.rs           # SSE parsing, stream accumulation, and the shared stream driver
-│   └── utils/             # Utility unit tests
+│   └── utils/             # accumulator.rs + anthropic_accumulator.rs (wire decoding),
+│                          # buffers.rs (the shared drain), driver.rs, sse.rs
 ├── examples/
 │   ├── simple_query.rs              # Basic streaming query
+│   ├── anthropic_query.rs           # Anthropic messages endpoint via ApiProtocol
 │   ├── calculator_tools.rs          # Function calling (manual mode)
 │   ├── auto_execution_demo.rs       # Automatic tool execution
 │   ├── multi_tool_agent.rs          # Production agent with 5 tools and hooks
@@ -1297,25 +1314,41 @@ open-agent-sdk-rust/
 ├── tests/
 │   ├── integration_tests.rs         # Core integration tests
 │   ├── advanced_integration_test.rs
+│   ├── anthropic_protocol_test.rs   # Path, headers, body, and event vocabulary per protocol
 │   ├── auto_execution_test.rs
 │   ├── backward_compatibility_test.rs
+│   ├── ci_workflow_policy_test.rs   # GitHub CI runner, coverage, mutation, and security guards
 │   ├── client_image_serialization_test.rs
+│   ├── config_env_test.rs           # get_model env resolution (own process: mutates env)
+│   ├── context_estimation_test.rs   # Token arithmetic and truncation boundaries
 │   ├── debug_logging_test.rs
 │   ├── defensive_validation_test.rs
 │   ├── edge_cases_test.rs
 │   ├── hooks_history_snapshot_test.rs
 │   ├── hooks_integration_test.rs
 │   ├── image_serialization_test.rs
-│   ├── package_manifest_test.rs     # Package exclusion coverage (CLAUDE.md, .markdownlint.json)
-│   ├── ci_workflow_policy_test.rs   # GitHub CI runner, coverage, mutation, and security guards
+│   ├── package_manifest_test.rs     # Package exclusion coverage
+│   ├── regression_finish_reason_test.rs
+│   ├── regression_max_tokens_test.rs
+│   ├── regression_reasoning_channel_test.rs
+│   ├── regression_retry_classification_test.rs
+│   ├── regression_stream_flush_test.rs
 │   ├── security_bypass_test.rs
 │   ├── send_message_test.rs         # Manual-mode history regression (v0.6.2)
-│   ├── source_file_size_test.rs      # Repository Rust hard-limit guard
-│   └── tool_call_content_test.rs    # Tool call serialization tests
+│   ├── source_file_size_test.rs     # Repository Rust hard-limit guard
+│   ├── tool_call_content_test.rs    # Tool call serialization tests
+│   └── common/mod.rs                # Shared wiremock SSE harness and block helpers
+├── scripts/
+│   ├── mutants-common.sh            # The one definition of the results directory
+│   ├── mutants-run.sh               # Owns the verdict (missed.txt); called by the hook and CI
+│   ├── mutants-remote.sh            # rsync + ssh to a build host, falls back loudly
+│   └── mutants-staged.sh            # Staged-diff scope, through mutants-remote.sh
+├── .githooks/
+│   └── pre-commit                   # fmt, clippy, tests, and a --in-diff cargo-mutants sweep
 ├── .github/
 │   ├── dependabot.yml               # Grouped weekly Cargo dependency updates
 │   └── workflows/
-│       ├── ci.yml                   # GitHub CI (fmt, clippy, MSRV, Linux/macOS stable + beta matrix, security audit, docs, LLVM Tarpaulin coverage, benchmarks)
+│       ├── ci.yml                   # GitHub CI (fmt, clippy, MSRV, Linux/macOS stable + beta matrix, security audit, mutation sweep, docs, LLVM Tarpaulin coverage, benchmarks)
 │       └── scheduled-audit.yml      # Scheduled dependency audit
 ├── .markdownlint.json               # Markdown lint rules (disable MD013, allow duplicate sibling headings)
 ├── Cargo.toml
@@ -1335,6 +1368,7 @@ open-agent-sdk-rust/
 ### Core SDK Usage
 
 - `simple_query.rs` – Minimal streaming query (simplest quickstart)
+- `anthropic_query.rs` – Same query against an Anthropic messages endpoint via `ApiProtocol`
 - `calculator_tools.rs` – Manual tool execution pattern
 - `auto_execution_demo.rs` – Automatic tool execution pattern
 - `vision_example.rs` – Multimodal image support (URLs, local files, base64)

@@ -84,8 +84,9 @@ pub type EventStream = Pin<Box<dyn Stream<Item = Result<StreamEvent>> + Send>>;
 ///
 /// 1. Creates a temporary HTTP client with configured timeout
 /// 2. Builds message array (system prompt + user prompt)
-/// 3. Converts tools to OpenAI format if provided
-/// 4. Makes HTTP POST request to `/chat/completions`
+/// 3. Converts tools to the wire format if provided
+/// 4. Makes an HTTP POST request to the path the configured
+///    [`ApiProtocol`](crate::ApiProtocol) selects
 /// 5. Parses Server-Sent Events (SSE) response stream
 /// 6. Aggregates chunks into complete content blocks
 /// 7. Returns stream that yields events as they complete, ending with `Finish`

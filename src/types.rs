@@ -22,10 +22,13 @@
 //! - [`ToolUseBlock`]: Represents an AI request to execute a tool
 //! - [`ToolResultBlock`]: Contains the result of a tool execution
 //!
-//! # OpenAI API Compatibility
+//! # Wire Formats
 //!
-//! The SDK communicates with LLM providers using the OpenAI-compatible API format.
-//! These types handle serialization/deserialization for streaming responses:
+//! [`ApiProtocol`] selects which wire format an endpoint speaks: `OpenAiChat` (the default)
+//! or `Anthropic`. `OpenAIRequest` stays the single internal request representation, and the
+//! translation to the Anthropic shape happens at the transport boundary.
+//!
+//! OpenAI chat completions:
 //!
 //! - [`OpenAIRequest`]: Request payload sent to the API
 //! - [`OpenAIMessage`]: Message format for OpenAI API
@@ -33,12 +36,22 @@
 //! - [`OpenAIToolCall`], [`OpenAIFunction`]: Tool calling format
 //! - [`OpenAIDelta`], [`OpenAIToolCallDelta`]: Incremental updates in streaming
 //!
+//! Anthropic messages:
+//!
+//! - [`AnthropicRequest`], [`AnthropicMessage`]: Request payload, built with
+//!   [`AnthropicRequest::from_openai`]
+//! - [`AnthropicEvent`]: One decoded event from the streaming vocabulary
+//! - [`AnthropicBlockStart`], [`AnthropicDelta`], [`AnthropicMessageDelta`]: Content block
+//!   openings and incremental updates
+//! - [`AnthropicErrorBody`]: A mid-stream `error` event
+//! - [`anthropic_finish_reason`]: Maps Anthropic stop reasons onto [`FinishReason`]
+//!
 //! # Architecture Overview
 //!
 //! The type system is designed to:
 //!
 //! 1. **Separate concerns**: Internal SDK types (Message, ContentBlock) are distinct
-//!    from API wire format (OpenAI types), allowing flexibility in provider support
+//!    from the API wire formats, allowing flexibility in provider support
 //! 2. **Enable streaming**: OpenAI types support incremental delta parsing for
 //!    real-time responses
 //! 3. **Support tool use**: First-class support for function calling with proper

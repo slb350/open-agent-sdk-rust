@@ -1,7 +1,8 @@
 //! # Tool System for Open Agent SDK
 //!
-//! This module provides a comprehensive tool definition system compatible with OpenAI's
-//! function calling API and similar LLM tool-use patterns.
+//! This module provides a comprehensive tool definition system. One tool definition serves
+//! both wire protocols: it converts to OpenAI's function calling shape and to Anthropic's
+//! `name`/`description`/`input_schema` shape.
 //!
 //! ## Architecture Overview
 //!
@@ -11,7 +12,7 @@
 //!    and an async handler function that executes the tool's logic.
 //!
 //! 2. **Schema Flexibility** - Supports both simple type notation and full JSON Schema,
-//!    automatically converting to the OpenAI function calling format.
+//!    automatically converting to whichever wire format the endpoint's protocol uses.
 //!
 //! 3. **Async Execution** - Tools run asynchronously with a pinned, boxed future pattern
 //!    that enables dynamic dispatch and easy integration with async runtimes.

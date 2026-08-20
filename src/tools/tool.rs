@@ -1,4 +1,4 @@
-/// Tool definition for OpenAI-compatible function calling.
+/// Tool definition for function calling, over either wire protocol.
 ///
 /// A `Tool` encapsulates everything needed for an LLM to understand and execute
 /// a function: its identity, purpose, expected inputs, and implementation.

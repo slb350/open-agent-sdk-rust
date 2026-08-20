@@ -5,7 +5,7 @@ impl Client {
     ///
     /// 1. Executes UserPromptSubmit hooks (which can modify or block the prompt)
     /// 2. Adds the user message to conversation history
-    /// 3. Builds and sends HTTP request to the OpenAI-compatible API
+    /// 3. Builds and sends the HTTP request to the configured endpoint
     /// 4. Parses the SSE stream and sets up aggregation
     /// 5. Stores the stream for consumption via `receive()`
     ///

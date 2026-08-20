@@ -14,6 +14,9 @@
 /// - Some models don't charge tokens for images at all
 /// - The `ImageDetail` setting may be ignored entirely
 ///
+/// **Anthropic messages protocol**: the API has no equivalent field, so the setting is
+/// dropped in translation rather than mapped onto something approximate.
+///
 /// **Recommendation:** Always benchmark your specific model to understand
 /// actual token consumption. Do not rely on OpenAI's values for capacity planning
 /// with local models.

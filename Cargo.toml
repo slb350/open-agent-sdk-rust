@@ -10,7 +10,7 @@ homepage = "https://github.com/slb350/open-agent-sdk-rust"
 repository = "https://github.com/slb350/open-agent-sdk-rust"
 readme = "README.md"
 license = "MIT"
-keywords = ["ai", "llm", "agent", "openai", "local"]
+keywords = ["ai", "llm", "agent", "openai", "anthropic"]
 categories = ["api-bindings", "asynchronous", "development-tools"]
 exclude = [
     ".githooks/",
