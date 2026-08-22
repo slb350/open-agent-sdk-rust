@@ -65,7 +65,7 @@ regex = "1.10"
 criterion = "0.7"
 env_logger = "0.11"
 # Pinned exactly: wiremock 0.6.5 uses let-chains and fails to build on the 1.85 MSRV.
-wiremock = "=0.6.4"
+wiremock = "=0.6.5"
 # test-util is not part of tokio's "full" feature set; it provides the paused virtual clock
 # that lets retry tests assert exact backoff timing without real sleeps or flaky tolerances.
 tokio = { version = "1.50", features = ["test-util"] }
