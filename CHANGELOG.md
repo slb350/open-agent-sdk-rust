@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Maintenance
+
+- Refreshed seven Rust-1.85-compatible lockfile entries: `cc` 1.4.4, `either` 1.18.0,
+  `h2` 0.4.18, `log` 0.4.34, `rustls-webpki` 0.103.15, `zerovec` 0.11.8 and
+  `zerovec-derive` 0.11.6.
+- Updated the immutable `taiki-e/install-action` pin from v2.86.2 to v2.86.6 for the
+  cargo-mutants installation job, with its exact workflow-policy assertion updated in step.
+- Dependabot now ignores wiremock 0.6.5 specifically. Its use of let-chains fails on the
+  supported Rust 1.85 compiler, while future wiremock releases remain eligible for review.
+
+### Tests
+
+- Added a Dependabot-policy regression so the known MSRV-breaking wiremock release cannot be
+  reintroduced by the weekly dependency group.
+
 ## [0.10.0] - 2026-08-19
 
 Streaming that actually streams. Every release since 0.1.0 advertised token-by-token

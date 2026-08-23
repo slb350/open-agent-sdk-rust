@@ -1460,11 +1460,13 @@ push. To run the same check before each commit:
 git config core.hooksPath .githooks
 ```
 
-The hook runs `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`,
-and a `cargo mutants --in-diff` sweep scoped to the staged Rust changes. Both the hook and CI
-reach their verdict through `scripts/mutants-run.sh`, which reads `missed.txt` rather than the
-exit code — cargo-mutants reports a timeout in preference to a survivor, so a run with one of
-each would otherwise look like a timeout. The current sweep is 231 mutants, 0 missed.
+The hook runs `cargo fmt --all -- --check`,
+`cargo clippy --all-targets --all-features -- -D warnings`,
+`cargo test --all-features --all`, and a `cargo mutants --in-diff` sweep scoped to the staged
+Rust changes. Both the hook and CI reach their verdict through `scripts/mutants-run.sh`, which
+reads `missed.txt` rather than the exit code — cargo-mutants reports a timeout in preference
+to a survivor, so a run with one of each would otherwise look like a timeout. The current
+sweep is 237 mutants, 0 missed.
 
 ## Requirements
 
@@ -1478,7 +1480,7 @@ each would otherwise look like a timeout. The current sweep is 231 mutants, 0 mi
 - thiserror 2.0 + anyhow 1.0.103+ (error handling)
 - log 0.4.29+ (logging)
 - base64 0.23 (multimodal image encoding)
-- wiremock 0.6 (dev-only: HTTP mocking for streaming and wire-format tests)
+- wiremock =0.6.4 (dev-only: 0.6.5 uses syntax unavailable on the Rust 1.85 MSRV)
 - cargo-mutants 27.1.0 (dev-only: mutation testing gate)
 - rand (retry jitter)
 

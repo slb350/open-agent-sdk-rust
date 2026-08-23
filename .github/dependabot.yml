@@ -12,6 +12,10 @@ updates:
       - dependency-name: reqwest
         update-types:
           - version-update:semver-major
+      # wiremock 0.6.5 uses let-chains and fails to compile on the Rust 1.85 MSRV.
+      - dependency-name: wiremock
+        versions:
+          - "0.6.5"
     groups:
       cargo-dependencies:
         patterns:

@@ -1,5 +1,6 @@
 const CI_WORKFLOW: &str = include_str!("../.github/workflows/ci.yml");
 const SCHEDULED_AUDIT_WORKFLOW: &str = include_str!("../.github/workflows/scheduled-audit.yml");
+const DEPENDABOT_CONFIG: &str = include_str!("../.github/dependabot.yml");
 const PRE_COMMIT_HOOK: &str = include_str!("../.githooks/pre-commit");
 const MUTANTS_RUN: &str = include_str!("../scripts/mutants-run.sh");
 const MUTANTS_REMOTE: &str = include_str!("../scripts/mutants-remote.sh");
@@ -89,6 +90,14 @@ fn msrv_check_covers_test_targets_and_dev_dependencies() {
 }
 
 #[test]
+fn dependabot_skips_the_wiremock_release_that_breaks_the_msrv() {
+    assert!(
+        DEPENDABOT_CONFIG
+            .contains("- dependency-name: wiremock\n        versions:\n          - \"0.6.5\"")
+    );
+}
+
+#[test]
 fn mutation_sweep_runs_on_every_push_with_a_pinned_toolchain() {
     let mutants = job(CI_WORKFLOW, "mutants");
 
@@ -101,7 +110,7 @@ fn mutation_sweep_runs_on_every_push_with_a_pinned_toolchain() {
     // Exact tool version, and an immutable SHA pin with a version comment for the installer.
     assert!(mutants.contains("tool: cargo-mutants@27.1.0"));
     assert!(mutants.contains(
-        "uses: taiki-e/install-action@b6b84cf49ebfe0176417bdce007c624f0db37f20 # v2.86.2"
+        "uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6"
     ));
     assert!(mutants.contains("toolchain: stable"));
 }
