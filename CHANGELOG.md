@@ -22,6 +22,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a Dependabot-policy regression so the known MSRV-breaking wiremock release cannot be
   reintroduced by the weekly dependency group.
 
+## [0.11.0] - 2026-08-26
+
+### Added
+
+- **Arbitrary model-request headers** through
+  `AgentOptions::builder().header(name, value)`. This enables OpenRouter attribution with
+  `HTTP-Referer` / `X-Title`, Azure OpenAI authentication with `api-key`, and corporate
+  gateways that require `User-Agent` or custom routing and billing metadata.
+- Caller headers replace SDK defaults case-insensitively, while defaults the caller did not
+  name remain intact. Repeating a caller header replaces its earlier value rather than
+  appending a duplicate.
+- An empty `api_key` now suppresses the protocol's SDK auth header, allowing authentication
+  to come entirely from caller-supplied headers. Invalid header names and values fail
+  `build()` as configuration errors that identify the offending name.
+
 ## [0.10.0] - 2026-08-19
 
 Streaming that actually streams. Every release since 0.1.0 advertised token-by-token

@@ -9,8 +9,8 @@
 ///
 /// The options are organized into several functional areas:
 ///
-/// - **Model Configuration**: `model`, `base_url`, `api_key`, `protocol`, `temperature`,
-///   `max_tokens`
+/// - **Model Configuration**: `model`, `base_url`, `api_key`, `headers`, `protocol`,
+///   `temperature`, `max_tokens`
 /// - **Conversation Control**: `system_prompt`, `max_turns`, `timeout`
 /// - **Tool Management**: `tools`, `auto_execute_tools`, `max_tool_iterations`
 /// - **Lifecycle Hooks**: `hooks` for monitoring and interception
@@ -64,6 +64,12 @@ pub struct AgentOptions {
     /// "not-needed" is often sufficient. For cloud providers like OpenAI,
     /// set this to your actual API key.
     api_key: String,
+
+    /// Caller-supplied HTTP headers applied to every model request.
+    ///
+    /// These may override the protocol defaults, including authentication and content type.
+    /// Header names are matched case-insensitively when the builder replaces an earlier value.
+    headers: BTreeMap<String, String>,
 
     /// Maximum number of conversation turns (user message + assistant response = 1 turn).
     ///
@@ -158,8 +164,8 @@ pub struct AgentOptions {
 /// Custom Debug implementation to prevent sensitive data leakage.
 ///
 /// We override the default Debug implementation because:
-/// 1. The `api_key` field may contain sensitive credentials that shouldn't
-///    appear in logs or error messages
+/// 1. The `api_key` and `headers` fields may contain sensitive credentials that
+///    shouldn't appear in logs or error messages
 /// 2. The `tools` vector contains Arc-wrapped closures that don't debug nicely,
 ///    so we show a count instead
 ///
@@ -205,6 +211,8 @@ impl Default for AgentOptions {
             base_url: String::new(),
             // Most local servers (LM Studio, llama.cpp) don't require auth
             api_key: "not-needed".to_string(),
+            // No additional request metadata unless the caller opts in
+            headers: BTreeMap::new(),
             // Default to single-shot interaction; users opt into conversations
             max_turns: 1,
             // No client-imposed cap; the server decides how long a response may be.
@@ -272,6 +280,11 @@ impl AgentOptions {
     /// Returns the API key.
     pub fn api_key(&self) -> &str {
         &self.api_key
+    }
+
+    /// Returns the caller-supplied HTTP headers.
+    pub fn headers(&self) -> &BTreeMap<String, String> {
+        &self.headers
     }
 
     /// Returns the maximum number of conversation turns.

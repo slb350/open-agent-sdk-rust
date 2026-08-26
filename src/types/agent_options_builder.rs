@@ -61,6 +61,8 @@ pub struct AgentOptionsBuilder {
     base_url: Option<String>,
     /// Optional API key; defaults to "not-needed"
     api_key: Option<String>,
+    /// Caller-supplied HTTP headers; starts empty
+    headers: BTreeMap<String, String>,
     /// Optional max turns; defaults to 1
     max_turns: Option<u32>,
     /// Optional max tokens; unset means no client-imposed cap
@@ -86,7 +88,7 @@ pub struct AgentOptionsBuilder {
 /// Custom Debug implementation for builder to show minimal useful information.
 ///
 /// Similar to [`AgentOptions`], we provide a simplified debug output that:
-/// - Omits sensitive fields like API keys (not shown at all in builder)
+/// - Omits sensitive fields like API keys and headers (not shown at all in builder)
 /// - Shows tool count rather than tool details
 /// - Focuses on the most important configuration fields
 impl std::fmt::Debug for AgentOptionsBuilder {
@@ -478,7 +480,8 @@ impl AgentOptionsBuilder {
     ///
     /// # Errors
     ///
-    /// Returns a configuration error if any required field is missing.
+    /// Returns an error if a required field is missing, a model or endpoint value is invalid,
+    /// or a caller-supplied HTTP header name or value cannot be encoded on the wire.
     ///
     /// # Example
     ///
@@ -526,6 +529,8 @@ impl AgentOptionsBuilder {
             ));
         }
 
+        http_headers::validate(&self.headers)?;
+
         // Validate temperature when one was set, through the `Temperature` newtype that
         // exists for exactly this check rather than a second copy of its range and message.
         // Unset is passed through as None so the field is omitted from the wire request,
@@ -555,6 +560,7 @@ impl AgentOptionsBuilder {
             base_url,
             // Default API key works for most local servers
             api_key: self.api_key.unwrap_or_else(|| "not-needed".to_string()),
+            headers: self.headers,
             // Default to single-turn for simplicity
             max_turns: self.max_turns.unwrap_or(1),
             max_tokens: self.max_tokens,

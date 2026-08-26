@@ -6,6 +6,7 @@
             .model("test-model")
             .base_url("http://localhost:1234/v1")
             .api_key("test-key")
+            .header("X-Test", "test-value")
             .max_turns(5)
             .max_tokens(1000)
             .temperature(0.5)
@@ -19,6 +20,10 @@
         assert_eq!(options.model, "test-model");
         assert_eq!(options.base_url, "http://localhost:1234/v1");
         assert_eq!(options.api_key, "test-key");
+        assert_eq!(
+            options.headers.get("X-Test").map(String::as_str),
+            Some("test-value")
+        );
         assert_eq!(options.max_turns, 5);
         assert_eq!(options.max_tokens, Some(1000));
         assert_eq!(options.temperature, Some(0.5));
@@ -37,6 +42,7 @@
 
         assert_eq!(options.system_prompt, "");
         assert_eq!(options.api_key, "not-needed");
+        assert!(options.headers.is_empty());
         assert_eq!(options.max_turns, 1);
         // Unset means "no client-imposed cap" — the field is omitted from the wire request.
         assert_eq!(options.max_tokens, None);
@@ -399,6 +405,7 @@
             .base_url("http://localhost:1234/v1")
             .system_prompt("Test prompt")
             .api_key("test-key")
+            .header("X-Test", "test-value")
             .max_turns(5)
             .max_tokens(1000)
             .temperature(0.5)
@@ -413,6 +420,10 @@
         assert_eq!(options.model(), "test-model");
         assert_eq!(options.base_url(), "http://localhost:1234/v1");
         assert_eq!(options.api_key(), "test-key");
+        assert_eq!(
+            options.headers().get("X-Test").map(String::as_str),
+            Some("test-value")
+        );
         assert_eq!(options.max_turns(), 5);
         assert_eq!(options.max_tokens(), Some(1000));
         assert_eq!(options.temperature(), Some(0.5));

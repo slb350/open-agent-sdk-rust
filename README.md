@@ -16,9 +16,9 @@
 - **Control** - pick your model (Qwen, Llama, Mistral, Claude, etc.)
 
 **How fast?**
-From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 580 active tests.
+From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 588 active tests.
 
-[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.10.0)](https://crates.io/crates/open-agent-sdk)
+[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.11.0)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -53,7 +53,7 @@ The protocol is a property of the endpoint, set with `.protocol(..)` and default
 - **vLLM** - OpenAI-compatible API
 - **Text Generation WebUI** - OpenAI extension
 - **Any OpenAI-compatible local endpoint**
-- **Cloud vendors** - OpenAI, OpenRouter, z.ai (`https://api.z.ai/api/coding/paas/v4`)
+- **Cloud vendors** - OpenAI, OpenRouter, Azure OpenAI, z.ai (`https://api.z.ai/api/coding/paas/v4`)
 - **Local gateways proxying cloud models** - e.g., Ollama or custom gateways that route to cloud providers
 
 **Note on LM Studio:** LM Studio is particularly well-tested with this SDK and provides reliable OpenAI-compatible API support. If you're looking for a user-friendly local model server with excellent compatibility, LM Studio is highly recommended.
@@ -74,7 +74,7 @@ explicitly when an endpoint asks for them.
 
 ### Not Supported (Use Official SDKs)
 
-- **Cloud provider SDKs** - Bedrock, Vertex, Azure, etc. (proxied via local gateway is fine)
+- **Cloud provider SDK-only APIs** - Bedrock, Vertex, etc. (proxied via a compatible gateway is fine)
 
 ## Quick Start
 
@@ -82,7 +82,7 @@ explicitly when an endpoint asks for them.
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.10.0"
+open-agent-sdk = "0.11.0"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -95,6 +95,46 @@ git clone https://github.com/slb350/open-agent-sdk-rust.git
 cd open-agent-sdk-rust
 cargo build
 ```
+
+### Custom Request Headers
+
+Caller headers are stored as strings and applied to both `query()` and `Client` requests.
+They replace SDK defaults with the same name case-insensitively; names not supplied retain
+their protocol defaults.
+
+OpenRouter attribution:
+
+```rust
+let options = AgentOptions::builder()
+    .model(std::env::var("MODEL")?)
+    .base_url("https://openrouter.ai/api/v1")
+    .api_key(std::env::var("OPENROUTER_API_KEY")?)
+    .header("HTTP-Referer", "https://example.com")
+    .header("X-Title", "Example agent")
+    .build()?;
+```
+
+Azure OpenAI `api-key` authentication uses an empty `api_key` to suppress the SDK bearer
+header, then supplies the provider-specific header directly:
+
+```rust
+let options = AgentOptions::builder()
+    .model(std::env::var("MODEL")?)
+    .base_url(std::env::var("AZURE_OPENAI_BASE_URL")?)
+    .api_key("")
+    .header("api-key", std::env::var("AZURE_OPENAI_API_KEY")?)
+    .build()?;
+```
+
+Calling `.header()` again with the same name replaces the earlier value. Invalid names or
+values are rejected by `.build()` before a request can be sent.
+
+### Upgrading from 0.10.x
+
+v0.11.0 is additive. Existing configurations keep their current protocol headers; callers
+that use the new `.header(name, value)` method can replace those defaults case-insensitively.
+The one explicit opt-in auth behavior is `.api_key("")`, which now omits the SDK auth header
+so authentication can come entirely from caller headers.
 
 ### Upgrading from 0.9.x
 
@@ -968,6 +1008,7 @@ AgentOptions::builder()
     .protocol(ApiProtocol)               // Wire protocol (default: ApiProtocol::OpenAiChat)
     .timeout(u64)                        // Request timeout in seconds (default: 60)
     .api_key(str)                        // API key (default: "not-needed")
+    .header(name, value)                 // Add or replace a model-request header
     .include_reasoning(bool)             // Surface reasoning as StreamEvent::Reasoning (default: false)
     .build()?
 ```
@@ -1447,10 +1488,10 @@ cargo mutants --no-shuffle -j 4
 **Test Coverage:**
 
 - 248 unit tests (lib)
-- 168 active integration tests across 26 test files
+- 176 active integration tests across 27 test files
 - 164 active doctests
 
-Total: 580 active unit, integration, and documentation tests
+Total: 588 active unit, integration, and documentation tests
 
 **Mutation testing** is part of the gate, not an optional extra: a green suite proves the
 tests ran, not that they would notice if the code were wrong. CI runs the full sweep on every
@@ -1466,7 +1507,7 @@ The hook runs `cargo fmt --all -- --check`,
 Rust changes. Both the hook and CI reach their verdict through `scripts/mutants-run.sh`, which
 reads `missed.txt` rather than the exit code — cargo-mutants reports a timeout in preference
 to a survivor, so a run with one of each would otherwise look like a timeout. The current
-sweep is 237 mutants, 0 missed.
+sweep is 243 mutants, 0 missed.
 
 ## Requirements
 
@@ -1500,6 +1541,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.10.0 - Incremental text and reasoning delivery, plus from v0.9.0 the Anthropic messages protocol alongside OpenAI chat completions selected per endpoint with `ApiProtocol`, extended thinking on the existing reasoning channel, omittable `temperature`, plus from v0.8.0 finish reasons surfaced on every stream, explicit reasoning-channel separation, end-of-stream flushing for servers that omit `finish_reason`, structured `Error::Api` with status-based retry classification, no implicit `max_tokens` cap, a mandatory mutation-testing gate, plus transport-boundary-safe SSE streaming, complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, GitHub-hosted Linux/macOS CI, non-locking cancellation, and multimodal image support
+**Status**: v0.11.0 - Validated caller-supplied model-request headers with case-insensitive override semantics and empty-key auth suppression, plus incremental text and reasoning delivery, two wire protocols selected per endpoint with `ApiProtocol`, finish reasons on every stream, reasoning-channel separation, end-of-stream flushing, structured retry classification, no implicit token cap, mandatory mutation testing, complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, GitHub-hosted Linux/macOS CI, non-locking cancellation, and multimodal image support
 
 Star this repo if you're building AI agents with local models in Rust!
