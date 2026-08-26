@@ -127,6 +127,10 @@ path = "examples/vision_api_demo.rs"
 name = "test_tool_serialization"
 path = "examples/test_tool_serialization.rs"
 
+[[example]]
+name = "anthropic_query"
+path = "examples/anthropic_query.rs"
+
 [[bench]]
 name = "performance"
 harness = false
