@@ -324,6 +324,7 @@ use crate::utils::{
 };
 use crate::{Error, Result};
 use futures::stream::{Stream, StreamExt};
+use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -359,20 +360,43 @@ async fn stream_request(
 ) -> Result<EventStream> {
     let protocol = options.protocol();
     let url = format!("{}{}", options.base_url(), protocol.path());
-    let pending = http_client
-        .post(&url)
-        .header("Content-Type", "application/json");
+    let mut headers = HeaderMap::new();
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+
+    if !options.api_key().is_empty() {
+        let (name, value) = match protocol {
+            ApiProtocol::OpenAiChat => (
+                AUTHORIZATION,
+                HeaderValue::from_str(&format!("Bearer {}", options.api_key())).map_err(|_| {
+                    Error::config("api_key cannot be encoded as an HTTP header value")
+                })?,
+            ),
+            ApiProtocol::Anthropic => (
+                HeaderName::from_static("x-api-key"),
+                HeaderValue::from_str(options.api_key()).map_err(|_| {
+                    Error::config("api_key cannot be encoded as an HTTP header value")
+                })?,
+            ),
+        };
+        headers.insert(name, value);
+    }
+
+    if protocol == ApiProtocol::Anthropic {
+        headers.insert(
+            HeaderName::from_static("anthropic-version"),
+            HeaderValue::from_static(ANTHROPIC_VERSION),
+        );
+    }
+
+    // `HeaderMap::insert` replaces case-insensitively. Applying caller values last is what
+    // makes custom authentication possible without dropping unrelated protocol defaults.
+    crate::types::http_headers::insert_all(&mut headers, options.headers())?;
+
+    let pending = http_client.post(&url).headers(headers);
 
     let pending = match protocol {
-        ApiProtocol::OpenAiChat => pending
-            .header("Authorization", format!("Bearer {}", options.api_key()))
-            .json(request),
-        // Anthropic authenticates with `x-api-key` rather than a bearer token, and rejects
-        // a request that does not name the schema version it was written against.
-        ApiProtocol::Anthropic => pending
-            .header("x-api-key", options.api_key())
-            .header("anthropic-version", ANTHROPIC_VERSION)
-            .json(&AnthropicRequest::from_openai(request)),
+        ApiProtocol::OpenAiChat => pending.json(request),
+        ApiProtocol::Anthropic => pending.json(&AnthropicRequest::from_openai(request)),
     };
 
     let response = pending.send().await.map_err(Error::Http)?;

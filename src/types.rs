@@ -82,6 +82,7 @@ use crate::Error;
 use crate::hooks::Hooks;
 use crate::tools::Tool;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 include!("types/validated.rs");
@@ -98,6 +99,7 @@ include!("types/openai.rs");
 // modules could only reach by weakening that encapsulation.
 mod anthropic;
 mod anthropic_stream;
+pub(crate) mod http_headers;
 mod openai_stream;
 mod protocol;
 mod stream_event;
