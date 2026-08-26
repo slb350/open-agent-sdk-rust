@@ -16,7 +16,7 @@
 - **Control** - pick your model (Qwen, Llama, Mistral, Claude, etc.)
 
 **How fast?**
-From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 588 active tests.
+From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 578 active tests.
 
 [![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.11.0)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
@@ -1488,10 +1488,10 @@ cargo mutants --no-shuffle -j 4
 **Test Coverage:**
 
 - 248 unit tests (lib)
-- 176 active integration tests across 27 test files
+- 166 active integration tests across 27 test files (12 require a live Ollama server and are `#[ignore]`d)
 - 164 active doctests
 
-Total: 588 active unit, integration, and documentation tests
+Total: 578 active unit, integration, and documentation tests
 
 **Mutation testing** is part of the gate, not an optional extra: a green suite proves the
 tests ran, not that they would notice if the code were wrong. CI runs the full sweep on every
