@@ -1405,6 +1405,7 @@ open-agent-sdk-rust/
 │   ├── client_image_serialization_test.rs
 │   ├── config_env_test.rs           # get_model env resolution (own process: mutates env)
 │   ├── context_estimation_test.rs   # Token arithmetic and truncation boundaries
+│   ├── custom_headers_test.rs       # Caller-supplied header storage, case-insensitive override, empty api_key auth suppression
 │   ├── debug_logging_test.rs
 │   ├── defensive_validation_test.rs
 │   ├── edge_cases_test.rs
