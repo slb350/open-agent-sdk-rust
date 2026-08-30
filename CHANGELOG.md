@@ -7,20 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-08-29
+
+### Fixed
+
+- Published crate sources no longer include repository-only tests after excluding the
+  workflows, hooks and mutation scripts they load. Freshly unpacked packages now build and
+  test without missing-file compiler errors.
+- Mutation sweeps now own unique local scratch directories, staged diffs, remote checkouts and
+  result directories. Concurrent runs cannot delete live scratch trees, mutate another run's
+  checkout, overwrite its diff or return its diagnostics.
+- Remote scratch overrides are forwarded, result-mirror failures are reported instead of
+  hidden, the exact remote run is retained when recovery is necessary, and cleanup preserves
+  the original command status. A new run prunes completed same-host diagnostics while
+  preserving live concurrent runs, so local results remain bounded.
+
 ### Maintenance
 
-- Refreshed seven Rust-1.85-compatible lockfile entries: `cc` 1.4.4, `either` 1.18.0,
-  `h2` 0.4.18, `log` 0.4.34, `rustls-webpki` 0.103.15, `zerovec` 0.11.8 and
-  `zerovec-derive` 0.11.6.
-- Updated the immutable `taiki-e/install-action` pin from v2.86.2 to v2.86.6 for the
+- Refreshed six Rust-1.85-compatible lockfile entries: `chacha20` 0.10.2, `cpufeatures` 0.3.1,
+  `h2` 0.4.19, `hyper` 1.11.1, `indexmap` 2.14.1 and `syn` 3.0.4. The `chacha20` update removes
+  the yanked 0.10.1 release that caused the deny-warnings security audit to fail.
+- Updated the immutable `taiki-e/install-action` pin from v2.86.6 to v2.87.1 for the
   cargo-mutants installation job, with its exact workflow-policy assertion updated in step.
-- Dependabot now ignores wiremock 0.6.5 specifically. Its use of let-chains fails on the
-  supported Rust 1.85 compiler, while future wiremock releases remain eligible for review.
 
 ### Tests
 
-- Added a Dependabot-policy regression so the known MSRV-breaking wiremock release cannot be
-  reintroduced by the weekly dependency group.
+- Added behavioral shell regressions for failure status, stale cleanup, concurrent scratch
+  ownership, unique remote runs, scratch forwarding, mirror failure and staged-diff cleanup.
+- Added package-manifest coverage for the repository-only CI policy test.
 
 ## [0.11.0] - 2026-08-26
 
@@ -36,6 +50,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An empty `api_key` now suppresses the protocol's SDK auth header, allowing authentication
   to come entirely from caller-supplied headers. Invalid header names and values fail
   `build()` as configuration errors that identify the offending name.
+
+### Maintenance
+
+- Refreshed seven Rust-1.85-compatible lockfile entries: `cc` 1.4.4, `either` 1.18.0,
+  `h2` 0.4.18, `log` 0.4.34, `rustls-webpki` 0.103.15, `zerovec` 0.11.8 and
+  `zerovec-derive` 0.11.6.
+- Updated the immutable `taiki-e/install-action` pin from v2.86.2 to v2.86.6 for the
+  cargo-mutants installation job, with its exact workflow-policy assertion updated in step.
+- Dependabot now ignores wiremock 0.6.5 specifically. Its use of let-chains fails on the
+  supported Rust 1.85 compiler, while future wiremock releases remain eligible for review.
+
+### Tests
+
+- Added a Dependabot-policy regression so the known MSRV-breaking wiremock release cannot be
+  reintroduced by the weekly dependency group.
 
 ## [0.10.0] - 2026-08-19
 

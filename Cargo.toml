@@ -1,6 +1,6 @@
 [package]
 name = "open-agent-sdk"
-version = "0.11.0"
+version = "0.11.1"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Stephen Brandon"]
@@ -13,6 +13,7 @@ license = "MIT"
 keywords = ["ai", "llm", "agent", "openai", "anthropic"]
 categories = ["api-bindings", "asynchronous", "development-tools"]
 exclude = [
+    ".Codex/",
     ".githooks/",
     ".gitignore",
     ".github/",
@@ -20,7 +21,11 @@ exclude = [
     "CLAUDE.md",
     "mutants.out/",
     "scripts/",
+    "tests/ci_workflow_policy_test.rs",
     "tests/fixtures/",
+    "tests/mutation_scripts_test.rs",
+    "tests/mutation_transport_scripts_test.rs",
+    "tests/support/",
 ]
 
 [package.metadata.docs.rs]
@@ -64,6 +69,7 @@ tokio-test = "0.4"
 regex = "1.10"
 criterion = "0.7"
 env_logger = "0.11"
+tempfile = "3.27"
 # Pinned exactly: wiremock 0.6.5 uses let-chains and fails to build on the 1.85 MSRV.
 wiremock = "=0.6.4"
 # test-util is not part of tokio's "full" feature set; it provides the paused virtual clock

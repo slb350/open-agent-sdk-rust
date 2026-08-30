@@ -12,10 +12,37 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/mutants-common.sh
-. "$(dirname "$0")/mutants-common.sh"
-DIFF="$MUTANTS_OUT_DIR/staged.diff"
-mkdir -p "$MUTANTS_OUT_DIR"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/mutants-common.sh"
+STAGED_DIR="$MUTANTS_OUT_DIR/staged"
+mkdir -p "$STAGED_DIR"
+DIFF="$(mktemp "$STAGED_DIR/staged.XXXXXX")"
+
+# The diff is an input to the remote run, so it must live until that run has
+# copied it. Give every invocation its own file and delete only that exact file
+# on every exit; concurrent pre-commit hooks must never overwrite one another.
+# Invoked indirectly by the EXIT trap.
+# shellcheck disable=SC2329
+cleanup_staged_diff() {
+  local original_status=$?
+  local cleanup_status
+  trap - EXIT
+  set +e
+  mutants_delete_exact_path "$DIFF"
+  cleanup_status=$?
+  if [ "$cleanup_status" -ne 0 ]; then
+    echo "mutants-staged: failed to clean staged diff $DIFF" >&2
+  fi
+  mutants_reconcile_cleanup_status "$original_status" "$cleanup_status"
+  original_status=$?
+  exit "$original_status"
+}
+trap cleanup_staged_diff EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # pre-commit stashes unstaged changes before running hooks, so the working tree
 # matches the index here - which is what makes diffing the index correct.
@@ -34,4 +61,4 @@ fi
 # so it is named here as a file the run needs. The alternative was for the
 # transport layer to scan the arguments for `--in-diff`, which is cargo-mutants
 # grammar it has no business knowing.
-MUTANTS_EXTRA_FILES="$DIFF" exec ./scripts/mutants-remote.sh --in-diff "$DIFF"
+MUTANTS_EXTRA_FILE="$DIFF" ./scripts/mutants-remote.sh --in-diff "$DIFF"

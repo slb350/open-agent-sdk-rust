@@ -16,9 +16,9 @@
 - **Control** - pick your model (Qwen, Llama, Mistral, Claude, etc.)
 
 **How fast?**
-From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 586 active tests.
+From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 592 active tests.
 
-[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.11.0)](https://crates.io/crates/open-agent-sdk)
+[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.11.1)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -82,7 +82,7 @@ explicitly when an endpoint asks for them.
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.11.0"
+open-agent-sdk = "0.11.1"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -1489,10 +1489,10 @@ cargo mutants --no-shuffle -j 4
 **Test Coverage:**
 
 - 248 unit tests (lib)
-- 174 active integration tests across 28 test files (12 require a live Ollama server and are `#[ignore]`d)
+- 180 active integration tests across 30 test files (12 require a live Ollama server and are `#[ignore]`d)
 - 164 active doctests
 
-Total: 578 active unit, integration, and documentation tests
+Total: 592 active unit, integration, and documentation tests
 
 **Mutation testing** is part of the gate, not an optional extra: a green suite proves the
 tests ran, not that they would notice if the code were wrong. CI runs the full sweep on every
@@ -1542,6 +1542,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.11.0 - Validated caller-supplied model-request headers with case-insensitive override semantics and empty-key auth suppression, plus incremental text and reasoning delivery, two wire protocols selected per endpoint with `ApiProtocol`, finish reasons on every stream, reasoning-channel separation, end-of-stream flushing, structured retry classification, no implicit token cap, mandatory mutation testing, complete structured hook history, source-size architecture guards, Rust 1.85-compatible dependencies, GitHub-hosted Linux/macOS CI, non-locking cancellation, and multimodal image support
+**Status**: v0.11.1 - Reproducible published package tests, concurrency-safe mutation infrastructure, non-yanked Rust 1.85-compatible dependencies and current immutable CI pins, plus validated caller-supplied model-request headers, incremental streaming, OpenAI and Anthropic wire protocols, finish reasons, reasoning-channel separation, structured retry classification, context controls, hooks, tools and multimodal image support
 
 Star this repo if you're building AI agents with local models in Rust!

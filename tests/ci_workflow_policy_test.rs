@@ -3,6 +3,7 @@ const SCHEDULED_AUDIT_WORKFLOW: &str = include_str!("../.github/workflows/schedu
 const DEPENDABOT_CONFIG: &str = include_str!("../.github/dependabot.yml");
 const PRE_COMMIT_HOOK: &str = include_str!("../.githooks/pre-commit");
 const MUTANTS_RUN: &str = include_str!("../scripts/mutants-run.sh");
+const MUTANTS_COMMON: &str = include_str!("../scripts/mutants-common.sh");
 const MUTANTS_REMOTE: &str = include_str!("../scripts/mutants-remote.sh");
 const MUTANTS_STAGED: &str = include_str!("../scripts/mutants-staged.sh");
 
@@ -110,7 +111,7 @@ fn mutation_sweep_runs_on_every_push_with_a_pinned_toolchain() {
     // Exact tool version, and an immutable SHA pin with a version comment for the installer.
     assert!(mutants.contains("tool: cargo-mutants@27.1.0"));
     assert!(mutants.contains(
-        "uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6"
+        "uses: taiki-e/install-action@742a3317eac7bd62f91cd888b4eead5e784ba833 # v2.87.1"
     ));
     assert!(mutants.contains("toolchain: stable"));
 }
@@ -133,6 +134,34 @@ fn the_mutation_verdict_comes_from_missed_txt_not_the_exit_code() {
 }
 
 #[test]
+fn mutation_scratch_copies_stay_off_the_tmpfs() {
+    // cargo-mutants creates one source-tree copy per job beneath $TMPDIR and removes those
+    // copies only on a clean exit. The default root is checkout-adjacent so a killed run costs
+    // disk, not Strix's tmpfs-backed /tmp. Every invocation owns a unique namespace, otherwise
+    // one concurrent run's startup or EXIT cleanup can erase another run's live source tree.
+    assert!(
+        MUTANTS_RUN.contains(r#"SCRATCH_ROOT="${DREP_MUTANTS_TMPDIR:-${ROOT}.mutants-tmp}""#),
+        "the default scratch root must stay beside the checkout"
+    );
+    assert!(
+        MUTANTS_RUN.contains("mktemp -d \"$SCRATCH_ROOT/run_${HOST_ID}_$$_XXXXXX\""),
+        "each run must own a unique scratch namespace"
+    );
+    assert!(
+        MUTANTS_COMMON.contains(r#"kill -0 "$owner_pid""#),
+        "stale cleanup must preserve a live owner"
+    );
+    assert!(
+        MUTANTS_RUN.contains("trap cleanup_owned_scratch EXIT"),
+        "normal, failed and trapped exits must clean only the owned namespace"
+    );
+    assert!(
+        !MUTANTS_RUN.lines().any(|line| line.contains("rm -rf")),
+        "the mutation runner must honor the repository deletion policy"
+    );
+}
+
+#[test]
 fn the_remote_sweep_never_silently_skips_itself() {
     // An unreachable host must fall back to a local run and say so. A commit gate that quietly
     // disables itself because the LAN blipped is worse than a slow one.
@@ -142,10 +171,18 @@ fn the_remote_sweep_never_silently_skips_itself() {
     // propagates its exit code.
     assert!(MUTANTS_REMOTE.contains("./scripts/mutants-run.sh"));
     assert!(MUTANTS_REMOTE.contains(r#"exit "$status""#));
+    assert!(MUTANTS_REMOTE.contains("REMOTE_RUN_DIR="));
+    assert!(MUTANTS_REMOTE.contains("LOCAL_RESULTS="));
+    assert!(MUTANTS_REMOTE.contains("DREP_MUTANTS_TMPDIR="));
+    assert!(
+        !MUTANTS_REMOTE.contains("2>/dev/null || true"),
+        "result-mirroring failures must never be hidden"
+    );
     // The staged diff lands under target/, the one directory the sync excludes, so it has to
     // be named as a file the run needs.
-    assert!(MUTANTS_STAGED.contains("MUTANTS_EXTRA_FILES"));
+    assert!(MUTANTS_STAGED.contains("MUTANTS_EXTRA_FILE"));
     assert!(MUTANTS_STAGED.contains("--in-diff"));
+    assert!(MUTANTS_STAGED.contains("mktemp"));
 }
 
 #[test]
