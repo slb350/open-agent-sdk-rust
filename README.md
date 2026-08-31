@@ -129,6 +129,11 @@ let options = AgentOptions::builder()
 Calling `.header()` again with the same name replaces the earlier value. Invalid names or
 values are rejected by `.build()` before a request can be sent.
 
+Custom headers are sent only to the configured model origin. Model requests deliberately do
+not follow HTTP redirects, including same-origin redirects; any `30x` response surfaces through
+the normal API-status error path. Set `base_url` to the exact destination that should receive
+the request and its credentials.
+
 ### Upgrading from 0.10.x
 
 v0.11.0 is additive. Existing configurations keep their current protocol headers; callers

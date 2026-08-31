@@ -1,7 +1,10 @@
+mod common;
+
+use common::{header_values, read_request};
 use futures::StreamExt;
 use open_agent::{AgentOptions, ApiProtocol, Client, Error, query};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
 async fn start_request_capture() -> (String, JoinHandle<String>) {
@@ -23,38 +26,6 @@ async fn start_request_capture() -> (String, JoinHandle<String>) {
     });
 
     (format!("http://{address}"), server)
-}
-
-async fn read_request(socket: &mut TcpStream) -> Vec<u8> {
-    let mut request = Vec::new();
-    let mut buffer = [0_u8; 4_096];
-
-    loop {
-        let read = socket.read(&mut buffer).await.expect("read SDK request");
-        assert!(read > 0, "SDK closed the request before sending its body");
-        request.extend_from_slice(&buffer[..read]);
-
-        let Some(header_end) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n") else {
-            continue;
-        };
-        let body_start = header_end + 4;
-        let headers = String::from_utf8_lossy(&request[..header_end]);
-        let content_length = headers
-            .lines()
-            .filter_map(|line| line.split_once(':'))
-            .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
-            .map(|(_, value)| {
-                value
-                    .trim()
-                    .parse::<usize>()
-                    .expect("request content-length is numeric")
-            })
-            .unwrap_or_default();
-
-        if request.len() >= body_start + content_length {
-            return request;
-        }
-    }
 }
 
 async fn capture_query_request(configure: impl FnOnce(String) -> AgentOptions) -> String {
@@ -81,15 +52,6 @@ async fn capture_client_request(configure: impl FnOnce(String) -> AgentOptions) 
         .is_some()
     {}
     server.await.expect("request capture task completes")
-}
-
-fn header_values(request: &str, expected_name: &str) -> Vec<String> {
-    request
-        .lines()
-        .filter_map(|line| line.split_once(':'))
-        .filter(|(name, _)| name.eq_ignore_ascii_case(expected_name))
-        .map(|(_, value)| value.trim().to_string())
-        .collect()
 }
 
 #[tokio::test]

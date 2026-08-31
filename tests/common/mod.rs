@@ -8,8 +8,53 @@
 
 use futures::StreamExt;
 use open_agent::{AgentOptions, ContentBlock, FinishReason, Message, StreamEvent, query};
+use tokio::io::AsyncReadExt;
+use tokio::net::TcpStream;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
+
+/// Reads one complete HTTP request, including a body identified by `Content-Length`.
+pub async fn read_request(socket: &mut TcpStream) -> Vec<u8> {
+    let mut request = Vec::new();
+    let mut buffer = [0_u8; 4_096];
+
+    loop {
+        let read = socket.read(&mut buffer).await.expect("read SDK request");
+        assert!(read > 0, "SDK closed the request before sending its body");
+        request.extend_from_slice(&buffer[..read]);
+
+        let Some(header_end) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n") else {
+            continue;
+        };
+        let body_start = header_end + 4;
+        let headers = String::from_utf8_lossy(&request[..header_end]);
+        let content_length = headers
+            .lines()
+            .filter_map(|line| line.split_once(':'))
+            .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+            .map(|(_, value)| {
+                value
+                    .trim()
+                    .parse::<usize>()
+                    .expect("request content-length is numeric")
+            })
+            .unwrap_or_default();
+
+        if request.len() >= body_start + content_length {
+            return request;
+        }
+    }
+}
+
+/// Returns every value for `expected_name`, matching the HTTP header name case-insensitively.
+pub fn header_values(request: &str, expected_name: &str) -> Vec<String> {
+    request
+        .lines()
+        .filter_map(|line| line.split_once(':'))
+        .filter(|(name, _)| name.eq_ignore_ascii_case(expected_name))
+        .map(|(_, value)| value.trim().to_string())
+        .collect()
+}
 
 /// Starts a mock server that answers the chat-completions endpoint with `body` as an SSE
 /// stream.

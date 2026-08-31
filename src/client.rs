@@ -348,6 +348,17 @@ fn serialize_history_snapshot(history: &[Message]) -> Result<Vec<serde_json::Val
 /// this SDK was written against, so it changes when the code does.
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 
+/// Builds the shared HTTP-client policy for model requests.
+///
+/// Redirects are rejected even when they stay on the same origin. The configured base URL
+/// names the exact model endpoint, and caller-supplied credentials must never be replayed to a
+/// destination selected by an HTTP response.
+fn model_http_client_builder(options: &AgentOptions) -> reqwest::ClientBuilder {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(options.timeout()))
+        .redirect(reqwest::redirect::Policy::none())
+}
+
 /// Sends the request over whichever protocol `options` selects and returns its event stream.
 ///
 /// The one place the two protocols differ. Both call sites build the same protocol-neutral
