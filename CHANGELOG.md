@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-08-31
+
+### Security
+
+- Model requests no longer follow HTTP redirects, including same-origin redirects. Custom
+  headers and other credentials are sent only to the configured origin, while any `30x`
+  response remains visible through the existing API-status error path.
+
+### Tests
+
+- Added raw loopback regressions for both `query()` and `Client` proving a redirect target is
+  never contacted and cannot receive a caller-supplied credential header.
+
 ## [0.11.1] - 2026-08-29
 
 ### Fixed

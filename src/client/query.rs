@@ -209,8 +209,7 @@ pub type EventStream = Pin<Box<dyn Stream<Item = Result<StreamEvent>> + Send>>;
 pub async fn query(prompt: &str, options: &AgentOptions) -> Result<EventStream> {
     // Create HTTP client with configured timeout
     // The timeout applies to the entire request, not individual chunks
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(options.timeout()))
+    let client = model_http_client_builder(options)
         .build()
         .map_err(Error::Http)?;
 

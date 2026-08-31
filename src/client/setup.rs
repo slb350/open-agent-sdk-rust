@@ -31,8 +31,7 @@ impl Client {
     pub fn new(options: AgentOptions) -> Result<Self> {
         // Build HTTP client with configured timeout
         // This client is reused across all requests for connection pooling
-        let http_client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(options.timeout()))
+        let http_client = model_http_client_builder(&options)
             .build()
             .map_err(|e| Error::config(format!("Failed to build HTTP client: {}", e)))?;
 
