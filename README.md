@@ -1507,7 +1507,7 @@ is wrong. CI starts mutation work only when tests are added, modified, deleted, 
 Inline tests rerun every mutant in their owning source files; integration tests, fixtures,
 snapshots, and ambiguous mappings conservatively fall back to the complete sweep. Production-only
 revisions run only the fast policy check. Manual dispatch and the monthly run on the fifteenth
-day always sweep the tree. The following day's `Monthly Open Agent Mutation Repair` automation
+day always sweep the tree. The following day's shared `Monthly Mutation Repair` automation
 repairs survivors through a branch-protected PR and auto-merges only after every gate is green.
 To keep the staged local gate enabled:
 
