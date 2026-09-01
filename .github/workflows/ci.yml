@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: '37 9 15 * *'
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,6 +20,7 @@ jobs:
   # Fast feedback: formatting check (fails in ~30s)
   fmt:
     name: Rustfmt
+    if: &regular_ci github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -29,6 +33,7 @@ jobs:
   # Fast feedback: clippy lints
   clippy:
     name: Clippy
+    if: *regular_ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -42,6 +47,7 @@ jobs:
   # Linux matrix runs on GitHub-hosted runners.
   test-linux:
     name: Test Suite (Linux, ${{ matrix.rust }})
+    if: *regular_ci
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -61,6 +67,7 @@ jobs:
   # Preserve native macOS coverage on GitHub-hosted runners.
   test-macos:
     name: Test Suite (macOS, ${{ matrix.rust }})
+    if: *regular_ci
     runs-on: macos-latest
     strategy:
       matrix:
@@ -80,6 +87,7 @@ jobs:
   # MSRV check: Ensure Rust 1.85 compatibility
   msrv:
     name: Minimum Supported Rust Version
+    if: *regular_ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -96,6 +104,7 @@ jobs:
   # Security audit: Check for known vulnerabilities
   security:
     name: Security Audit
+    if: *regular_ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -112,17 +121,53 @@ jobs:
       - name: Run security audit
         run: cargo audit --deny warnings
 
-  # Mutation testing: A green suite proves the tests ran, not that they would notice if the
-  # code were wrong. The verdict comes from missed.txt rather than the exit code, because
-  # cargo-mutants reports exit 3 (Timeout) in preference to exit 2 (FoundProblems) — so a run
-  # with one hanging mutant and one genuine survivor also exits 3. scripts/mutants-run.sh owns
-  # that rule and is shared with the pre-commit hook, so the two cannot disagree; survivors
-  # print as "MISSED <file>:<line>: <mutation>" lines in this job's log.
-  #
-  # This runs on the GitHub runner, not on strix: only the local hook offloads, because a
-  # GitHub runner cannot reach the LAN.
+  # Ordinary CI runs the full sweep only when its complete pushed or pull-request diff adds a
+  # Rust test declaration. Monthly and manual runs are explicit full sweeps. The verdict still
+  # comes from missed.txt through the shared script, never from cargo-mutants' ambiguous status.
+  mutation-policy:
+    name: Mutation policy
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.test-policy.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
+        with:
+          fetch-depth: 0
+      - name: Detect newly added Rust tests
+        id: test-policy
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BASE: ${{ github.event.before }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == schedule || "$EVENT_NAME" == workflow_dispatch ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            base="$(git merge-base HEAD "origin/$BASE_REF")"
+          elif [[ "$PUSH_BASE" =~ ^0+$ ]]; then
+            base="$(git merge-base HEAD origin/main)"
+          else
+            base="$PUSH_BASE"
+          fi
+          git diff --unified=0 "$base" HEAD -- '*.rs' > "$RUNNER_TEMP/new-tests.diff"
+          if grep -Eq '^\+[[:space:]]*#\[(test|[[:alnum:]_]+::test|rstest|test_case|case|parameterized)([[:space:](]|])' "$RUNNER_TEMP/new-tests.diff" ||
+             grep -Eq '^\+[[:space:]]*//[/!][[:space:]]*```(rust)?' "$RUNNER_TEMP/new-tests.diff"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "new Rust tests detected; admitting the full mutation sweep"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "no new Rust tests detected; mutation work is omitted"
+          fi
+
   mutants:
     name: Mutation Testing
+    needs: mutation-policy
+    if: needs.mutation-policy.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -139,6 +184,7 @@ jobs:
   # Documentation: Validate docs build for docs.rs
   docs:
     name: Documentation
+    if: *regular_ci
     runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: -Dwarnings
@@ -154,6 +200,7 @@ jobs:
   # Code coverage: Tarpaulin report retained with the workflow run
   coverage:
     name: Code Coverage
+    if: *regular_ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

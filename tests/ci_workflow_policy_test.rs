@@ -99,12 +99,18 @@ fn dependabot_skips_the_wiremock_release_that_breaks_the_msrv() {
 }
 
 #[test]
-fn mutation_sweep_runs_on_every_push_with_a_pinned_toolchain() {
+fn mutation_sweep_runs_for_new_tests_or_the_monthly_schedule() {
+    let policy = job(CI_WORKFLOW, "mutation-policy");
     let mutants = job(CI_WORKFLOW, "mutants");
 
-    // The sweep must be unconditional: a mutation gate that only runs on pull requests lets
-    // survivors land through direct pushes.
-    assert!(!mutants.contains("if:"));
+    assert!(CI_WORKFLOW.contains("schedule:\n    - cron: '37 9 15 * *'"));
+    assert!(CI_WORKFLOW.contains("workflow_dispatch:"));
+    assert!(policy.contains("id: test-policy"));
+    assert!(policy.contains("git diff --unified=0"));
+    assert!(policy.contains("new-tests.diff"));
+    assert!(policy.contains("outputs:\n      run:"));
+    assert!(mutants.contains("needs: mutation-policy"));
+    assert!(mutants.contains("needs.mutation-policy.outputs.run == 'true'"));
     // Through the shared verdict script, and unscoped, so CI sweeps the whole tree.
     assert!(mutants.contains("run: ./scripts/mutants-run.sh"));
     assert!(!mutants.contains("--in-diff"));
