@@ -41,11 +41,70 @@ content_has_tests() {
 test_content() {
   local revision="$1"
   local path="$2"
+  # Extract only test-gated items; a suffix from the first test marker would
+  # misclassify later production changes in mixed Rust source files.
   { git show "$revision:$path" 2>/dev/null || true; } |
-    awk -v pattern="$TEST_SIGNAL_REGEX" '
-      found || $0 ~ pattern {
-        found = 1
+    awk '
+      function brace_delta(source, opens, closes) {
+        sub(/\/\/.*$/, "", source)
+        gsub(/"([^"\\]|\\.)*"/, "", source)
+        opens = gsub(/\{/, "{", source)
+        closes = gsub(/\}/, "}", source)
+        return opens - closes
+      }
+
+      function test_attribute(source) {
+        return source ~ /^[[:space:]]*#\[(cfg\(test\)|test|[[:alnum:]_]+::test|rstest|test_case|case|parameterized)([[:space:](]|\])/
+      }
+
+      function test_module(source) {
+        return source ~ /(^|[[:space:]])mod[[:space:]]+tests([[:space:]]|\{|;)/
+      }
+
+      function begin_item(source, delta, remainder, has_open) {
+        print source
+        delta = brace_delta(source)
+        has_open = source ~ /\{/
+        if (has_open && delta > 0) {
+          capturing = 1
+          depth = delta
+          return
+        }
+        if (has_open) {
+          pending = 0
+          return
+        }
+        remainder = source
+        sub(/^.*\][[:space:]]*/, "", remainder)
+        pending = remainder == ""
+      }
+
+      capturing {
         print
+        depth += brace_delta($0)
+        if (depth <= 0) {
+          capturing = 0
+        }
+        next
+      }
+
+      pending {
+        print
+        if ($0 ~ /^[[:space:]]*$/ || $0 ~ /^[[:space:]]*#\[/) {
+          next
+        }
+        delta = brace_delta($0)
+        if ($0 ~ /\{/ && delta > 0) {
+          capturing = 1
+          depth = delta
+        }
+        pending = 0
+        next
+      }
+
+      test_attribute($0) || test_module($0) || $0 ~ /proptest!|rstest!/ {
+        begin_item($0)
+        next
       }
     '
 }
@@ -80,7 +139,7 @@ while IFS= read -r -d '' path; do
   esac
 
   case "$path" in
-    tests/*|*/tests/*|test/*|*/test/*|fixtures/*|*/fixtures/*|testdata/*|*/testdata/*|snapshots/*|*/snapshots/*|*.snap|*.snap.new|.cargo/mutants.toml)
+    tests/*|*/tests/*|test/*|*/test/*|test_support/*|*/test_support/*|test_support.rs|*/test_support.rs|*_test.rs|*_tests.rs|fixtures/*|*/fixtures/*|testdata/*|*/testdata/*|snapshots/*|*/snapshots/*|*.snap|*.snap.new|.cargo/mutants.toml)
       FULL=true
       continue
       ;;

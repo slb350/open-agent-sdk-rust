@@ -130,6 +130,42 @@ fn deleted_test_files_fall_back_to_the_complete_sweep() {
 }
 
 #[test]
+fn repository_test_modules_fall_back_to_the_complete_sweep() {
+    let repository = Repository::new();
+    repository.write("src/body_map.rs", "pub fn body_map() -> u8 { 1 }\n");
+    repository.write(
+        "src/body_map_tests.rs",
+        "#[test]\nfn body_map_is_stable() { assert_eq!(2 + 2, 4); }\n",
+    );
+    let base = repository.commit("initial repository test module");
+    repository.write(
+        "src/body_map_tests.rs",
+        "#[test]\nfn body_map_is_stable() { assert!(2 + 2 > 3); }\n",
+    );
+    repository.commit("modify repository test module");
+
+    assert_eq!(repository.scope(&base), ["full"]);
+}
+
+#[test]
+fn repository_test_support_changes_fall_back_to_the_complete_sweep() {
+    let repository = Repository::new();
+    repository.write("src/lib.rs", "pub fn answer() -> u8 { 42 }\n");
+    repository.write(
+        "src/test_support/doubles.rs",
+        "pub fn response() -> u8 { 41 }\n",
+    );
+    let base = repository.commit("initial test support");
+    repository.write(
+        "src/test_support/doubles.rs",
+        "pub fn response() -> u8 { 42 }\n",
+    );
+    repository.commit("modify test support");
+
+    assert_eq!(repository.scope(&base), ["full"]);
+}
+
+#[test]
 fn production_only_changes_do_not_start_mutation_ci() {
     let repository = Repository::new();
     repository.write(
@@ -142,6 +178,40 @@ fn production_only_changes_do_not_start_mutation_ci() {
         "pub fn answer() -> u8 { 42 }\n\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn answer_is_stable() { assert!(super::answer() > 40); }\n}\n",
     );
     repository.commit("modify production code");
+
+    assert_eq!(repository.scope(&base), ["none"]);
+}
+
+#[test]
+fn production_changes_after_a_test_gated_item_do_not_start_mutation_ci() {
+    let repository = Repository::new();
+    repository.write(
+        "src/lib.rs",
+        "pub async fn upload() -> u8 {\n    #[cfg(test)]\n    let delay = 1;\n    consume(delay);\n    41\n}\n",
+    );
+    let base = repository.commit("initial mixed source");
+    repository.write(
+        "src/lib.rs",
+        "pub async fn upload() -> u8 {\n    #[cfg(test)]\n    let delay = 1;\n    consume(delay);\n    42\n}\n",
+    );
+    repository.commit("modify trailing production code");
+
+    assert_eq!(repository.scope(&base), ["none"]);
+}
+
+#[test]
+fn production_changes_after_an_inline_test_module_do_not_start_mutation_ci() {
+    let repository = Repository::new();
+    repository.write(
+        "src/lib.rs",
+        "#[cfg(test)]\nmod tests {\n    #[test]\n    fn arithmetic() { assert_eq!(2 + 2, 4); }\n}\n\npub fn answer() -> u8 { 41 }\n",
+    );
+    let base = repository.commit("initial test-first source");
+    repository.write(
+        "src/lib.rs",
+        "#[cfg(test)]\nmod tests {\n    #[test]\n    fn arithmetic() { assert_eq!(2 + 2, 4); }\n}\n\npub fn answer() -> u8 { 42 }\n",
+    );
+    repository.commit("modify production after inline tests");
 
     assert_eq!(repository.scope(&base), ["none"]);
 }
