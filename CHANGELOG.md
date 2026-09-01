@@ -9,10 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Stop running the full `cargo-mutants` sweep for every ordinary CI revision. CI now runs it
-  when a pushed or pull-request diff adds a Rust test, on manual dispatch, and monthly on the
-  fifteenth day; revisions without new tests complete the mutation policy job without
-  installing or starting mutation tooling.
+- Stop running the full `cargo-mutants` sweep for every ordinary CI revision. Added, modified,
+  deleted, and renamed inline tests now run the owning source files' mutants; integration tests,
+  fixtures, snapshots, and ambiguous mappings fall back to the full sweep. Production-only
+  revisions skip mutation, while manual dispatch and the fifteenth-day monthly schedule always
+  sweep the tree. Failed runs retain bounded evidence for the following day's autonomous repair
+  PR.
 
 ## [0.11.2] - 2026-08-31
 

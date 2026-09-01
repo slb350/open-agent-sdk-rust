@@ -1503,9 +1503,13 @@ cargo mutants --no-shuffle -j 4
 Total: 595 active unit, integration, and documentation tests
 
 **Mutation testing** proves something the ordinary suite cannot: that tests notice when code
-is wrong. CI runs the full sweep when the complete pushed or pull-request diff adds a Rust
-test, on manual dispatch, and monthly on the fifteenth day. Revisions without new tests run
-only the fast mutation-policy check. To keep the staged local gate enabled:
+is wrong. CI starts mutation work only when tests are added, modified, deleted, or renamed.
+Inline tests rerun every mutant in their owning source files; integration tests, fixtures,
+snapshots, and ambiguous mappings conservatively fall back to the complete sweep. Production-only
+revisions run only the fast policy check. Manual dispatch and the monthly run on the fifteenth
+day always sweep the tree. The following day's `Monthly Open Agent Mutation Repair` automation
+repairs survivors through a branch-protected PR and auto-merges only after every gate is green.
+To keep the staged local gate enabled:
 
 ```bash
 git config core.hooksPath .githooks
@@ -1514,9 +1518,9 @@ git config core.hooksPath .githooks
 The hook runs `cargo fmt --all -- --check`,
 `cargo clippy --all-targets --all-features -- -D warnings`,
 `cargo test --all-features --all`, and a `cargo mutants --in-diff` sweep scoped to the staged
-Rust changes. Full CI sweeps are unscoped once admitted, so a newly added test must
-discriminate existing code anywhere in the tree. Both the hook and CI reach their verdict
-through `scripts/mutants-run.sh`, which
+Rust changes. Failed CI mutation runs retain only `missed.txt`, `timeout.txt`, and
+`outcomes.json` as bounded repair evidence. Both the hook and CI reach their verdict through
+`scripts/mutants-run.sh`, which
 reads `missed.txt` rather than the exit code — cargo-mutants reports a timeout in preference
 to a survivor, so a run with one of each would otherwise look like a timeout. The current
 sweep is 243 mutants, 0 missed.

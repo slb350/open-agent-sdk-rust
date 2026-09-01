@@ -99,21 +99,25 @@ fn dependabot_skips_the_wiremock_release_that_breaks_the_msrv() {
 }
 
 #[test]
-fn mutation_sweep_runs_for_new_tests_or_the_monthly_schedule() {
+fn mutation_sweep_is_scoped_for_test_changes_and_full_for_the_monthly_schedule() {
     let policy = job(CI_WORKFLOW, "mutation-policy");
     let mutants = job(CI_WORKFLOW, "mutants");
 
     assert!(CI_WORKFLOW.contains("schedule:\n    - cron: '37 9 15 * *'"));
     assert!(CI_WORKFLOW.contains("workflow_dispatch:"));
     assert!(policy.contains("id: test-policy"));
-    assert!(policy.contains("git diff --unified=0"));
-    assert!(policy.contains("new-tests.diff"));
+    assert!(policy.contains("./scripts/mutants-ci-scope.sh"));
     assert!(policy.contains("outputs:\n      run:"));
+    assert!(policy.contains("mode: ${{ steps.test-policy.outputs.mode }}"));
+    assert!(policy.contains("base: ${{ steps.test-policy.outputs.base }}"));
     assert!(mutants.contains("needs: mutation-policy"));
     assert!(mutants.contains("needs.mutation-policy.outputs.run == 'true'"));
-    // Through the shared verdict script, and unscoped, so CI sweeps the whole tree.
-    assert!(mutants.contains("run: ./scripts/mutants-run.sh"));
-    assert!(!mutants.contains("--in-diff"));
+    assert!(mutants.contains("mapfile -t mutation_scope"));
+    assert!(mutants.contains("./scripts/mutants-run.sh \"${mutation_args[@]}\""));
+    assert!(mutants.contains("name: Retain mutation repair evidence"));
+    assert!(mutants.contains("if [[ \"$status\" -eq 2 && -s \"$missed\" ]]"));
+    assert!(mutants.contains("${{ runner.temp }}/mutation-repair/missed.txt"));
+    assert!(mutants.contains("actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"));
     // Exact tool version, and an immutable SHA pin with a version comment for the installer.
     assert!(mutants.contains("tool: cargo-mutants@27.1.0"));
     assert!(mutants.contains(

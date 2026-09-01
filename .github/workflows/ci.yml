@@ -121,20 +121,22 @@ jobs:
       - name: Run security audit
         run: cargo audit --deny warnings
 
-  # Ordinary CI runs the full sweep only when its complete pushed or pull-request diff adds a
-  # Rust test declaration. Monthly and manual runs are explicit full sweeps. The verdict still
-  # comes from missed.txt through the shared script, never from cargo-mutants' ambiguous status.
+  # Ordinary CI runs mutation only for added, modified, deleted, or renamed tests. Inline tests
+  # scope to their owning source files; ambiguous integration tests and fixtures expand to the
+  # full sweep. Monthly and manual runs are always full. Production-only revisions skip mutation.
   mutation-policy:
     name: Mutation policy
     runs-on: ubuntu-latest
     outputs:
       run: ${{ steps.test-policy.outputs.run }}
+      mode: ${{ steps.test-policy.outputs.mode }}
+      base: ${{ steps.test-policy.outputs.base }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
         with:
           fetch-depth: 0
-      - name: Detect newly added Rust tests
+      - name: Classify mutation scope from test changes
         id: test-policy
         shell: bash
         env:
@@ -144,25 +146,31 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$EVENT_NAME" == schedule || "$EVENT_NAME" == workflow_dispatch ]]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [[ "$EVENT_NAME" == pull_request ]]; then
-            base="$(git merge-base HEAD "origin/$BASE_REF")"
-          elif [[ "$PUSH_BASE" =~ ^0+$ ]]; then
-            base="$(git merge-base HEAD origin/main)"
+            run=true
+            mode=full
+            base=
           else
-            base="$PUSH_BASE"
+            if [[ "$EVENT_NAME" == pull_request ]]; then
+              base="$(git merge-base HEAD "origin/$BASE_REF")"
+            elif [[ "$PUSH_BASE" =~ ^0+$ ]]; then
+              base="$(git merge-base HEAD origin/main)"
+            else
+              base="$PUSH_BASE"
+            fi
+            mapfile -t mutation_scope < <(./scripts/mutants-ci-scope.sh "$base" HEAD)
+            mode="${mutation_scope[0]:-}"
+            case "$mode" in
+              none) run=false ;;
+              files|full) run=true ;;
+              *) echo "mutation policy returned invalid mode: $mode" >&2; exit 64 ;;
+            esac
           fi
-          git diff --unified=0 "$base" HEAD -- '*.rs' > "$RUNNER_TEMP/new-tests.diff"
-          if grep -Eq '^\+[[:space:]]*#\[(test|[[:alnum:]_]+::test|rstest|test_case|case|parameterized)([[:space:](]|])' "$RUNNER_TEMP/new-tests.diff" ||
-             grep -Eq '^\+[[:space:]]*//[/!][[:space:]]*```(rust)?' "$RUNNER_TEMP/new-tests.diff"; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            echo "new Rust tests detected; admitting the full mutation sweep"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-            echo "no new Rust tests detected; mutation work is omitted"
-          fi
+          {
+            echo "run=$run"
+            echo "mode=$mode"
+            echo "base=$base"
+          } >> "$GITHUB_OUTPUT"
+          echo "mutation scope: $mode"
 
   mutants:
     name: Mutation Testing
@@ -171,6 +179,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
           toolchain: stable
@@ -179,7 +189,45 @@ jobs:
         with:
           tool: cargo-mutants@27.1.0
       - name: Run mutation sweep
-        run: ./scripts/mutants-run.sh
+        shell: bash
+        env:
+          MUTATION_BASE: ${{ needs.mutation-policy.outputs.base }}
+          MUTATION_MODE: ${{ needs.mutation-policy.outputs.mode }}
+        run: |
+          set -euo pipefail
+          mutation_args=()
+          if [[ "$MUTATION_MODE" == files ]]; then
+            mapfile -t mutation_scope < <(./scripts/mutants-ci-scope.sh "$MUTATION_BASE" HEAD)
+            [[ "${mutation_scope[0]:-}" == files ]]
+            mutation_args=("${mutation_scope[@]:1}")
+          fi
+          set +e
+          ./scripts/mutants-run.sh "${mutation_args[@]}"
+          status=$?
+          set -e
+          missed=target/mutants/mutants.out/missed.txt
+          if [[ "$status" -eq 2 && -s "$missed" ]]; then
+            report_dir="$RUNNER_TEMP/mutation-repair"
+            mkdir -p "$report_dir"
+            for report in missed.txt timeout.txt outcomes.json; do
+              source_report="target/mutants/mutants.out/$report"
+              [[ -f "$source_report" && ! -L "$source_report" ]] || continue
+              cp -- "$source_report" "$report_dir/$report"
+            done
+          fi
+          exit "$status"
+
+      - name: Retain mutation repair evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mutation-repair
+          path: |
+            ${{ runner.temp }}/mutation-repair/missed.txt
+            ${{ runner.temp }}/mutation-repair/timeout.txt
+            ${{ runner.temp }}/mutation-repair/outcomes.json
+          if-no-files-found: ignore
+          retention-days: 30
 
   # Documentation: Validate docs build for docs.rs
   docs:
