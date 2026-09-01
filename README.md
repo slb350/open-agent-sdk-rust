@@ -1417,6 +1417,8 @@ open-agent-sdk-rust/
 │   ├── hooks_history_snapshot_test.rs
 │   ├── hooks_integration_test.rs
 │   ├── image_serialization_test.rs
+│   ├── mutation_scripts_test.rs     # Mutation runner script regression tests
+│   ├── mutation_transport_scripts_test.rs  # Mutation transport script regression tests
 │   ├── package_manifest_test.rs     # Package exclusion coverage
 │   ├── regression_finish_reason_test.rs
 │   ├── regression_max_tokens_test.rs
@@ -1427,7 +1429,8 @@ open-agent-sdk-rust/
 │   ├── send_message_test.rs         # Manual-mode history regression (v0.6.2)
 │   ├── source_file_size_test.rs     # Repository Rust hard-limit guard
 │   ├── tool_call_content_test.rs    # Tool call serialization tests
-│   └── common/mod.rs                # Shared wiremock SSE harness and block helpers
+│   ├── common/mod.rs                # Shared wiremock SSE harness and block helpers
+│   └── support/process.rs          # Shared process utilities for script tests
 ├── scripts/
 │   ├── mutants-common.sh            # The one definition of the results directory
 │   ├── mutants-run.sh               # Owns the verdict (missed.txt); called by the hook and CI
@@ -1494,10 +1497,10 @@ cargo mutants --no-shuffle -j 4
 **Test Coverage:**
 
 - 248 unit tests (lib)
-- 180 active integration tests across 30 test files (12 require a live Ollama server and are `#[ignore]`d)
+- 183 active integration tests across 30 test files (12 require a live Ollama server and are `#[ignore]`d)
 - 164 active doctests
 
-Total: 592 active unit, integration, and documentation tests
+Total: 595 active unit, integration, and documentation tests
 
 **Mutation testing** is part of the gate, not an optional extra: a green suite proves the
 tests ran, not that they would notice if the code were wrong. CI runs the full sweep on every
