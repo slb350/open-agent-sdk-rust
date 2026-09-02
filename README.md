@@ -1417,9 +1417,11 @@ open-agent-sdk-rust/
 │   ├── hooks_history_snapshot_test.rs
 │   ├── hooks_integration_test.rs
 │   ├── image_serialization_test.rs
+│   ├── mutation_ci_scope_test.rs    # Mutation CI test scoping and policy guards
 │   ├── mutation_scripts_test.rs     # Mutation runner script regression tests
 │   ├── mutation_transport_scripts_test.rs  # Mutation transport script regression tests
 │   ├── package_manifest_test.rs     # Package exclusion coverage
+│   ├── redirect_policy_test.rs      # Model request redirect rejection policy
 │   ├── regression_finish_reason_test.rs
 │   ├── regression_max_tokens_test.rs
 │   ├── regression_reasoning_channel_test.rs
@@ -1432,6 +1434,7 @@ open-agent-sdk-rust/
 │   ├── common/mod.rs                # Shared wiremock SSE harness and block helpers
 │   └── support/process.rs          # Shared process utilities for script tests
 ├── scripts/
+│   ├── mutants-ci-scope.sh          # Classifies mutation work for a CI diff
 │   ├── mutants-common.sh            # The one definition of the results directory
 │   ├── mutants-run.sh               # Owns the verdict (missed.txt); called by the hook and CI
 │   ├── mutants-remote.sh            # rsync + ssh to a build host, falls back loudly
@@ -1497,7 +1500,7 @@ cargo mutants --no-shuffle -j 4
 **Test Coverage:**
 
 - 248 unit tests (lib)
-- 183 active integration tests across 30 test files (12 require a live Ollama server and are `#[ignore]`d)
+- 183 active integration tests across 31 test files (12 require a live Ollama server and are `#[ignore]`d)
 - 164 active doctests
 
 Total: 595 active unit, integration, and documentation tests
