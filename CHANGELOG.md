@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Preserve manual tool-result call IDs through OpenAI and Anthropic request translation.
 - Truncate logged image URLs at UTF-8 boundaries and reject non-ASCII Base64 characters.
 - Forward custom mutation-result directories to the remote execution environment.
+- Keep the repository's package-check test out of crate archives so unpacked sources
+  can run their tests without trying to repackage Cargo-generated files.
 
 ### Maintenance
 

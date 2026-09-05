@@ -383,6 +383,7 @@ cargo test --test mutation_ci_scope_test
 - `add_tool_result` retains structured `ToolResultBlock` history, including the call ID; never convert it to a plain text block before request translation.
 - `max_turns` is a retained, inert compatibility value. It does not limit Client conversations or tool rounds; `max_tool_iterations` controls automatic tool rounds. Do not silently implement a new turn limit or remove the public setter/getter in a cleanup.
 - Library Tokio features are minimal; test and example runtime features belong in dev-dependencies. Do not reintroduce unused direct dependencies.
+- Package verification is a repository-only test: exclude `tests/package_manifest_test.rs` from crate archives. Validate an unpacked archive's test suite with a separate target directory so Cargo cannot reuse binaries carrying another checkout's `CARGO_MANIFEST_DIR`.
 - Token estimates count tool JSON through its existing `Display` serializer into a byte counter. Preserve JSON escaping and UTF-8 byte lengths without allocating strings solely to measure them.
 
 - **TDD**: Write failing tests first, implement, refactor, commit
