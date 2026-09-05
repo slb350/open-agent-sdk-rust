@@ -24,7 +24,8 @@ fn development_only_files_are_excluded_from_package() {
                     "tests/ci_workflow_policy_test.rs",
                     "tests/mutation_ci_scope_test.rs",
                     "tests/mutation_scripts_test.rs",
-                    "tests/mutation_transport_scripts_test.rs"
+                    "tests/mutation_transport_scripts_test.rs",
+                    "tests/package_manifest_test.rs"
                 ]
                 .iter()
                 .any(|prefix| path.starts_with(prefix)),

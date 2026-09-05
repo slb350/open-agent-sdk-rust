@@ -2,7 +2,7 @@
 
 ## Project Description
 
-A lightweight Rust SDK (v0.11.2 source) for building AI agents with local or cloud LLMs. Speaks two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint with `ApiProtocol`. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
+A lightweight Rust SDK (v0.11.3 source) for building AI agents with local or cloud LLMs. Speaks two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint with `ApiProtocol`. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
 
 ## Repository Structure
 
@@ -383,6 +383,7 @@ cargo test --test mutation_ci_scope_test
 - `add_tool_result` retains structured `ToolResultBlock` history, including the call ID; never convert it to a plain text block before request translation.
 - `max_turns` is a retained, inert compatibility value. It does not limit Client conversations or tool rounds; `max_tool_iterations` controls automatic tool rounds. Do not silently implement a new turn limit or remove the public setter/getter in a cleanup.
 - Library Tokio features are minimal; test and example runtime features belong in dev-dependencies. Do not reintroduce unused direct dependencies.
+- Package verification is a repository-only test: exclude `tests/package_manifest_test.rs` from crate archives. Validate an unpacked archive's test suite with a separate target directory so Cargo cannot reuse binaries carrying another checkout's `CARGO_MANIFEST_DIR`.
 - Token estimates count tool JSON through its existing `Display` serializer into a byte counter. Preserve JSON escaping and UTF-8 byte lengths without allocating strings solely to measure them.
 
 - **TDD**: Write failing tests first, implement, refactor, commit
@@ -440,7 +441,7 @@ cargo test --test mutation_ci_scope_test
 - PR benchmarks: compare Criterion results directly against the base commit with a shared target directory; do not restore the obsolete `boa-dev/criterion-compare-action`
 - Coverage reports: use the exact cargo-tarpaulin 0.37.2 LLVM engine in unprivileged containers, but do not import its upstream lockfile while that lock contains vulnerable anyhow 1.0.102; retain the XML with the latest compatible immutable-SHA-pinned `actions/upload-artifact` release (currently v7.0.1) and fail CI when the report is missing
 
-## Security Advisories (resolved in v0.6.5, current v0.11.2)
+## Security Advisories (resolved in v0.6.5, current v0.11.3)
 
 RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 
@@ -450,6 +451,12 @@ RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 - `futures` raised to `0.3.32`
 
 ## Current Version
+
+**v0.11.3**. Fixes stale client output, failed-stream cleanup, cancellation during automatic
+tool rounds, and manual tool-result call IDs. Image validation and logging handle non-ASCII
+input safely. Token estimation counts serialized tool JSON without allocating temporary
+strings. The cleanup removes duplicate tests, unused dependencies, and repeated documentation;
+public signatures and defaults remain unchanged. See CHANGELOG.md.
 
 **v0.11.2**. Model requests deliberately reject all HTTP redirects, including same-origin
 redirects, so custom headers and other credentials are sent only to the exact configured
