@@ -4,6 +4,22 @@
 //! heuristics, not tokenizer output or a guaranteed upper bound.
 
 use crate::types::Message;
+use std::fmt::{self, Write};
+
+fn json_len(value: &serde_json::Value) -> usize {
+    struct ByteCount(usize);
+
+    impl Write for ByteCount {
+        fn write_str(&mut self, text: &str) -> fmt::Result {
+            self.0 += text.len();
+            Ok(())
+        }
+    }
+
+    let mut count = ByteCount(0);
+    write!(count, "{value}").expect("counting JSON bytes cannot fail");
+    count.0
+}
 
 /// Estimates tokens using UTF-8 byte lengths and fixed image allowances.
 ///
@@ -47,12 +63,12 @@ pub fn estimate_tokens(messages: &[Message]) -> usize {
                     // Tool calls add significant overhead
                     total_chars += tool.name().len();
                     total_chars += tool.id().len();
-                    total_chars += tool.input().to_string().len();
+                    total_chars += json_len(tool.input());
                 }
                 crate::types::ContentBlock::ToolResult(result) => {
                     // Tool results add overhead
                     total_chars += result.tool_use_id().len();
-                    total_chars += result.content().to_string().len();
+                    total_chars += json_len(result.content());
                 }
             }
         }

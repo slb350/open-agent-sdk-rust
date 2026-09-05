@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Validate workflow structure and actual package contents instead of source substrings,
   preserving scoped mutation CI and its monthly/manual full-sweep backstops.
 - Exercise both branches of the context-management workflow benchmark.
+- Count serialized tool JSON bytes without allocating temporary strings during token estimation.
 
 ## [0.11.2] - 2026-08-31
 

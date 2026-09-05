@@ -10,40 +10,37 @@ use open_agent::{
 use serde_json::json;
 
 #[test]
-fn tool_use_blocks_accumulate_name_id_and_input_lengths() {
-    let input = json!({"q": "rust"});
-    assert_eq!(
-        input.to_string().len(),
-        12,
-        "{{\"q\":\"rust\"}} is 12 chars"
-    );
-
-    let message = Message::new(
-        MessageRole::Assistant,
-        vec![ContentBlock::ToolUse(ToolUseBlock::new(
-            "call_12", "search", input,
-        ))],
-    );
-
-    // 8 role + "search" (6) + "call_12" (7) + input (12) + 16 conversation = 49 chars,
-    // and 49 / 4 rounds up to 13 tokens.
-    assert_eq!(estimate_tokens(&[message]), 13);
-}
-
-#[test]
-fn tool_result_blocks_accumulate_id_and_content_lengths() {
-    let content = json!({"hits": 3});
-    assert_eq!(content.to_string().len(), 10, "{{\"hits\":3}} is 10 chars");
-
-    let message = Message::new(
-        MessageRole::User,
-        vec![ContentBlock::ToolResult(ToolResultBlock::new(
-            "call_12", content,
-        ))],
-    );
-
-    // 8 role + "call_12" (7) + content (10) + 16 conversation = 41 chars -> 11 tokens.
-    assert_eq!(estimate_tokens(&[message]), 11);
+fn tool_blocks_count_serialized_json_bytes() {
+    for (value, input_tokens, result_tokens) in [
+        (json!({"q": "rust"}), 13, 11),
+        (json!({"hits": 3}), 12, 11),
+        // 50 serialized bytes, including UTF-8 and JSON quote/newline escapes.
+        (
+            json!({"q": "é\n\"", "values": [null, true, false, -12, 1.25]}),
+            22,
+            21,
+        ),
+    ] {
+        for (role, block, expected) in [
+            (
+                MessageRole::Assistant,
+                ContentBlock::ToolUse(ToolUseBlock::new("call_12", "search", value.clone())),
+                input_tokens,
+            ),
+            (
+                MessageRole::User,
+                ContentBlock::ToolResult(ToolResultBlock::new("call_12", value)),
+                result_tokens,
+            ),
+        ] {
+            let message = Message::new(role, vec![block]);
+            assert_eq!(
+                estimate_tokens(std::slice::from_ref(&message)),
+                expected,
+                "{message:?}"
+            );
+        }
+    }
 }
 
 /// Builds a single message whose estimate is exactly 600 tokens.
