@@ -1,33 +1,7 @@
-/// OpenAI API message format for serialization.
+/// OpenAI message content, serialized as either a string or a list of parts.
 ///
-/// This struct represents the wire format for messages when communicating
-/// with OpenAI-compatible APIs. It differs from the internal [`Message`]
-/// type to accommodate the specific serialization requirements of the
-/// OpenAI API.
-///
-/// # Key Differences from Internal Message Type
-///
-/// - Content is a flat string rather than structured blocks
-/// - Tool calls are represented in OpenAI's specific format
-/// - Supports both sending tool calls (via `tool_calls`) and tool results
-///   (via `tool_call_id`)
-///
-/// # Serialization
-///
-/// Optional fields are skipped when `None` to keep payloads minimal.
-///
-/// # Usage
-///
-/// This type is typically created by the SDK internally when converting
-/// from [`Message`] to API format. Users rarely need to construct these
-/// directly.
-///
-/// # OpenAI Content Format
-///
-/// OpenAI content format supporting both string and array.
-///
-/// For backward compatibility, text-only messages use string format.
-/// Messages with images use array format with multiple content parts.
+/// Images require [`OpenAIContent::Parts`]; text-only messages can use
+/// [`OpenAIContent::Text`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum OpenAIContent {
@@ -58,33 +32,12 @@ pub enum OpenAIContentPart {
 }
 
 impl OpenAIContentPart {
-    /// Creates a text content part.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use open_agent::OpenAIContentPart;
-    ///
-    /// let part = OpenAIContentPart::text("Hello world");
-    /// ```
+    /// Creates a text part.
     pub fn text(text: impl Into<String>) -> Self {
         Self::Text { text: text.into() }
     }
 
-    /// Creates an image content part from a validated ImageBlock.
-    ///
-    /// This is the preferred way to create image content parts as it ensures
-    /// the image URL has been validated against security issues (XSS, file disclosure, etc.)
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use open_agent::{OpenAIContentPart, ImageBlock, ImageDetail};
-    ///
-    /// let image = ImageBlock::from_url("https://example.com/img.jpg")
-    ///     .expect("Valid URL");
-    /// let part = OpenAIContentPart::from_image(&image);
-    /// ```
+    /// Converts a validated [`ImageBlock`] while preserving its URL and detail hint.
     pub fn from_image(image: &ImageBlock) -> Self {
         Self::ImageUrl {
             image_url: OpenAIImageUrl {
@@ -94,30 +47,8 @@ impl OpenAIContentPart {
         }
     }
 
-    /// Creates an image URL content part directly (DEPRECATED).
-    ///
-    /// # Security Warning
-    ///
-    /// This method bypasses validation checks performed by `ImageBlock::from_url()`
-    /// and `ImageBlock::from_base64()`. Prefer using `from_image()` instead.
-    ///
-    /// # Deprecation
-    ///
-    /// This method is deprecated and will be removed in v1.0. Use `from_image()` instead.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use open_agent::{OpenAIContentPart, ImageDetail};
-    ///
-    /// // Deprecated approach:
-    /// let part = OpenAIContentPart::image_url("https://example.com/img.jpg", ImageDetail::High);
-    ///
-    /// // Preferred approach:
-    /// use open_agent::ImageBlock;
-    /// let image = ImageBlock::from_url("https://example.com/img.jpg").expect("Valid URL");
-    /// let part = OpenAIContentPart::from_image(&image);
-    /// ```
+    /// Creates an unvalidated image part. Prefer [`from_image`](Self::from_image)
+    /// with a validated [`ImageBlock`].
     #[deprecated(
         since = "0.6.0",
         note = "Use `from_image()` instead to ensure proper validation"
@@ -168,31 +99,7 @@ pub struct OpenAIMessage {
     pub tool_call_id: Option<String>,
 }
 
-/// OpenAI tool call representation in API messages.
-///
-/// Represents a request from the model to execute a specific function/tool.
-/// This is the wire format used in the OpenAI API, distinct from the internal
-/// [`ToolUseBlock`] representation.
-///
-/// # Structure
-///
-/// Each tool call has:
-/// - A unique ID for correlation with results
-/// - A type (always "function" in current OpenAI API)
-/// - Function details (name and arguments)
-///
-/// # Example JSON
-///
-/// ```json
-/// {
-///   "id": "call_abc123",
-///   "type": "function",
-///   "function": {
-///     "name": "get_weather",
-///     "arguments": "{\"location\":\"San Francisco\"}"
-///   }
-/// }
-/// ```
+/// An OpenAI tool call, including the call ID used to pair its result.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpenAIToolCall {
     /// Unique identifier for this tool call.
@@ -212,17 +119,7 @@ pub struct OpenAIToolCall {
     pub function: OpenAIFunction,
 }
 
-/// OpenAI function call details.
-///
-/// Contains the function name and its arguments in the OpenAI API format.
-/// Note that arguments are serialized as a JSON string, not a JSON object,
-/// which is an OpenAI API quirk.
-///
-/// # Arguments Format
-///
-/// The `arguments` field is a **JSON string**, not a parsed JSON object.
-/// For example: `"{\"x\": 1, \"y\": 2}"` not `{"x": 1, "y": 2}`.
-/// This must be parsed before use.
+/// Function name and JSON-encoded arguments for an OpenAI tool call.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpenAIFunction {
     /// Name of the function/tool to call.
@@ -236,43 +133,10 @@ pub struct OpenAIFunction {
     pub arguments: String,
 }
 
-/// Complete request payload for OpenAI chat completions API.
+/// An OpenAI chat-completions request.
 ///
-/// This struct is serialized and sent as the request body when making
-/// API calls to OpenAI-compatible endpoints. It includes the model,
-/// conversation history, and configuration parameters.
-///
-/// # Streaming
-///
-/// The SDK always uses streaming mode (`stream: true`) to enable real-time
-/// response processing and better user experience.
-///
-/// # Optional Fields
-///
-/// Fields marked with `skip_serializing_if` are omitted from the JSON payload
-/// when `None`, allowing the API provider to use its defaults.
-///
-/// # Example
-///
-/// ```ignore
-/// use open_agent_sdk::types::{OpenAIRequest, OpenAIMessage};
-///
-/// let request = OpenAIRequest {
-///     model: "gpt-4".to_string(),
-///     messages: vec![
-///         OpenAIMessage {
-///             role: "user".to_string(),
-///             content: "Hello!".to_string(),
-///             tool_calls: None,
-///             tool_call_id: None,
-///         }
-///     ],
-///     stream: true,
-///     max_tokens: Some(1000),
-///     temperature: Some(0.7),
-///     tools: None,
-/// };
-/// ```
+/// Optional fields are omitted when unset. The client also uses this as its internal
+/// request representation before translating to Anthropic at the transport boundary.
 #[derive(Debug, Clone, Serialize)]
 pub struct OpenAIRequest {
     /// Model identifier (e.g., "gpt-4", "qwen2.5-32b-instruct").
@@ -286,7 +150,7 @@ pub struct OpenAIRequest {
 
     /// Whether to stream the response.
     ///
-    /// The SDK always sets this to `true` for better user experience.
+    /// The SDK sets this to `true` to request SSE responses.
     /// Streaming allows incremental processing of responses rather than
     /// waiting for the entire completion.
     pub stream: bool,

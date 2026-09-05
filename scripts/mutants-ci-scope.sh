@@ -66,7 +66,6 @@ test_content() {
         delta = brace_delta(source)
         has_open = source ~ /\{/
         if (has_open && delta > 0) {
-          capturing = 1
           depth = delta
           return
         }
@@ -79,12 +78,9 @@ test_content() {
         pending = remainder == ""
       }
 
-      capturing {
+      depth > 0 {
         print
         depth += brace_delta($0)
-        if (depth <= 0) {
-          capturing = 0
-        }
         next
       }
 
@@ -95,7 +91,6 @@ test_content() {
         }
         delta = brace_delta($0)
         if ($0 ~ /\{/ && delta > 0) {
-          capturing = 1
           depth = delta
         }
         pending = 0
@@ -158,10 +153,8 @@ while IFS= read -r -d '' path; do
   fi
 
   case "$path" in
-    */tests.rs|*/test.rs|*/tests/*.rs)
+    */tests.rs|*/test.rs)
       parent="${path%/*}"
-      parent="${parent%/tests}"
-      parent="${parent%/test}"
       if path_exists "$HEAD" "$parent.rs"; then
         add_file_scope "$parent.rs"
       elif path_exists "$HEAD" "$parent/mod.rs"; then

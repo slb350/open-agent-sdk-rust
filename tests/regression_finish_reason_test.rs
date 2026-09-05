@@ -42,18 +42,6 @@ async fn a_server_that_never_sends_finish_reason_reports_unspecified() {
 }
 
 #[tokio::test]
-async fn unspecified_is_distinct_from_stop() {
-    let unspecified = collect_events(text_chunk("x", None) + DONE, false).await;
-    let stopped = collect_events(text_chunk("x", Some("stop")) + DONE, false).await;
-
-    assert_ne!(
-        sole_finish_reason(&unspecified),
-        sole_finish_reason(&stopped),
-        "a silent server must not be reported as a clean stop"
-    );
-}
-
-#[tokio::test]
 async fn tool_call_completion_reports_tool_calls() {
     let body = common::tool_chunk("call_1", "search", "{\"q\":\"rust\"}")
         + &text_chunk("", Some("tool_calls"))

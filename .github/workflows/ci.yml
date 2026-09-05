@@ -292,7 +292,8 @@ jobs:
         env:
           CARGO_TARGET_DIR: ${{ runner.temp }}/criterion-target
         run: cargo bench --manifest-path "$RUNNER_TEMP/benchmark-base/Cargo.toml" --bench performance --all-features -- --save-baseline base
+      # Existing cases compare against base; new cases run without a prior measurement.
       - name: Benchmark pull request
         env:
           CARGO_TARGET_DIR: ${{ runner.temp }}/criterion-target
-        run: cargo bench --bench performance --all-features -- --baseline base
+        run: cargo bench --bench performance --all-features -- --baseline-lenient base

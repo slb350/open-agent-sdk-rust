@@ -1,322 +1,36 @@
-//! Client for streaming queries and multi-turn conversations
+//! Streaming requests and conversation state.
 //!
-//! This module provides the core streaming client implementation for the Open Agent SDK.
-//! It handles communication with OpenAI-compatible and Anthropic messages endpoints,
-//! selected per endpoint with [`ApiProtocol`](crate::ApiProtocol), manages conversation
-//! history, and provides two modes of operation: manual and automatic tool execution.
-//!
-//! # Architecture Overview
-//!
-//! The SDK implements a **streaming-first architecture** where all responses from the model
-//! are received as a stream of content blocks. This design enables:
-//!
-//! - **Progressive rendering**: Display text as it arrives without waiting for completion
-//! - **Real-time tool execution**: Execute tools as they're requested by the model
-//! - **Interruption support**: Cancel operations mid-stream without corrupting state
-//! - **Memory efficiency**: Process large responses without buffering everything in memory
-//!
-//! ## Two Operating Modes
-//!
-//! ### 1. Manual Tool Execution Mode (default)
-//!
-//! In manual mode, the client streams content blocks directly to the caller. When the model
-//! requests a tool, the caller receives a `ToolUseBlock`, executes the tool, adds the result
-//! using `add_tool_result()`, and continues the conversation with another `send()` call.
-//!
-//! **Use cases**: Custom tool execution logic, interactive debugging, fine-grained control
-//!
-//! ### 2. Automatic Tool Execution Mode
-//!
-//! When `auto_execute_tools` is enabled, the client automatically executes tools and continues
-//! the conversation until receiving a text-only response. The caller only receives the final
-//! text blocks after all tool iterations complete.
-//!
-//! **Use cases**: Simple agentic workflows, automated task completion, batch processing
-//!
-//! ## Request Flow
-//!
-//! ```text
-//! User sends prompt
-//!     │
-//!     ├─> UserPromptSubmit hook executes (can modify/block prompt)
-//!     │
-//!     ├─> Prompt added to history
-//!     │
-//!     ├─> HTTP request to the configured endpoint (OpenAI chat or Anthropic messages)
-//!     │
-//!     ├─> Response streamed as Server-Sent Events (SSE)
-//!     │
-//!     ├─> SSE chunks decoded: text and reasoning forwarded, tool calls assembled
-//!     │
-//!     └─> Blocks emitted to caller (or buffered for auto-execution)
-//! ```
-//!
-//! ## Tool Execution Flow
-//!
-//! ### Manual Mode:
-//! ```text
-//! receive() → ToolUseBlock
-//!     │
-//!     ├─> Caller executes tool
-//!     │
-//!     ├─> Caller calls add_tool_result()
-//!     │
-//!     ├─> Caller calls send("") to continue
-//!     │
-//!     └─> receive() → TextBlock (model's response)
-//! ```
-//!
-//! ### Auto Mode:
-//! ```text
-//! receive() triggers auto-execution loop
-//!     │
-//!     ├─> Collect all blocks from stream
-//!     │
-//!     ├─> For each ToolUseBlock:
-//!     │   ├─> PreToolUse hook executes (can modify/block)
-//!     │   ├─> Tool executed via Tool.execute()
-//!     │   ├─> PostToolUse hook executes (can modify result)
-//!     │   └─> Result added to history
-//!     │
-//!     ├─> Continue conversation with send("")
-//!     │
-//!     ├─> Repeat until text-only response or max iterations
-//!     │
-//!     └─> Return text blocks one-by-one via receive()
-//! ```
-//!
-//! ## State Management
-//!
-//! The client maintains several pieces of state:
-//!
-//! - **history**: Full conversation history (`Vec<Message>`)
-//! - **current_stream**: Active SSE stream being consumed (`Option<EventStream>`)
-//! - **interrupted**: Atomic flag for cancellation (`Arc<AtomicBool>`)
-//! - **auto_exec_buffer**: Buffered blocks for auto-execution mode (`Vec<ContentBlock>`)
-//! - **auto_exec_index**: Current position in buffer (usize)
-//!
-//! ## Interruption Mechanism
-//!
-//! The interrupt system uses `Arc<AtomicBool>` to enable safe, thread-safe cancellation:
+//! [`query`] streams a single prompt. [`Client`] also manages history and supports
+//! manual or automatic tool execution. Manual mode yields content immediately;
+//! auto mode executes tool rounds and then yields the final response.
 //!
 //! ```rust,no_run
-//! # use open_agent::{Client, AgentOptions};
-//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let mut client = Client::new(AgentOptions::default())?;
-//! let handle = client.interrupt_handle(); // Clone Arc for use in other threads
-//!
-//! // In another thread or async task:
-//! tokio::spawn(async move {
-//!     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-//!     handle.store(true, std::sync::atomic::Ordering::SeqCst);
-//! });
-//!
-//! client.send("Long request").await?;
+//! use open_agent::{AgentOptions, Client, ContentBlock};
+//! # async fn example() -> open_agent::Result<()> {
+//! let options = AgentOptions::builder()
+//!     .model("local-model").base_url("http://localhost:1234/v1").build()?;
+//! let mut client = Client::new(options)?;
+//! client.send("Hello").await?;
 //! while let Some(block) = client.receive().await? {
-//!     // Will stop when interrupted
+//!     if let ContentBlock::Text(text) = block { print!("{}", text.text); }
 //! }
 //! # Ok(())
 //! # }
 //! ```
 //!
-//! ## Hook Integration
+//! For manual tools, execute each `ToolUse`, supply it with [`Client::add_tool_result`],
+//! and call `send("")` to continue. For auto mode, register tools and enable
+//! [`AgentOptions::auto_execute_tools`]. Context truncation is always caller controlled.
 //!
-//! Hooks provide extension points throughout the request lifecycle:
-//!
-//! - **UserPromptSubmit**: Called before sending user prompt (can modify or block)
-//! - **PreToolUse**: Called before executing each tool (can modify input or block execution)
-//! - **PostToolUse**: Called after tool execution (can modify result)
-//!
-//! Hooks are only invoked in specific scenarios and have access to conversation history.
-//!
-//! ## Error Handling
-//!
-//! Errors are propagated immediately and leave the client in a valid state:
-//!
-//! - **HTTP errors**: Network failures, timeouts, connection issues
-//! - **API errors**: Invalid model, authentication failures, rate limits
-//! - **Parse errors**: Malformed SSE responses, invalid JSON
-//! - **Tool errors**: Tool execution failures (converted to JSON error responses)
-//! - **Hook errors**: Hook execution failures or blocked operations
-//!
-//! After an error, the client remains usable for new requests.
-//!
-//! # Examples
-//!
-//! ## Simple Single-Turn Query
-//!
-//! ```rust,no_run
-//! use open_agent::{query, AgentOptions, ContentBlock};
-//! use futures::StreamExt;
-//!
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let options = AgentOptions::builder()
-//!         .model("gpt-4")
-//!         .api_key("sk-...")
-//!         .build()?;
-//!
-//!     let mut stream = query("What is Rust?", &options).await?;
-//!
-//!     while let Some(event) = stream.next().await {
-//!         if let Some(ContentBlock::Text(text)) = event?.into_block() {
-//!             print!("{}", text.text);
-//!         }
-//!     }
-//!
-//!     Ok(())
-//! }
-//! ```
-//!
-//! ## Multi-Turn Conversation
-//!
-//! ```rust,no_run
-//! use open_agent::{Client, AgentOptions, ContentBlock};
-//! use futures::StreamExt;
-//!
-//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let mut client = Client::new(AgentOptions::builder()
-//!     .model("gpt-4")
-//!     .api_key("sk-...")
-//!     .build()?)?;
-//!
-//! // First question
-//! client.send("What's the capital of France?").await?;
-//! while let Some(block) = client.receive().await? {
-//!     if let ContentBlock::Text(text) = block {
-//!         print!("{}", text.text);
-//!     }
-//! }
-//!
-//! // Follow-up question (history is maintained)
-//! client.send("What's its population?").await?;
-//! while let Some(block) = client.receive().await? {
-//!     if let ContentBlock::Text(text) = block {
-//!         print!("{}", text.text);
-//!     }
-//! }
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ## Manual Tool Execution
-//!
-//! ```rust,no_run
-//! use open_agent::{Client, AgentOptions, ContentBlock, Tool};
-//! use serde_json::json;
-//!
-//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let calculator = Tool::new(
-//!     "calculator",
-//!     "Performs arithmetic operations",
-//!     json!({"type": "object", "properties": {"operation": {"type": "string"}}}),
-//!     |input| Box::pin(async move {
-//!         // Custom execution logic
-//!         Ok(json!({"result": 42}))
-//!     })
-//! );
-//!
-//! let mut client = Client::new(AgentOptions::builder()
-//!     .model("gpt-4")
-//!     .api_key("sk-...")
-//!     .tools(vec![calculator])
-//!     .build()?)?;
-//!
-//! client.send("Calculate 2+2").await?;
-//!
-//! while let Some(block) = client.receive().await? {
-//!     match block {
-//!         ContentBlock::ToolUse(tool_use) => {
-//!             println!("Model wants to use: {}", tool_use.name());
-//!
-//!             // Execute tool manually
-//!             let tool = client.get_tool(tool_use.name()).unwrap();
-//!             let result = tool.execute(tool_use.input().clone()).await?;
-//!
-//!             // Add result and continue
-//!             client.add_tool_result(tool_use.id(), result)?;
-//!             client.send("").await?;
-//!         }
-//!         ContentBlock::Text(text) => {
-//!             println!("Response: {}", text.text);
-//!         }
-//!         ContentBlock::ToolResult(_) | ContentBlock::Image(_) => {}
-//!     }
-//! }
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ## Automatic Tool Execution
-//!
-//! ```rust,no_run
-//! use open_agent::{Client, AgentOptions, ContentBlock, Tool};
-//! use serde_json::json;
-//!
-//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let calculator = Tool::new(
-//!     "calculator",
-//!     "Performs arithmetic operations",
-//!     json!({"type": "object"}),
-//!     |input| Box::pin(async move { Ok(json!({"result": 42})) })
-//! );
-//!
-//! let mut client = Client::new(AgentOptions::builder()
-//!     .model("gpt-4")
-//!     .api_key("sk-...")
-//!     .tools(vec![calculator])
-//!     .auto_execute_tools(true)  // Enable auto-execution
-//!     .max_tool_iterations(5)    // Max 5 tool rounds
-//!     .build()?)?;
-//!
-//! client.send("Calculate 2+2 and then multiply by 3").await?;
-//!
-//! // Tools are executed automatically - you only get final text response
-//! while let Some(block) = client.receive().await? {
-//!     if let ContentBlock::Text(text) = block {
-//!         print!("{}", text.text);
-//!     }
-//! }
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ## With Hooks
-//!
-//! ```ignore
-//! use open_agent::{Client, AgentOptions, Hooks, HookDecision};
-//!
-//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let hooks = Hooks::new()
-//!     .add_user_prompt_submit(|event| async move {
-//!         // Block prompts containing certain words
-//!         if event.prompt.contains("forbidden") {
-//!             return Some(HookDecision::block("Forbidden word detected"));
-//!         }
-//!         Some(HookDecision::continue_())
-//!     })
-//!     .add_pre_tool_use(|event| async move {
-//!         // Log all tool uses
-//!         println!("Executing tool: {}", event.tool_name);
-//!         Some(HookDecision::continue_())
-//!     });
-//!
-//! let mut client = Client::new(AgentOptions::builder()
-//!     .model("gpt-4")
-//!     .base_url("http://localhost:1234/v1")
-//!     .hooks(hooks)
-//!     .build()?)?;
-//!
-//! // Hooks will be executed automatically
-//! client.send("Hello!").await?;
-//! # Ok(())
-//! # }
-//! ```
+//! Cancellation is checked between stream events. Share [`Client::interrupt_handle`]
+//! rather than locking a client across an awaited receive. New sends discard pending
+//! output; completed history remains until [`Client::clear_history`] is called.
+
+mod request;
 
 use crate::types::{
     AgentOptions, AnthropicRequest, ApiProtocol, ContentBlock, FinishReason, Message, MessageRole,
-    OpenAIContent, OpenAIContentPart, OpenAIFunction, OpenAIMessage, OpenAIRequest, OpenAIToolCall,
-    StreamEvent, TextBlock,
+    OpenAIContent, OpenAIMessage, OpenAIRequest, StreamEvent,
 };
 use crate::utils::{
     AnthropicAccumulator, StreamAccumulator, coalesce_text_blocks, drive,
@@ -446,6 +160,7 @@ include!("client/history.rs");
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::TextBlock;
 
     include!("client/tests.rs");
 }

@@ -1,11 +1,4 @@
-// ============================================================================
-// NEWTYPE WRAPPERS FOR COMPILE-TIME TYPE SAFETY
-// ============================================================================
-
-/// Validated model name with compile-time type safety.
-///
-/// This newtype wrapper ensures that model names are validated at construction time
-/// rather than at runtime, catching invalid configurations earlier in development.
+/// A model name validated at construction time.
 ///
 /// # Validation Rules
 ///
@@ -66,15 +59,15 @@ impl std::fmt::Display for ModelName {
     }
 }
 
-/// Validated base URL with compile-time type safety.
-///
-/// This newtype wrapper ensures that base URLs are validated at construction time
-/// rather than at runtime, catching invalid configurations earlier in development.
+/// A base URL validated at construction time.
 ///
 /// # Validation Rules
 ///
 /// - Must not be empty
-/// - Must start with `http://` or `https://`
+/// - After trimming, must start with `http://` or `https://`
+///
+/// Validation preserves the original string, including whitespace. The options
+/// builder checks the scheme on the untrimmed input for compatibility.
 ///
 /// # Example
 ///
@@ -137,10 +130,7 @@ impl std::fmt::Display for BaseUrl {
     }
 }
 
-/// Validated temperature value with compile-time type safety.
-///
-/// This newtype wrapper ensures that temperature values are validated at construction time
-/// rather than at runtime, catching invalid configurations earlier in development.
+/// A temperature validated at construction time.
 ///
 /// # Validation Rules
 ///
@@ -197,7 +187,3 @@ impl std::fmt::Display for Temperature {
         write!(f, "{}", self.0)
     }
 }
-
-// ============================================================================
-// AGENT CONFIGURATION
-// ============================================================================

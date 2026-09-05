@@ -177,7 +177,7 @@ impl ImageBlock {
                 // Check character set
                 if !base64_data
                     .chars()
-                    .all(|c| c.is_alphanumeric() || c == '+' || c == '/' || c == '=')
+                    .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
                 {
                     return Err(crate::Error::invalid_input(
                         "Data URI base64 data contains invalid characters. Valid characters: A-Z, a-z, 0-9, +, /, =",
@@ -270,7 +270,7 @@ impl ImageBlock {
         // This catches common errors like spaces, special characters, etc.
         if !data
             .chars()
-            .all(|c| c.is_alphanumeric() || c == '+' || c == '/' || c == '=')
+            .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
         {
             return Err(crate::Error::invalid_input(
                 "Base64 data contains invalid characters. Valid characters: A-Z, a-z, 0-9, +, /, =",

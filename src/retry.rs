@@ -117,38 +117,11 @@ impl RetryConfig {
     }
 }
 
-/// Retry an async operation with exponential backoff
+/// Retries every error using the configured backoff and returns the final result.
 ///
-/// # Arguments
-///
-/// * `config` - Retry configuration
-/// * `operation` - Async function to retry
-///
-/// # Returns
-///
-/// The result of the operation if successful, or the last error if all retries failed
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// use open_agent::retry::{retry_with_backoff, RetryConfig};
-/// use open_agent::{Client, AgentOptions};
-///
-/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let config = RetryConfig::default().with_max_attempts(3);
-/// let options = AgentOptions::builder()
-///     .model("qwen3:8b")
-///     .base_url("http://localhost:11434/v1")
-///     .build()?;
-///
-/// let result = retry_with_backoff(config, || async {
-///     let mut client = Client::new(options.clone())?;
-///     client.send("Hello").await?;
-///     Ok::<_, open_agent::Error>(())
-/// }).await?;
-/// # Ok(())
-/// # }
-/// ```
+/// `max_attempts` counts total attempts, including the first. Zero attempts returns
+/// an error without calling the operation. Use [`retry_with_backoff_conditional`]
+/// to stop immediately on non-retryable errors.
 pub async fn retry_with_backoff<F, Fut, T>(config: RetryConfig, mut operation: F) -> Result<T>
 where
     F: FnMut() -> Fut,
@@ -186,15 +159,10 @@ where
 /// Supported` describe permanent server capabilities, so retrying them only wastes attempts.
 const RETRYABLE_STATUS_CODES: &[u16] = &[408, 429, 500, 502, 503, 504, 529];
 
-/// Determine if an error is retryable
+/// Classifies HTTP transport, explicit timeout, and stream errors as retryable.
 ///
-/// Returns true for transient errors like network issues, timeouts, rate limiting (429), and
-/// 5xx server errors. Returns false for client errors like invalid requests (4xx) or
-/// configuration errors.
-///
-/// API errors are classified on [`Error::status_code`]. An API error raised without a status
-/// — via [`Error::api`] rather than [`Error::api_status`] — is treated as non-retryable,
-/// matching the conservative default applied to every other unclassified error.
+/// API errors require status 408, 429, 500, 502, 503, 504, or 529. Other statuses,
+/// API errors without a status, and other error variants are not retried.
 pub fn is_retryable_error(error: &Error) -> bool {
     match error {
         // Transport failures, timeouts, and interrupted streams are all transient by nature.
@@ -210,7 +178,8 @@ pub fn is_retryable_error(error: &Error) -> bool {
 
 /// Retry an async operation with exponential backoff, only retrying on retryable errors
 ///
-/// This is a smarter version of `retry_with_backoff` that only retries transient errors.
+/// Uses [`is_retryable_error`] to stop on non-retryable errors. Attempt and delay
+/// semantics match [`retry_with_backoff`].
 ///
 /// # Examples
 ///

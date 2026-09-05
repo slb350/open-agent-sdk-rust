@@ -20,6 +20,8 @@ impl Repository {
         repository.git(&["init", "--quiet"]);
         repository.git(&["config", "user.email", "ci@example.invalid"]);
         repository.git(&["config", "user.name", "CI"]);
+        repository.git(&["config", "core.hooksPath", "/dev/null"]);
+        repository.git(&["config", "commit.gpgsign", "false"]);
         repository
     }
 
@@ -28,16 +30,22 @@ impl Repository {
     }
 
     fn write(&self, path: &str, contents: &str) {
-        let path = self.path().join(path);
-        fs::create_dir_all(path.parent().expect("fixture path has a parent"))
+        let destination = self.path().join(path);
+        fs::create_dir_all(destination.parent().expect("fixture path has a parent"))
             .expect("create fixture parent");
-        fs::write(path, contents).expect("write fixture");
+        fs::write(destination, contents).expect("write fixture");
+        let ignored = Command::new("git")
+            .args(["check-ignore", "--quiet", "--", path])
+            .current_dir(self.path())
+            .output()
+            .expect("check fixture ignore rules");
+        assert_eq!(ignored.status.code(), Some(1), "{path}: {ignored:?}");
+        self.git(&["add", "--", path]);
     }
 
     fn commit(&self, message: &str) -> String {
-        self.git(&["add", "."]);
         self.git(&["commit", "--quiet", "-m", message]);
-        self.git_output(&["rev-parse", "HEAD"])
+        self.git(&["rev-parse", "HEAD"])
     }
 
     fn scope(&self, base: &str) -> Vec<String> {
@@ -56,16 +64,7 @@ impl Repository {
             .collect()
     }
 
-    fn git(&self, args: &[&str]) {
-        let output = Command::new("git")
-            .args(args)
-            .current_dir(self.path())
-            .output()
-            .expect("run git");
-        assert!(output.status.success(), "git {args:?}: {output:?}");
-    }
-
-    fn git_output(&self, args: &[&str]) -> String {
+    fn git(&self, args: &[&str]) -> String {
         let output = Command::new("git")
             .args(args)
             .current_dir(self.path())

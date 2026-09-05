@@ -1,23 +1,7 @@
 #!/usr/bin/env bash
-#
-# Run the mutation sweep on a bigger machine over SSH, then report its verdict
-# here.
-#
-# Mutation testing is the most CPU-hungry gate in this repo: every mutant is a
-# full build plus a full test run, and the hook fires on a laptop the developer
-# is still using. Offloading keeps that work away from the interactive machine.
-#
-# More jobs is not always better, and -j 4 on a 32-thread box is not a typo.
-# Measured runs slowed down at -j 8 and -j 16 because concurrent source copies,
-# compilation and linking became I/O-bound. Treat MUTANTS_JOBS as a knob to
-# measure, not a number to raise on principle.
-#
-# The verdict rule is NOT duplicated here. This script syncs, invokes
-# scripts/mutants-run.sh on the remote, and propagates its exit code - so the
-# hook, CI and the remote sweep cannot disagree about what counts as a failure.
-#
-# Falls back to a local run, loudly, when the host is unreachable. A commit gate
-# that silently skips itself because the LAN blipped is worse than a slow one.
+# Offload mutation sweeps to SSH; unreachable hosts fall back locally.
+# Measured compilation/linking contention made -j 4 faster than -j 8 or 16.
+# The runner owns the verdict; transport failures must never hide it.
 #
 #   DREP_MUTANTS_HOST    ssh target (default: strix.local)
 #   DREP_MUTANTS_DIR     remote base, $HOME-relative (default: ci/<repo name>)
@@ -29,9 +13,6 @@
 
 set -euo pipefail
 
-# `git rev-parse`, not `dirname "$0"/..`: the same answer install.sh already
-# uses, and it does not care whether the script was reached through a symlink,
-# a relative path or PATH.
 cd "$(git rev-parse --show-toplevel)"
 # shellcheck source=scripts/mutants-common.sh
 # shellcheck disable=SC1091
@@ -99,18 +80,14 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 run_local() {
-  MUTANTS_JOBS="${MUTANTS_LOCAL_JOBS:-4}" exec ./scripts/mutants-run.sh "$@"
+  MUTANTS_JOBS="${MUTANTS_LOCAL_JOBS:-4}" exec bash ./scripts/mutants-run.sh "$@"
 }
 
 if [ "${DREP_MUTANTS_REMOTE:-1}" = "0" ]; then
   run_local "$@"
 fi
 
-# A bare probe rather than letting the first rsync fail and reading its exit
-# code: "the host is down, here is what I am doing instead" is the message the
-# developer needs, and inferring it from an rsync failure would also swallow a
-# full disk or an unwritable directory as "unreachable". One handshake, ~145ms,
-# against a run measured in minutes.
+# Only an unreachable host permits fallback; rsync failures must fail the gate.
 if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$HOST" true 2>/dev/null; then
   echo "warning: $HOST is unreachable - running the mutation sweep locally instead." >&2
   echo "         This will use this machine's CPU for the duration." >&2
@@ -119,11 +96,7 @@ fi
 
 echo "mutants: running on $HOST (-j $JOBS), results will mirror to $LOCAL_RESULTS"
 
-# Every invocation syncs into a unique remote checkout. That removes the race
-# where a second rsync changed a shared tree beneath a running mutation sweep,
-# and it lets each run mirror only its own diagnostics without a remote flock.
-# cargo-mutants 27.1 excludes the top-level target/ from its source copies by
-# default, so preserving a shared checkout target never warmed those copies.
+# Unique checkouts prevent an overlapping rsync from changing a running sweep.
 REMOVE_REMOTE_ON_EXIT=1
 rsync -a --mkpath \
   --exclude target --exclude 'mutants.out*' \
@@ -133,11 +106,7 @@ rsync -a --mkpath \
   --exclude '.tokens' --exclude '.env*' \
   ./ "$REMOTE/"
 
-# Files the run needs that the sync above skipped - in practice the staged diff,
-# which mutants-staged.sh writes under the excluded target/. Named by the caller
-# rather than recovered by scanning "$@" for cargo-mutants' own flags: what
-# belongs at this layer is "move these bytes", not that layer's argument
-# grammar. -R recreates each path under the remote root, directories included.
+# The staged diff lives under excluded target/, so transfer it explicitly.
 if [ -n "${MUTANTS_EXTRA_FILE:-}" ]; then
   case "$MUTANTS_EXTRA_FILE" in
     /*|../*|*/../*|*/..)
@@ -151,13 +120,7 @@ if [ -n "${MUTANTS_EXTRA_FILE:-}" ]; then
   rsync -aR --mkpath "$MUTANTS_EXTRA_FILE" "$REMOTE/"
 fi
 
-# `bash -s` rather than a quoted one-liner: the arguments are quoted with printf
-# %q, which is bash's dialect, so the remote end must be bash whatever login
-# shell the account uses.
-# `printf '%q ' "$@"` still runs its format once when there are no arguments, so it
-# emits a single empty token and the remote sweep is invoked as `mutants-run.sh ''`,
-# which cargo-mutants rejects with "unexpected argument '' found". Only ever reached by
-# an unscoped full sweep; the staged-diff path always passes --in-diff.
+# %q requires bash. With no arguments it would emit one empty argument.
 QUOTED_ARGS=""
 if [ "$#" -gt 0 ]; then
   printf -v QUOTED_ARGS '%q ' "$@"
@@ -171,14 +134,12 @@ set -euo pipefail
 export PATH=\$HOME/.cargo/bin:\$PATH
 cd "\$HOME"/$REMOTE_RUN_Q
 $REMOTE_SCRATCH_COMMAND
+export MUTANTS_OUT_DIR=$MUTANTS_OUT_DIR_Q
 mkdir -p $MUTANTS_OUT_DIR_Q
-MUTANTS_JOBS=$JOBS ./scripts/mutants-run.sh $QUOTED_ARGS
+MUTANTS_JOBS=$JOBS bash ./scripts/mutants-run.sh $QUOTED_ARGS
 EOF
 
-# Mirror this run into its own local directory so concurrent invocations cannot
-# overwrite one another's diagnostics. A mirror failure is part of the verdict:
-# preserve the remote checkout for recovery and fail a mutation run that had
-# otherwise passed instead of silently presenting stale local results.
+# Preserve the remote checkout if its diagnostics cannot be mirrored.
 mkdir -p "$LOCAL_RESULTS"
 mirror_status=0
 rsync -a --mkpath "$REMOTE/$MUTANTS_OUT_DIR/" "$LOCAL_RESULTS/" || mirror_status=$?

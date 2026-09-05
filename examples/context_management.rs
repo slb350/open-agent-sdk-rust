@@ -89,7 +89,6 @@ async fn pattern_2_manual_truncation() -> Result<(), Box<dyn std::error::Error>>
         .model("qwen3:8b")
         .base_url("http://localhost:11434/v1")
         .system_prompt("You are a helpful coding assistant")
-        .max_turns(10)
         .build()?;
 
     let mut client = Client::new(options)?;
