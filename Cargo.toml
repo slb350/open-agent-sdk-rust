@@ -23,6 +23,7 @@ exclude = [
     "mutants.out/",
     "scripts/",
     "tests/ci_workflow_policy_test.rs",
+    "tests/mutation_ci_scope_test.rs",
     "tests/fixtures/",
     "tests/mutation_scripts_test.rs",
     "tests/mutation_transport_scripts_test.rs",

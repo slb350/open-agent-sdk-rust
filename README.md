@@ -1403,7 +1403,7 @@ open-agent-sdk-rust/
 ├── tests/                         # Wire protocol, lifecycle, validation, and infrastructure tests
 │   └── common/mod.rs                # Shared loopback-server and stream helpers
 ├── scripts/
-│   ├── mutants-ci-scope.py          # Complete event diff policy for CI mutation runs
+│   ├── mutants-ci-scope.sh          # Complete event diff policy for CI mutation runs
 │   ├── mutants-common.sh            # The one definition of the results directory
 │   ├── mutants-run.sh               # Owns the verdict (missed.txt); called by the hook and CI
 │   ├── mutants-remote.sh            # rsync + ssh to a build host, falls back loudly
@@ -1471,10 +1471,13 @@ validation boundaries, and client lifecycle transitions. One provider smoke test
 ignored by default and requires an explicitly configured local server. Run `cargo test`
 for the current results instead of relying on a manually maintained test count.
 
-Mutation testing checks whether the suite detects changed behavior. Ordinary CI runs a
-full sweep when the complete pushed or pull-request diff adds Rust tests or doctests;
-manual dispatch and the monthly schedule also run a full sweep. Other revisions run
-the fast policy check. To run the same check before each commit:
+Mutation testing runs when tests are added, modified, deleted, or renamed. Inline tests
+scope the sweep to their owning source files; integration tests, fixtures, snapshots,
+and ambiguous mappings trigger the complete sweep. Production-only revisions run the
+fast policy check. Manual dispatch and the monthly run on the fifteenth always sweep
+the tree. Failed runs retain bounded evidence for the following day's shared
+`Monthly Mutation Repair` automation, which repairs survivors through a PR and merges
+only after its checks pass. Enable the staged local gate with:
 
 ```bash
 git config core.hooksPath .githooks
@@ -1493,10 +1496,9 @@ to a survivor, so a run with one of each would otherwise look like a timeout.
 - Tokio 1.50+ (async runtime)
 - serde, serde_json (serialization)
 - reqwest (HTTP client)
-- futures, tokio-stream (async streams)
+- futures (async streams)
 - eventsource-stream (SSE parsing)
-- async-trait (async trait support)
-- thiserror 2.0 + anyhow 1.0.103+ (error handling)
+- thiserror 2.0 (error handling)
 - log 0.4.29+ (logging)
 - base64 0.23 (multimodal image encoding)
 - wiremock =0.6.4 (dev-only: 0.6.5 uses syntax unavailable on the Rust 1.85 MSRV)

@@ -5,9 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  workflow_dispatch:
   schedule:
-    - cron: '0 16 15 * *'
+    - cron: '37 9 15 * *'
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -20,6 +20,7 @@ jobs:
   # Fast feedback: formatting check (fails in ~30s)
   fmt:
     name: Rustfmt
+    if: &regular_ci github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -32,6 +33,7 @@ jobs:
   # Fast feedback: clippy lints
   clippy:
     name: Clippy
+    if: *regular_ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -45,6 +47,7 @@ jobs:
   # Linux matrix runs on GitHub-hosted runners.
   test-linux:
     name: Test Suite (Linux, ${{ matrix.rust }})
+    if: *regular_ci
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -64,6 +67,7 @@ jobs:
   # Preserve native macOS coverage on GitHub-hosted runners.
   test-macos:
     name: Test Suite (macOS, ${{ matrix.rust }})
+    if: *regular_ci
     runs-on: macos-latest
     strategy:
       matrix:
@@ -83,6 +87,7 @@ jobs:
   # MSRV check: Ensure Rust 1.85 compatibility
   msrv:
     name: Minimum Supported Rust Version
+    if: *regular_ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -99,6 +104,7 @@ jobs:
   # Security audit: Check for known vulnerabilities
   security:
     name: Security Audit
+    if: *regular_ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -115,23 +121,57 @@ jobs:
       - name: Run security audit
         run: cargo audit --deny warnings
 
-  # Full event history includes tests introduced before the tip commit.
+  # Ordinary CI runs mutation only for added, modified, deleted, or renamed tests. Inline tests
+  # scope to their owning source files; ambiguous integration tests and fixtures expand to the
+  # full sweep. Monthly and manual runs are always full. Production-only revisions skip mutation.
   mutation-policy:
-    name: Mutation Policy
+    name: Mutation policy
     runs-on: ubuntu-latest
     outputs:
-      run: ${{ steps.scope.outputs.run }}
+      run: ${{ steps.test-policy.outputs.run }}
+      mode: ${{ steps.test-policy.outputs.mode }}
+      base: ${{ steps.test-policy.outputs.base }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
         with:
           fetch-depth: 0
-      - name: Verify mutation admission
-        run: python3 -B scripts/test_mutants_ci_scope.py
-      - name: Inspect complete event diff
-        id: scope
-        run: python3 -B scripts/mutants-ci-scope.py "$GITHUB_EVENT_NAME" "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
+      - name: Classify mutation scope from test changes
+        id: test-policy
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BASE: ${{ github.event.before }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == schedule || "$EVENT_NAME" == workflow_dispatch ]]; then
+            run=true
+            mode=full
+            base=
+          else
+            if [[ "$EVENT_NAME" == pull_request ]]; then
+              base="$(git merge-base HEAD "origin/$BASE_REF")"
+            elif [[ "$PUSH_BASE" =~ ^0+$ ]]; then
+              base="$(git merge-base HEAD origin/main)"
+            else
+              base="$PUSH_BASE"
+            fi
+            mapfile -t mutation_scope < <(./scripts/mutants-ci-scope.sh "$base" HEAD)
+            mode="${mutation_scope[0]:-}"
+            case "$mode" in
+              none) run=false ;;
+              files|full) run=true ;;
+              *) echo "mutation policy returned invalid mode: $mode" >&2; exit 64 ;;
+            esac
+          fi
+          {
+            echo "run=$run"
+            echo "mode=$mode"
+            echo "base=$base"
+          } >> "$GITHUB_OUTPUT"
+          echo "mutation scope: $mode"
 
-  # GitHub runners cannot reach the LAN; only the local hook offloads to Strix.
   mutants:
     name: Mutation Testing
     needs: mutation-policy
@@ -139,6 +179,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
           toolchain: stable
@@ -147,11 +189,50 @@ jobs:
         with:
           tool: cargo-mutants@27.1.0
       - name: Run mutation sweep
-        run: ./scripts/mutants-run.sh
+        shell: bash
+        env:
+          MUTATION_BASE: ${{ needs.mutation-policy.outputs.base }}
+          MUTATION_MODE: ${{ needs.mutation-policy.outputs.mode }}
+        run: |
+          set -euo pipefail
+          mutation_args=()
+          if [[ "$MUTATION_MODE" == files ]]; then
+            mapfile -t mutation_scope < <(./scripts/mutants-ci-scope.sh "$MUTATION_BASE" HEAD)
+            [[ "${mutation_scope[0]:-}" == files ]]
+            mutation_args=("${mutation_scope[@]:1}")
+          fi
+          set +e
+          ./scripts/mutants-run.sh "${mutation_args[@]}"
+          status=$?
+          set -e
+          missed=target/mutants/mutants.out/missed.txt
+          if [[ "$status" -eq 2 && -s "$missed" ]]; then
+            report_dir="$RUNNER_TEMP/mutation-repair"
+            mkdir -p "$report_dir"
+            for report in missed.txt timeout.txt outcomes.json; do
+              source_report="target/mutants/mutants.out/$report"
+              [[ -f "$source_report" && ! -L "$source_report" ]] || continue
+              cp -- "$source_report" "$report_dir/$report"
+            done
+          fi
+          exit "$status"
+
+      - name: Retain mutation repair evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mutation-repair
+          path: |
+            ${{ runner.temp }}/mutation-repair/missed.txt
+            ${{ runner.temp }}/mutation-repair/timeout.txt
+            ${{ runner.temp }}/mutation-repair/outcomes.json
+          if-no-files-found: ignore
+          retention-days: 30
 
   # Documentation: Validate docs build for docs.rs
   docs:
     name: Documentation
+    if: *regular_ci
     runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: -Dwarnings
@@ -167,6 +248,7 @@ jobs:
   # Code coverage: Tarpaulin report retained with the workflow run
   coverage:
     name: Code Coverage
+    if: *regular_ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -210,8 +292,8 @@ jobs:
         env:
           CARGO_TARGET_DIR: ${{ runner.temp }}/criterion-target
         run: cargo bench --manifest-path "$RUNNER_TEMP/benchmark-base/Cargo.toml" --bench performance --all-features -- --save-baseline base
+      # Existing cases compare against base; new cases run without a prior measurement.
       - name: Benchmark pull request
         env:
           CARGO_TARGET_DIR: ${{ runner.temp }}/criterion-target
-        # Existing cases compare with base; new cases establish their first measurements.
         run: cargo bench --bench performance --all-features -- --baseline-lenient base

@@ -123,23 +123,34 @@ fn mutation_sweep_uses_complete_event_scope_and_an_explicit_backstop() {
             .unwrap()
             .contains_key(Value::from("workflow_dispatch"))
     );
-    assert_eq!(ci["on"]["schedule"][0]["cron"], "0 16 15 * *");
+    assert_eq!(ci["on"]["schedule"][0]["cron"], "37 9 15 * *");
     let policy = &ci["jobs"]["mutation-policy"];
     assert!(
         steps(policy)
             .iter()
             .any(|step| step["with"]["fetch-depth"] == 0)
     );
-    command(
-        policy,
-        &["python3", "-B", "scripts/test_mutants_ci_scope.py"],
-    );
-    command(policy, &["python3", "-B", "scripts/mutants-ci-scope.py"]);
-    assert_eq!(policy["outputs"]["run"], "${{ steps.scope.outputs.run }}");
+    for output in ["run", "mode", "base"] {
+        assert_eq!(
+            policy["outputs"][output],
+            format!("${{{{ steps.test-policy.outputs.{output} }}}}")
+        );
+    }
+    for job in ci["jobs"].as_mapping().unwrap().values() {
+        if job != policy && job != &ci["jobs"]["mutants"] && job != &ci["jobs"]["benchmarks"] {
+            assert_eq!(
+                job["if"],
+                "github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'"
+            );
+        }
+    }
     let mutants = &ci["jobs"]["mutants"];
     assert_eq!(mutants["needs"], "mutation-policy");
     assert_eq!(mutants["if"], "needs.mutation-policy.outputs.run == 'true'");
-    assert_eq!(command(mutants, &["./scripts/mutants-run.sh"]).len(), 1);
+    assert_eq!(
+        command(mutants, &["./scripts/mutants-run.sh"]),
+        ["./scripts/mutants-run.sh", "\"${mutation_args[@]}\""]
+    );
     let installer = steps(mutants)
         .iter()
         .find(|step| step["with"]["tool"] == "cargo-mutants@27.1.0")

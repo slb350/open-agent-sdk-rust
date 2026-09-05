@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Stop running the full `cargo-mutants` sweep for every ordinary CI revision. Added, modified,
+  deleted, and renamed inline tests now run the owning source files' mutants; integration tests,
+  fixtures, snapshots, and ambiguous mappings fall back to the full sweep. Production-only
+  revisions skip mutation, while manual dispatch and the fifteenth-day monthly schedule always
+  sweep the tree. Failed runs retain bounded evidence for the following day's autonomous repair
+  PR.
+
 ### Fixed
 
 - Reset pending output for new requests and history clearing. Auto-mode responses no
@@ -25,9 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and move Tokio test/example runtime features out of production dependencies.
 - Shorten repeated API tutorials, correct stale contracts, and document `max_turns` as
   an inert compatibility value. Public signatures and defaults remain unchanged.
-- Validate workflow structure and actual package contents instead of source substrings.
-  Run full mutation CI for complete event diffs adding Rust tests or doctests, plus
-  manual dispatch and monthly backstops; retain fast policy checks on other revisions.
+- Validate workflow structure and actual package contents instead of source substrings,
+  preserving scoped mutation CI and its monthly/manual full-sweep backstops.
 - Exercise both branches of the context-management workflow benchmark.
 
 ## [0.11.2] - 2026-08-31

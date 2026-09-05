@@ -22,7 +22,7 @@ pub(crate) fn bash_with_fakes(bin: &Path) -> Command {
         .args([
             "-c",
             r#"
-for name in cargo ssh rsync git python3; do
+for name in cargo ssh rsync git; do
   if [ -f "$FIXTURE_BIN/$name" ]; then
     printf -v definition '%s() { command bash "$FIXTURE_BIN/%s" "$@"; }' "$name" "$name"
     eval "$definition"

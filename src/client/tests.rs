@@ -11,8 +11,7 @@ fn block_stream(items: Vec<Result<ContentBlock>>) -> EventStream {
     Box::pin(futures::stream::iter(
         items
             .into_iter()
-            .map(|item| item.map(StreamEvent::Block))
-            .collect::<Vec<_>>(),
+            .map(|item| item.map(StreamEvent::Block)),
     ))
 }
 

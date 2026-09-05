@@ -16,8 +16,6 @@ cargo clippy --all-targets --all-features -- -D warnings
 echo "pre-commit: cargo test --all-features --all"
 cargo test --all-features --all
 
-python3 -B scripts/test_mutants_ci_scope.py
-
 if ! command -v cargo-mutants > /dev/null 2>&1; then
     echo "pre-commit: cargo-mutants is required but not installed." >&2
     echo "            install it with: cargo install cargo-mutants --version '=${CARGO_MUTANTS_VERSION}'" >&2

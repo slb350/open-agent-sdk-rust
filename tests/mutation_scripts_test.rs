@@ -228,7 +228,6 @@ if [ "${FAKE_FAIL:-}" = "$1" ]; then exit 7; fi
 "#;
     write_executable(&harness.bin.join("cargo"), shim);
     write_executable(&harness.bin.join("cargo-mutants"), shim);
-    write_executable(&harness.bin.join("python3"), shim);
     write_executable(
         &scripts.join("mutants-staged.sh"),
         "#!/usr/bin/env bash\nprintf 'mutants\n' >> \"$FAKE_CHECKS\"\n",
@@ -241,7 +240,6 @@ if [ "${FAKE_FAIL:-}" = "$1" ]; then exit 7; fi
                 "cargo fmt --all -- --check",
                 "cargo clippy --all-targets --all-features -- -D warnings",
                 "cargo test --all-features --all",
-                "python3 -B scripts/test_mutants_ci_scope.py",
                 "mutants",
             ],
         ),
