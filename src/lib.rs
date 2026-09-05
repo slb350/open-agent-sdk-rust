@@ -1,6 +1,6 @@
 //! # Open Agent SDK - Rust Implementation
 //!
-//! A production-ready, streaming-first Rust SDK for building AI agents over two wire
+//! A streaming Rust SDK for building AI agents over two wire
 //! protocols: OpenAI chat completions and Anthropic messages.
 //!
 //! ## Overview
@@ -16,21 +16,6 @@
 //! `anthropic-version`:
 //! - Anthropic
 //! - Moonshot Kimi for Coding, MiniMax, and other Anthropic-shaped endpoints
-//!
-//! ## Key Features
-//!
-//! - **Two Wire Protocols**: OpenAI chat completions or Anthropic messages, per endpoint
-//! - **Local or Hosted**: Zero-cost inference on your own hardware, or a vendor endpoint
-//! - **High Performance**: Native async/await with Tokio runtime
-//! - **Streaming Responses**: Text and reasoning reach the caller fragment by fragment,
-//!   while the stream is still open
-//! - **Finish Reasons**: Every stream reports why generation stopped
-//! - **Reasoning Channel**: Extended thinking and reasoning deltas kept out of content
-//! - **Tool Calling**: Define and execute tools with automatic schema generation
-//! - **Lifecycle Hooks**: Intercept and control execution at key points
-//! - **Interrupts**: Gracefully cancel long-running operations
-//! - **Context Management**: Manual token estimation and history truncation
-//! - **Retry Logic**: Exponential backoff with jitter for reliability
 //!
 //! ## Two Interaction Modes
 //!
@@ -113,25 +98,6 @@
 //! }
 //! ```
 //!
-//! ## Architecture
-//!
-//! The SDK is organized into several modules, each with a specific responsibility:
-//!
-//! - **client**: Core streaming query engine and multi-turn client, and the transport
-//!   boundary where the protocol is applied
-//! - **types**: Data structures for messages, content blocks, configuration, and the
-//!   OpenAI and Anthropic wire formats
-//! - **tools**: Tool definition system with automatic JSON schema generation
-//! - **hooks**: Lifecycle event system for intercepting execution
-//! - **config**: Provider-specific configuration helpers
-//! - **error**: Comprehensive error types and conversions
-//! - **context**: Token estimation and message truncation utilities
-//! - **retry**: Exponential backoff retry logic with jitter
-//! - **utils**: Internal utilities for SSE parsing and tool aggregation
-
-// ============================================================================
-// MODULE DECLARATIONS
-// ============================================================================
 // These modules are private (internal implementation details) unless explicitly
 // re-exported through `pub use` statements below.
 
@@ -169,9 +135,6 @@ mod types;
 /// Handles the low-level details of streaming response parsing for both protocols.
 mod utils;
 
-// ============================================================================
-// PUBLIC EXPORTS
-// ============================================================================
 // These items form the public API of the SDK. Everything else is internal.
 
 /// Retry utilities with exponential backoff and jitter.
@@ -234,10 +197,6 @@ pub use types::{
 // `AnthropicRequest::from_openai` takes an `OpenAIRequest`, so the request half of the
 // OpenAI wire format has to be nameable for that constructor to be callable at all.
 pub use types::{OpenAIFunction, OpenAIMessage, OpenAIRequest, OpenAIToolCall};
-
-// ============================================================================
-// CONVENIENCE PRELUDE
-// ============================================================================
 
 /// Convenience module containing the most commonly used types and functions.
 /// Import with `use open_agent::prelude::*;` to get everything you need for typical usage.

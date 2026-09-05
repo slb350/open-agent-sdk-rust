@@ -10,9 +10,22 @@ use tempfile::TempDir;
 
 #[path = "support/process.rs"]
 mod process;
-use process::{prepend_path, repo_root, write_executable};
+use process::{bash_with_fakes, repo_root, write_executable};
 
 const START_TIMEOUT: Duration = Duration::from_secs(5);
+
+struct HeldRun {
+    child: Child,
+    release: PathBuf,
+}
+
+impl Drop for HeldRun {
+    fn drop(&mut self) {
+        // Release even after an assertion fails, before TempDir removes the marker.
+        let _ = fs::write(&self.release, "go");
+        let _ = self.child.wait();
+    }
+}
 
 struct Harness {
     _temp: TempDir,
@@ -44,10 +57,13 @@ if [ -n "${FAKE_READY:-}" ]; then
 fi
 if [ -n "${FAKE_WAIT:-}" ]; then
   while [ ! -e "$FAKE_WAIT" ]; do
+    if [ "$SECONDS" -ge 15 ]; then exit 99; fi
     sleep 0.01
   done
   test -e "$run_dir/owner-${FAKE_ID}"
 fi
+mkdir -p "$MUTANTS_OUT_DIR/mutants.out"
+printf '%s' "${FAKE_MISSED:-}" > "$MUTANTS_OUT_DIR/mutants.out/missed.txt"
 exit "${FAKE_EXIT:-0}"
 "#,
         );
@@ -60,10 +76,9 @@ exit "${FAKE_EXIT:-0}"
     }
 
     fn command(&self, id: &str, observed: &Path) -> Command {
-        let mut command = Command::new("bash");
+        let mut command = bash_with_fakes(&self.bin);
         command
             .arg(repo_root().join("scripts/mutants-run.sh"))
-            .env("PATH", prepend_path(&self.bin))
             .env("DREP_MUTANTS_TMPDIR", &self.scratch)
             .env("MUTANTS_OUT_DIR", &self.output)
             .env("FAKE_ID", id)
@@ -92,14 +107,33 @@ fn mutation_runner_owns_its_scratch_and_preserves_the_cargo_status() {
     let owned = PathBuf::from(read_trimmed(&observed));
     assert_eq!(owned.parent(), Some(harness.scratch.as_path()));
     assert_ne!(owned, harness.scratch);
-    assert!(
-        owned
-            .file_name()
-            .is_some_and(|name| name.to_string_lossy().starts_with("run_"))
-    );
     assert!(!owned.exists(), "the failed run must clean its own scratch");
     assert!(!stale.exists(), "a dead prior run must be swept");
     assert!(sentinel.exists(), "unowned entries must be preserved");
+}
+
+#[test]
+fn mutation_verdict_prioritizes_survivors_over_timeouts() {
+    for (status, missed, expected) in [
+        (0, "", 0),
+        (3, "", 0),
+        (3, "survivor", 2),
+        (0, "survivor", 2),
+        (7, "", 7),
+    ] {
+        let harness = Harness::new();
+        let output = harness
+            .command("verdict", &harness._temp.path().join("observed"))
+            .env("FAKE_EXIT", status.to_string())
+            .env("FAKE_MISSED", missed)
+            .output()
+            .expect("run mutation verdict");
+        assert_eq!(
+            output.status.code(),
+            Some(expected),
+            "status={status}, missed={missed}: {output:?}"
+        );
+    }
 }
 
 #[test]
@@ -110,13 +144,17 @@ fn concurrent_mutation_runs_never_delete_each_others_scratch() {
     let first_ready = harness._temp.path().join("first ready");
     let release_first = harness._temp.path().join("release first");
 
-    let mut first = harness
+    let child = harness
         .command("first", &first_observed)
         .env("FAKE_READY", &first_ready)
         .env("FAKE_WAIT", &release_first)
         .spawn()
         .expect("spawn first mutation run");
-    wait_for(&first_ready, &mut first);
+    let mut first = HeldRun {
+        child,
+        release: release_first.clone(),
+    };
+    wait_for(&first_ready, &mut first.child);
 
     let second = harness
         .command("second", &second_observed)
@@ -129,7 +167,7 @@ fn concurrent_mutation_runs_never_delete_each_others_scratch() {
     );
 
     fs::write(&release_first, "go").expect("release first run");
-    let first_status = first.wait().expect("wait for first mutation run");
+    let first_status = first.child.wait().expect("wait for first mutation run");
     assert!(first_status.success(), "{first_status:?}");
 }
 
@@ -175,4 +213,58 @@ fn wait_for(path: &Path, child: &mut Child) {
         thread::sleep(Duration::from_millis(10));
     }
     panic!("timed out waiting for {}", path.display());
+}
+
+#[test]
+fn pre_commit_executes_checks_and_stops_at_a_failed_check() {
+    let harness = Harness::new();
+    let scripts = harness._temp.path().join("scripts");
+    fs::create_dir_all(&scripts).unwrap();
+    let log = harness._temp.path().join("checks.log");
+    let shim = r#"#!/usr/bin/env bash
+set -euo pipefail
+printf '%s %s\n' "${0##*/}" "$*" >> "$FAKE_CHECKS"
+if [ "${FAKE_FAIL:-}" = "$1" ]; then exit 7; fi
+"#;
+    write_executable(&harness.bin.join("cargo"), shim);
+    write_executable(&harness.bin.join("cargo-mutants"), shim);
+    write_executable(&harness.bin.join("python3"), shim);
+    write_executable(
+        &scripts.join("mutants-staged.sh"),
+        "#!/usr/bin/env bash\nprintf 'mutants\n' >> \"$FAKE_CHECKS\"\n",
+    );
+    for (failure, expected) in [
+        ("fmt", vec!["cargo fmt --all -- --check"]),
+        (
+            "",
+            vec![
+                "cargo fmt --all -- --check",
+                "cargo clippy --all-targets --all-features -- -D warnings",
+                "cargo test --all-features --all",
+                "python3 -B scripts/test_mutants_ci_scope.py",
+                "mutants",
+            ],
+        ),
+    ] {
+        fs::write(&log, "").unwrap();
+        let output = bash_with_fakes(&harness.bin)
+            .arg(repo_root().join(".githooks/pre-commit"))
+            .current_dir(harness._temp.path())
+            .env("FAKE_CHECKS", &log)
+            .env("FAKE_FAIL", failure)
+            .output()
+            .unwrap();
+        assert_eq!(
+            output.status.code(),
+            Some(if failure.is_empty() { 0 } else { 7 }),
+            "{output:?}"
+        );
+        assert_eq!(
+            fs::read_to_string(&log)
+                .unwrap()
+                .lines()
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
 }

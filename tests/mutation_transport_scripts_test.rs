@@ -8,14 +8,14 @@ use tempfile::TempDir;
 
 #[path = "support/process.rs"]
 mod process;
-use process::{prepend_path, repo_root, write_executable};
+use process::{bash_with_fakes, repo_root, write_executable};
 
 struct RemoteHarness {
     _temp: TempDir,
     repo: PathBuf,
     bin: PathBuf,
-    command_log: PathBuf,
-    payload_log: PathBuf,
+    remote: PathBuf,
+    runs: PathBuf,
 }
 
 impl RemoteHarness {
@@ -29,40 +29,63 @@ impl RemoteHarness {
         let bin = temp.path().join("fake bin");
         fs::create_dir_all(&scripts).expect("create scripts directory");
         fs::create_dir_all(&bin).expect("create fake binary directory");
+        assert!(
+            Command::new("git")
+                .args(["init", "-q"])
+                .arg(&repo)
+                .status()
+                .unwrap()
+                .success()
+        );
         copy_script("mutants-common.sh", &scripts);
         copy_script("mutants-remote.sh", &scripts);
 
-        let command_log = temp.path().join("commands.log");
-        let payload_log = temp.path().join("payloads.log");
+        let remote = temp.path().join("remote home");
+        fs::create_dir_all(&remote).unwrap();
+        let runs = temp.path().join("runs.log");
+        write_executable(
+            &scripts.join("mutants-run.sh"),
+            r#"#!/usr/bin/env bash
+set -euo pipefail
+: "${MUTANTS_OUT_DIR:?output directory was not forwarded}"
+printf '%s\n' "$PWD" >> "$FAKE_RUNS"
+mkdir -p "$MUTANTS_OUT_DIR/mutants.out"
+printf '%s\n' "$DREP_MUTANTS_TMPDIR" > "$MUTANTS_OUT_DIR/mutants.out/scratch.txt"
+printf '%s\n' "$@" > "$MUTANTS_OUT_DIR/mutants.out/arguments.txt"
+exit "${FAKE_SWEEP_EXIT:-0}"
+"#,
+        );
         write_executable(
             &bin.join("ssh"),
             r#"#!/usr/bin/env bash
 set -euo pipefail
-printf 'ssh' >> "$FAKE_COMMAND_LOG"
-printf '\t%q' "$@" >> "$FAKE_COMMAND_LOG"
-printf '\n' >> "$FAKE_COMMAND_LOG"
-case " $* " in
-  *" bash -s "*)
-    cat >> "$FAKE_PAYLOAD_LOG"
-    printf '\n---\n' >> "$FAKE_PAYLOAD_LOG"
-    ;;
-esac
+while [ "$1" = "-o" ]; do shift 2; done
+test "$1" = worker.example
+shift
+if [ "$1" = true ]; then exit "${FAKE_PROBE_EXIT:-0}"; fi
+if [ "$1" = bash ]; then payload=$(cat); else payload=$1; fi
+payload=${payload//\$HOME/\$FAKE_REMOTE_ROOT}
+# SSH does not inherit the calling shell's mutation settings.
+unset MUTANTS_OUT_DIR DREP_MUTANTS_TMPDIR
+exec bash -c "$payload"
 "#,
         );
         write_executable(
             &bin.join("rsync"),
             r#"#!/usr/bin/env bash
 set -euo pipefail
-printf 'rsync' >> "$FAKE_COMMAND_LOG"
-printf '\t%q' "$@" >> "$FAKE_COMMAND_LOG"
-printf '\n' >> "$FAKE_COMMAND_LOG"
-if [ "${FAKE_MIRROR_FAILURE:-0}" = "1" ]; then
-  for argument in "$@"; do
-    case "$argument" in
-      *:*/out/) exit 23 ;;
-    esac
-  done
+arguments=("$@")
+source=${arguments[${#arguments[@]}-2]}
+destination=${arguments[${#arguments[@]}-1]}
+if [[ "$source" == worker.example:* ]]; then
+  if [ "${FAKE_MIRROR_FAILURE:-0}" = "1" ]; then exit 23; fi
+  source="$FAKE_REMOTE_ROOT/${source#*:}"
 fi
+if [[ "$destination" == worker.example:* ]]; then
+  destination="$FAKE_REMOTE_ROOT/${destination#*:}"
+fi
+mkdir -p "$destination"
+cp -R "${source%/}/." "$destination"
 "#,
         );
 
@@ -70,19 +93,18 @@ fi
             _temp: temp,
             repo,
             bin,
-            command_log,
-            payload_log,
+            remote,
+            runs,
         }
     }
 
     fn command(&self) -> Command {
-        let mut command = Command::new("bash");
+        let mut command = bash_with_fakes(&self.bin);
         command
             .arg(self.repo.join("scripts/mutants-remote.sh"))
             .current_dir(&self.repo)
-            .env("PATH", prepend_path(&self.bin))
-            .env("FAKE_COMMAND_LOG", &self.command_log)
-            .env("FAKE_PAYLOAD_LOG", &self.payload_log)
+            .env("FAKE_REMOTE_ROOT", &self.remote)
+            .env("FAKE_RUNS", &self.runs)
             .env("DREP_MUTANTS_HOST", "worker.example")
             .env("DREP_MUTANTS_DIR", "ci/open-agent-sdk-rust")
             .env("DREP_MUTANTS_TMPDIR", "/var/tmp/mutants scratch")
@@ -95,12 +117,25 @@ fi
 fn remote_mutation_runs_use_unique_checkouts_and_forward_the_scratch_override() {
     let harness = RemoteHarness::new();
 
-    let first = harness.command().output().expect("run first remote sweep");
-    let second = harness.command().output().expect("run second remote sweep");
+    let first = harness
+        .command()
+        .args(["--file", "src/file with spaces.rs"])
+        .output()
+        .expect("run first remote sweep");
     assert_success(&first);
+    let first_results = result_path(&first);
+    let artifacts = harness.repo.join(&first_results).join("mutants.out");
+    assert_eq!(
+        fs::read_to_string(artifacts.join("scratch.txt")).unwrap(),
+        "/var/tmp/mutants scratch\n"
+    );
+    assert_eq!(
+        fs::read_to_string(artifacts.join("arguments.txt")).unwrap(),
+        "--file\nsrc/file with spaces.rs\n"
+    );
+    let second = harness.command().output().expect("run second remote sweep");
     assert_success(&second);
 
-    let first_results = result_path(&first);
     let second_results = result_path(&second);
     assert_ne!(first_results, second_results);
     assert!(
@@ -109,14 +144,15 @@ fn remote_mutation_runs_use_unique_checkouts_and_forward_the_scratch_override() 
     );
     assert!(harness.repo.join(second_results).is_dir());
 
-    let payloads = fs::read_to_string(&harness.payload_log).expect("read remote payloads");
+    let runs = fs::read_to_string(&harness.runs).unwrap();
+    let paths: Vec<_> = runs.lines().map(Path::new).collect();
+    assert_eq!(paths.len(), 2);
+    assert_ne!(paths[0], paths[1]);
     assert!(
-        payloads.contains(r#"export DREP_MUTANTS_TMPDIR=/var/tmp/mutants\ scratch"#),
-        "custom remote scratch root was not forwarded: {payloads}"
+        paths
+            .iter()
+            .all(|path| path.starts_with(&harness.remote) && !path.exists())
     );
-
-    let commands = fs::read_to_string(&harness.command_log).expect("read command log");
-    assert_eq!(commands.matches("find\\ ").count(), 2, "{commands}");
 }
 
 #[test]
@@ -133,8 +169,10 @@ fn a_result_mirror_failure_is_reported_and_retains_the_remote_run() {
     assert!(stderr.contains("failed to mirror results"), "{stderr}");
     assert!(stderr.contains("remote run retained"), "{stderr}");
 
-    let commands = fs::read_to_string(&harness.command_log).expect("read command log");
-    assert!(!commands.contains("find\\ "), "{commands}");
+    let runs = fs::read_to_string(&harness.runs).unwrap();
+    let retained = Path::new(runs.trim());
+    assert!(retained.starts_with(&harness.remote));
+    assert!(retained.join("out/mutants.out/scratch.txt").is_file());
 }
 
 #[test]
@@ -171,10 +209,9 @@ test "$2" = "$MUTANTS_EXTRA_FILE"
     );
 
     for diff in ["first staged diff", "second staged diff"] {
-        let output = Command::new("bash")
+        let output = bash_with_fakes(&bin)
             .arg(scripts.join("mutants-staged.sh"))
             .current_dir(&repo)
-            .env("PATH", prepend_path(&bin))
             .env("MUTANTS_OUT_DIR", "out")
             .env("FAKE_DIFF", diff)
             .env("FAKE_PATHS_LOG", &paths_log)

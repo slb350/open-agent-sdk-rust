@@ -1,49 +1,28 @@
-/// Container for registering and managing lifecycle hooks.
+/// An ordered registry of asynchronous lifecycle hooks.
 ///
-/// The `Hooks` struct stores collections of hook handlers for different lifecycle events.
-/// It provides a builder pattern for registering hooks and executor methods for running them.
-///
-/// # Design Principles
-///
-/// - **Builder Pattern**: Hooks can be chained during construction using `.add_*()` methods
-/// - **Multiple Hooks**: You can register multiple hooks for the same event type
-/// - **Execution Order**: Hooks execute in the order they were registered (FIFO)
-/// - **First Wins**: The first hook returning `Some(HookDecision)` determines the outcome
-/// - **Thread Safe**: The struct is `Clone` and all handlers are `Arc`-wrapped for sharing
-///
-/// # Example: Building a Hooks Collection
+/// The first handler returning `Some(HookDecision)` determines the result and
+/// skips later handlers. Return `None` to let subsequent handlers run. Clones share
+/// handlers through [`Arc`]; the three vectors also permit direct registration.
 ///
 /// ```rust
-/// use open_agent::{Hooks, PreToolUseEvent, PostToolUseEvent, HookDecision};
+/// use open_agent::{Hooks, HookDecision};
 ///
 /// let hooks = Hooks::new()
-///     // First: Security gate (highest priority)
 ///     .add_pre_tool_use(|event| async move {
-///         if event.tool_name == "dangerous" {
-///             return Some(HookDecision::block("Security violation"));
+///         if event.tool_name == "delete_file" {
+///             return Some(HookDecision::block("Deletion is disabled"));
 ///         }
 ///         None
 ///     })
-///     // Second: Rate limiting
-///     .add_pre_tool_use(|event| async move {
-///         // Check rate limits...
+///     .add_post_tool_use(|event| async move {
+///         println!("Completed {}", event.tool_name);
 ///         None
 ///     })
-///     // Audit logging (happens after execution)
-///     .add_post_tool_use(|event| async move {
-///         println!("Tool '{}' executed", event.tool_name);
-///         None
+///     .add_user_prompt_submit(|event| async move {
+///         let prompt = format!("{}\nAnswer in JSON.", event.prompt);
+///         Some(HookDecision::modify_prompt(prompt, "Requested output format"))
 ///     });
 /// ```
-///
-/// # Fields
-///
-/// - `pre_tool_use`: Handlers invoked before tool execution
-/// - `post_tool_use`: Handlers invoked after tool execution
-/// - `user_prompt_submit`: Handlers invoked before processing user prompts
-///
-/// All fields are public, allowing direct manipulation if needed, though the builder
-/// methods are the recommended approach.
 #[derive(Clone, Default)]
 pub struct Hooks {
     /// Collection of PreToolUse hook handlers, executed in registration order
@@ -57,174 +36,48 @@ pub struct Hooks {
 }
 
 impl Hooks {
-    /// Creates a new, empty `Hooks` container.
-    ///
-    /// Use this as the starting point for building a hooks collection using the builder pattern.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use open_agent::Hooks;
-    ///
-    /// let hooks = Hooks::new()
-    ///     .add_pre_tool_use(|event| async move { None });
-    /// ```
+    /// Creates an empty hook registry.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Registers a PreToolUse hook handler using the builder pattern.
-    ///
-    /// This method takes ownership of `self` and returns it back, allowing method chaining.
-    /// The handler is wrapped in `Arc` and added to the collection of PreToolUse hooks.
-    ///
-    /// # Parameters
-    ///
-    /// - `handler`: An async function or closure that takes `PreToolUseEvent` and returns
-    ///   `Option<HookDecision>`. Must be `Send + Sync + 'static` for thread safety.
-    ///
-    /// # Type Parameters
-    ///
-    /// - `F`: The function/closure type
-    /// - `Fut`: The future type returned by the function
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use open_agent::{Hooks, HookDecision};
-    ///
-    /// let hooks = Hooks::new()
-    ///     .add_pre_tool_use(|event| async move {
-    ///         println!("About to execute: {}", event.tool_name);
-    ///         None
-    ///     })
-    ///     .add_pre_tool_use(|event| async move {
-    ///         // This runs second (if first returns None)
-    ///         if event.tool_name == "blocked" {
-    ///             Some(HookDecision::block("Not allowed"))
-    ///         } else {
-    ///             None
-    ///         }
-    ///     });
-    /// ```
+    /// Appends a pre-tool handler. See [`Hooks`] for ordering and an example.
     pub fn add_pre_tool_use<F, Fut>(mut self, handler: F) -> Self
     where
         F: Fn(PreToolUseEvent) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Option<HookDecision>> + Send + 'static,
     {
-        // Wrap the user's function in Arc and Box::pin for type erasure and heap allocation
         self.pre_tool_use
             .push(Arc::new(move |event| Box::pin(handler(event))));
         self
     }
 
-    /// Registers a PostToolUse hook handler using the builder pattern.
-    ///
-    /// Identical to `add_pre_tool_use` but for PostToolUse events. See [`Self::add_pre_tool_use`]
-    /// for detailed documentation.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use open_agent::Hooks;
-    ///
-    /// let hooks = Hooks::new()
-    ///     .add_post_tool_use(|event| async move {
-    ///         // Audit log all tool executions
-    ///         println!("Tool '{}' completed: {:?}",
-    ///                  event.tool_name, event.tool_result);
-    ///         None // Don't interfere with execution
-    ///     });
-    /// ```
+    /// Appends a post-tool handler. Return `None` from observers so later hooks run.
     pub fn add_post_tool_use<F, Fut>(mut self, handler: F) -> Self
     where
         F: Fn(PostToolUseEvent) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Option<HookDecision>> + Send + 'static,
     {
-        // Wrap the user's function in Arc and Box::pin for type erasure and heap allocation
         self.post_tool_use
             .push(Arc::new(move |event| Box::pin(handler(event))));
         self
     }
 
-    /// Registers a UserPromptSubmit hook handler using the builder pattern.
-    ///
-    /// Identical to `add_pre_tool_use` but for UserPromptSubmit events. See [`Self::add_pre_tool_use`]
-    /// for detailed documentation.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use open_agent::{Hooks, HookDecision};
-    ///
-    /// let hooks = Hooks::new()
-    ///     .add_user_prompt_submit(|event| async move {
-    ///         // Content moderation
-    ///         if event.prompt.contains("forbidden") {
-    ///             Some(HookDecision::block("Content violation"))
-    ///         } else {
-    ///             None
-    ///         }
-    ///     });
-    /// ```
+    /// Appends a prompt handler. Return a decision to block or replace the prompt.
     pub fn add_user_prompt_submit<F, Fut>(mut self, handler: F) -> Self
     where
         F: Fn(UserPromptSubmitEvent) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Option<HookDecision>> + Send + 'static,
     {
-        // Wrap the user's function in Arc and Box::pin for type erasure and heap allocation
         self.user_prompt_submit
             .push(Arc::new(move |event| Box::pin(handler(event))));
         self
     }
 
-    /// Executes all registered PreToolUse hooks in order and returns the first decision.
+    /// Runs handlers in registration order, returning the first `Some` decision.
     ///
-    /// This method implements the **"first non-None wins"** execution model:
-    ///
-    /// 1. Iterates through hooks in registration order (FIFO)
-    /// 2. Calls each hook with the same event snapshot
-    /// 3. If a hook returns `Some(decision)`, immediately returns that decision
-    /// 4. Remaining hooks are **not executed**
-    /// 5. If all hooks return `None`, returns `None`
-    ///
-    /// # Parameters
-    ///
-    /// - `event`: The PreToolUseEvent to pass to each hook
-    ///
-    /// # Returns
-    ///
-    /// - `Some(HookDecision)`: A hook made a decision (block, modify, or continue)
-    /// - `None`: All hooks returned `None` (continue normally)
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use open_agent::{Hooks, PreToolUseEvent, HookDecision};
-    /// use serde_json::json;
-    ///
-    /// # async fn example() {
-    /// let hooks = Hooks::new()
-    ///     .add_pre_tool_use(|e| async move { None }) // Runs first
-    ///     .add_pre_tool_use(|e| async move {
-    ///         Some(HookDecision::block("Blocked")) // Runs second, blocks
-    ///     })
-    ///     .add_pre_tool_use(|e| async move {
-    ///         None // NEVER runs because previous hook returned Some
-    ///     });
-    ///
-    /// let event = PreToolUseEvent::new(
-    ///     "test".to_string(),
-    ///     json!({}),
-    ///     "id".to_string(),
-    ///     vec![]
-    /// );
-    ///
-    /// let decision = hooks.execute_pre_tool_use(event).await;
-    /// assert!(decision.is_some());
-    /// assert!(!decision.unwrap().continue_execution());
-    /// # }
-    /// ```
+    /// Each handler receives the same event snapshot. Returns `None` if no handler
+    /// decides, including when the registry is empty.
     pub async fn execute_pre_tool_use(&self, event: PreToolUseEvent) -> Option<HookDecision> {
         let (last, preceding) = self.pre_tool_use.split_last()?;
         for handler in preceding {
@@ -236,15 +89,8 @@ impl Hooks {
         last(event).await
     }
 
-    /// Executes all registered PostToolUse hooks in order and returns the first decision.
-    ///
-    /// Identical in behavior to [`Self::execute_pre_tool_use`] but for PostToolUse events.
-    /// See that method for detailed documentation of the execution model.
-    ///
-    /// # Note
-    ///
-    /// PostToolUse hooks rarely return decisions in practice. They're primarily used for
-    /// observation (logging, metrics) and typically always return `None`.
+    /// Runs post-tool handlers with the same first-decision behavior as
+    /// [`execute_pre_tool_use`](Self::execute_pre_tool_use).
     pub async fn execute_post_tool_use(&self, event: PostToolUseEvent) -> Option<HookDecision> {
         let (last, preceding) = self.post_tool_use.split_last()?;
         for handler in preceding {
@@ -275,21 +121,7 @@ impl Hooks {
     }
 }
 
-/// Custom Debug implementation for Hooks.
-///
-/// Since hook handlers are closures (which don't implement Debug), we provide a custom
-/// implementation that shows the number of registered handlers instead of trying to
-/// debug-print the closures themselves.
-///
-/// # Example Output
-///
-/// ```text
-/// Hooks {
-///     pre_tool_use: 3 handlers,
-///     post_tool_use: 1 handlers,
-///     user_prompt_submit: 2 handlers
-/// }
-/// ```
+/// Shows handler counts, omitting the closures.
 impl std::fmt::Debug for Hooks {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Hooks")

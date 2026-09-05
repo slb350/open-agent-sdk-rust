@@ -1,19 +1,4 @@
-/// Identifies the sender/role of a message in the conversation.
-///
-/// This enum follows the standard chat completion role system used by most
-/// LLM APIs. The role determines how the message is interpreted and processed.
-///
-/// # Serialization
-///
-/// Serializes to lowercase strings via serde (`"system"`, `"user"`, etc.)
-/// to match OpenAI API format.
-///
-/// # Role Semantics
-///
-/// - [`System`](MessageRole::System): Establishes context, instructions, and behavior
-/// - [`User`](MessageRole::User): Input from the human or calling application
-/// - [`Assistant`](MessageRole::Assistant): Response from the AI model
-/// - [`Tool`](MessageRole::Tool): Results from tool/function execution
+/// Identifies the sender of a conversation message. Serializes as a lowercase string.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum MessageRole {
@@ -43,32 +28,9 @@ pub enum MessageRole {
     Tool,
 }
 
-/// Multi-modal content blocks that can appear in messages.
+/// A text, image, tool-call, or tool-result block.
 ///
-/// Messages are composed of one or more content blocks, allowing rich,
-/// structured communication between the user, assistant, and tools.
-///
-/// # Serialization
-///
-/// Uses serde's "externally tagged" enum format with a `"type"` field:
-/// ```json
-/// {"type": "text", "text": "Hello"}
-/// {"type": "tool_use", "id": "call_123", "name": "search", "input": {...}}
-/// {"type": "tool_result", "tool_use_id": "call_123", "content": {...}}
-/// ```
-///
-/// # Block Types
-///
-/// - [`Text`](ContentBlock::Text): Simple text content
-/// - [`Image`](ContentBlock::Image): Image content (URL or base64)
-/// - [`ToolUse`](ContentBlock::ToolUse): Request from model to execute a tool
-/// - [`ToolResult`](ContentBlock::ToolResult): Result of tool execution
-///
-/// # Usage
-///
-/// Messages can contain multiple blocks. For example, a user message might
-/// include text and an image, or an assistant message might include text
-/// followed by a tool use request.
+/// Serializes as an object with a snake-case `type` tag. See [`Message`] for examples.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
@@ -85,19 +47,7 @@ pub enum ContentBlock {
     ToolResult(ToolResultBlock),
 }
 
-/// Simple text content in a message.
-///
-/// The most common content type, representing plain text communication.
-/// Both users and assistants primarily use text blocks for their messages.
-///
-/// # Example
-///
-/// ```
-/// use open_agent::{TextBlock, ContentBlock};
-///
-/// let block = TextBlock::new("Hello, world!");
-/// let content = ContentBlock::Text(block);
-/// ```
+/// A text block in a message or an incremental streamed text fragment.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TextBlock {
     /// The text content.
@@ -105,48 +55,15 @@ pub struct TextBlock {
 }
 
 impl TextBlock {
-    /// Creates a new text block from any string-like type.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use open_agent::TextBlock;
-    ///
-    /// let block = TextBlock::new("Hello");
-    /// assert_eq!(block.text, "Hello");
-    /// ```
+    /// Creates a text block.
     pub fn new(text: impl Into<String>) -> Self {
         Self { text: text.into() }
     }
 }
 
-/// Tool use request from the AI model.
+/// A model-requested tool call with an ID, name, and assembled JSON input.
 ///
-/// When the model determines it needs to call a tool/function, it returns
-/// a ToolUseBlock specifying which tool to call and with what parameters.
-/// The application must then execute the tool and return results via
-/// [`ToolResultBlock`].
-///
-/// # Fields
-///
-/// - `id`: Unique identifier for this tool call, used to correlate results
-/// - `name`: Name of the tool to execute (must match a registered tool)
-/// - `input`: JSON parameters to pass to the tool
-///
-/// # Example
-///
-/// ```
-/// use open_agent::{ToolUseBlock, ContentBlock};
-/// use serde_json::json;
-///
-/// let block = ToolUseBlock::new(
-///     "call_123",
-///     "calculate",
-///     json!({"expression": "2 + 2"})
-/// );
-/// assert_eq!(block.id(), "call_123");
-/// assert_eq!(block.name(), "calculate");
-/// ```
+/// The ID pairs this call with its [`ToolResultBlock`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolUseBlock {
     /// Unique identifier for this tool call.
@@ -169,26 +86,7 @@ pub struct ToolUseBlock {
 }
 
 impl ToolUseBlock {
-    /// Creates a new tool use block.
-    ///
-    /// # Parameters
-    ///
-    /// - `id`: Unique identifier for this tool call
-    /// - `name`: Name of the tool to execute
-    /// - `input`: JSON parameters for the tool
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use open_agent::ToolUseBlock;
-    /// use serde_json::json;
-    ///
-    /// let block = ToolUseBlock::new(
-    ///     "call_abc",
-    ///     "search",
-    ///     json!({"query": "Rust async programming"})
-    /// );
-    /// ```
+    /// Creates a tool call from its ID, name, and JSON input.
     pub fn new(id: impl Into<String>, name: impl Into<String>, input: serde_json::Value) -> Self {
         Self {
             id: id.into(),
@@ -213,29 +111,7 @@ impl ToolUseBlock {
     }
 }
 
-/// Tool execution result sent back to the model.
-///
-/// After executing a tool requested via [`ToolUseBlock`], the application
-/// creates a ToolResultBlock containing the tool's output and sends it back
-/// to the model. The model then uses this information in its next response.
-///
-/// # Fields
-///
-/// - `tool_use_id`: Must match the `id` from the corresponding ToolUseBlock
-/// - `content`: JSON result from the tool execution
-///
-/// # Example
-///
-/// ```
-/// use open_agent::{ToolResultBlock, ContentBlock};
-/// use serde_json::json;
-///
-/// let result = ToolResultBlock::new(
-///     "call_123",
-///     json!({"result": 4})
-/// );
-/// assert_eq!(result.tool_use_id(), "call_123");
-/// ```
+/// A JSON tool result paired with the originating [`ToolUseBlock`] ID.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolResultBlock {
     /// ID of the tool use request this result corresponds to.
@@ -254,27 +130,7 @@ pub struct ToolResultBlock {
 }
 
 impl ToolResultBlock {
-    /// Creates a new tool result block.
-    ///
-    /// # Parameters
-    ///
-    /// - `tool_use_id`: ID from the corresponding ToolUseBlock
-    /// - `content`: JSON result from tool execution
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use open_agent::ToolResultBlock;
-    /// use serde_json::json;
-    ///
-    /// let result = ToolResultBlock::new(
-    ///     "call_xyz",
-    ///     json!({
-    ///         "status": "success",
-    ///         "data": {"temperature": 72}
-    ///     })
-    /// );
-    /// ```
+    /// Creates a result associated with the supplied tool-call ID.
     pub fn new(tool_use_id: impl Into<String>, content: serde_json::Value) -> Self {
         Self {
             tool_use_id: tool_use_id.into(),

@@ -1,39 +1,8 @@
-/// Configuration options for an AI agent instance.
+/// Configuration for model requests, tool execution, and hooks.
 ///
-/// `AgentOptions` controls all aspects of agent behavior including model selection,
-/// conversation management, tool usage, and lifecycle hooks. This struct should be
-/// constructed using [`AgentOptions::builder()`] rather than direct instantiation
-/// to ensure required fields are validated.
-///
-/// # Architecture
-///
-/// The options are organized into several functional areas:
-///
-/// - **Model Configuration**: `model`, `base_url`, `api_key`, `headers`, `protocol`,
-///   `temperature`, `max_tokens`
-/// - **Conversation Control**: `system_prompt`, `max_turns`, `timeout`
-/// - **Tool Management**: `tools`, `auto_execute_tools`, `max_tool_iterations`
-/// - **Lifecycle Hooks**: `hooks` for monitoring and interception
-///
-/// # Thread Safety
-///
-/// Tools are wrapped in `Arc<Tool>` to allow efficient cloning and sharing across
-/// threads, as agents may need to be cloned for parallel processing.
-///
-/// # Examples
-///
-/// ```no_run
-/// use open_agent::AgentOptions;
-///
-/// let options = AgentOptions::builder()
-///     .model("qwen2.5-32b-instruct")
-///     .base_url("http://localhost:1234/v1")
-///     .system_prompt("You are a helpful coding assistant")
-///     .max_turns(5)
-///     .temperature(0.7)
-///     .build()
-///     .expect("Valid configuration");
-/// ```
+/// Construct validated options with [`AgentOptions::builder`]. `Default` leaves the
+/// model and base URL empty without validation. Clones share tool handlers.
+/// `max_tokens` and `temperature` remain unset unless explicitly supplied.
 #[derive(Clone)]
 pub struct AgentOptions {
     /// System prompt that defines the agent's behavior and personality.
@@ -71,11 +40,10 @@ pub struct AgentOptions {
     /// Header names are matched case-insensitively when the builder replaces an earlier value.
     headers: BTreeMap<String, String>,
 
-    /// Maximum number of conversation turns (user message + assistant response = 1 turn).
+    /// Retained compatibility setting, stored but not enforced by the SDK.
     ///
-    /// This limits how long a conversation can continue. In auto-execution mode
-    /// with tools, this prevents infinite loops. Set to 1 for single-shot
-    /// interactions or higher for multi-turn conversations.
+    /// Use `max_tool_iterations` to limit automatic tool rounds. Applications must
+    /// limit conversation turns themselves.
     max_turns: u32,
 
     /// Maximum tokens the model should generate in a single response.
@@ -85,19 +53,10 @@ pub struct AgentOptions {
     /// Note this is separate from the model's context window size.
     max_tokens: Option<u32>,
 
-    /// Sampling temperature for response generation (typically 0.0 to 2.0).
+    /// Optional sampling temperature. `None` omits the field and lets the server choose.
     ///
-    /// - 0.0: Deterministic, always picks most likely tokens
-    /// - 0.7: Balanced creativity and consistency
-    /// - 1.0+: More random and creative responses
-    ///
-    /// `None` omits the field from the wire request entirely, leaving the server to apply
-    /// its own default. That is the default, and it is load-bearing rather than tidy: a
-    /// growing number of models reject the parameter outright — Anthropic's range stops at
-    /// 1.0, and several reasoning models 400 on any value at all — so a client-invented
-    /// temperature turns a working request into a hard error the caller never asked for.
-    /// This mirrors `max_tokens`, which stopped being defaulted in 0.7.0 for the same
-    /// reason.
+    /// The builder accepts 0.0 through 2.0; a provider may accept a narrower range or
+    /// reject the parameter entirely.
     temperature: Option<f32>,
 
     /// HTTP request timeout in seconds.
@@ -114,32 +73,16 @@ pub struct AgentOptions {
     /// vector. Empty by default.
     tools: Vec<Arc<Tool>>,
 
-    /// Whether to automatically execute tools and continue the conversation.
-    ///
-    /// - `true`: SDK automatically executes tool calls and sends results back
-    ///   to the model, continuing until no more tools are requested
-    /// - `false`: Tool calls are returned to the caller, who must manually
-    ///   execute them and provide results
-    ///
-    /// Auto-execution is convenient but gives less control. Manual execution
-    /// allows for approval workflows and selective tool access.
+    /// Whether the SDK executes tool calls and continues until a text response or
+    /// the configured iteration limit. Defaults to manual execution.
     auto_execute_tools: bool,
 
-    /// Maximum iterations of tool execution in automatic mode.
-    ///
-    /// Prevents infinite loops where the agent continuously requests tools.
-    /// Each tool execution attempt counts as one iteration. Only relevant
-    /// when `auto_execute_tools` is true.
+    /// Maximum automatic tool rounds. One round may contain several tool calls.
     max_tool_iterations: u32,
 
-    /// Whether the model's reasoning channel is surfaced to the caller.
+    /// Whether reasoning is emitted separately from content; defaults to false.
     ///
-    /// Reasoning models stream chain-of-thought separately from content
-    /// (`reasoning_content` on DeepSeek, `reasoning` on OpenRouter). It is never
-    /// merged into assistant text regardless of this setting; the flag only decides
-    /// whether it is buffered and emitted as `StreamEvent::Reasoning` or discarded
-    /// as it arrives. `false` by default, because a caller that does not want it
-    /// should not pay to buffer it.
+    /// Reasoning never enters assistant text or conversation history.
     include_reasoning: bool,
 
     /// The wire protocol this endpoint speaks.
@@ -149,28 +92,11 @@ pub struct AgentOptions {
     /// SDK supported before 0.9.0 speaks, so an existing configuration keeps its behaviour.
     protocol: ApiProtocol,
 
-    /// Lifecycle hooks for observing and intercepting agent operations.
-    ///
-    /// Hooks allow you to inject custom logic at various points:
-    /// - Before/after API requests
-    /// - Tool execution interception
-    /// - Response streaming callbacks
-    ///
-    /// Useful for logging, metrics, debugging, and implementing custom
-    /// authorization logic.
+    /// Hooks for prompt submission and automatic pre/post-tool execution.
     hooks: Hooks,
 }
 
-/// Custom Debug implementation to prevent sensitive data leakage.
-///
-/// We override the default Debug implementation because:
-/// 1. The `api_key` and `headers` fields may contain sensitive credentials that
-///    shouldn't appear in logs or error messages
-/// 2. The `tools` vector contains Arc-wrapped closures that don't debug nicely,
-///    so we show a count instead
-///
-/// This ensures that debug output is safe for logging while remaining useful
-/// for troubleshooting.
+/// Omits credentials and shows tool counts instead of handlers.
 impl std::fmt::Debug for AgentOptions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AgentOptions")
@@ -194,70 +120,33 @@ impl std::fmt::Debug for AgentOptions {
     }
 }
 
-/// Default values optimized for common single-turn use cases.
-///
-/// These defaults are chosen to:
-/// - Require explicit configuration of critical fields (model, base_url)
-/// - Provide safe, sensible defaults for optional fields
-/// - Work with local inference servers that don't need authentication
+/// Defaults with an empty model and base URL. Use the builder for runtime validation.
 impl Default for AgentOptions {
     fn default() -> Self {
         Self {
-            // Empty string forces users to explicitly set context
             system_prompt: String::new(),
-            // Empty string forces users to explicitly choose a model
             model: String::new(),
-            // Empty string forces users to explicitly configure the endpoint
             base_url: String::new(),
-            // Most local servers (LM Studio, llama.cpp) don't require auth
             api_key: "not-needed".to_string(),
-            // No additional request metadata unless the caller opts in
             headers: BTreeMap::new(),
-            // Default to single-shot interaction; users opt into conversations
             max_turns: 1,
-            // No client-imposed cap; the server decides how long a response may be.
-            // Callers who want a ceiling set one explicitly via `max_tokens()`.
             max_tokens: None,
-            // Unset: the field is omitted and the server decides. A client-invented value
-            // is rejected outright by several current models.
             temperature: None,
-            // 60 seconds handles most requests without timing out prematurely
             timeout: 60,
-            // No tools by default; users explicitly add capabilities
             tools: Vec::new(),
-            // Manual tool execution by default for safety and control
             auto_execute_tools: false,
-            // 5 iterations prevent infinite loops while allowing multi-step workflows
             max_tool_iterations: 5,
-            // Empty hooks for no-op behavior
             hooks: Hooks::new(),
-            // Reasoning is dropped unless a caller explicitly asks for it
             include_reasoning: false,
-            // The only protocol the SDK spoke before 0.9.0
             protocol: ApiProtocol::OpenAiChat,
         }
     }
 }
 
 impl AgentOptions {
-    /// Creates a new builder for constructing [`AgentOptions`].
+    /// Creates a builder that requires a model and base URL.
     ///
-    /// The builder pattern is used because:
-    /// 1. Some fields are required (model, base_url) and need validation
-    /// 2. Many fields have sensible defaults that can be overridden
-    /// 3. The API is more discoverable and readable than struct initialization
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use open_agent::AgentOptions;
-    ///
-    /// let options = AgentOptions::builder()
-    ///     .model("qwen2.5-32b-instruct")
-    ///     .base_url("http://localhost:1234/v1")
-    ///     .build()
-    ///     .expect("Valid configuration");
-    /// ```
+    /// See [`AgentOptionsBuilder`] for an example.
     pub fn builder() -> AgentOptionsBuilder {
         AgentOptionsBuilder::default()
     }
@@ -287,7 +176,10 @@ impl AgentOptions {
         &self.headers
     }
 
-    /// Returns the maximum number of conversation turns.
+    /// Returns the retained `max_turns` compatibility value.
+    ///
+    /// The SDK does not enforce it. Use [`max_tool_iterations`](Self::max_tool_iterations)
+    /// for automatic tool rounds and enforce conversation limits in your application.
     pub fn max_turns(&self) -> u32 {
         self.max_turns
     }

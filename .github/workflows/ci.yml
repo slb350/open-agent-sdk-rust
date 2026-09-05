@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 16 15 * *'
 
 env:
   CARGO_TERM_COLOR: always
@@ -112,17 +115,27 @@ jobs:
       - name: Run security audit
         run: cargo audit --deny warnings
 
-  # Mutation testing: A green suite proves the tests ran, not that they would notice if the
-  # code were wrong. The verdict comes from missed.txt rather than the exit code, because
-  # cargo-mutants reports exit 3 (Timeout) in preference to exit 2 (FoundProblems) — so a run
-  # with one hanging mutant and one genuine survivor also exits 3. scripts/mutants-run.sh owns
-  # that rule and is shared with the pre-commit hook, so the two cannot disagree; survivors
-  # print as "MISSED <file>:<line>: <mutation>" lines in this job's log.
-  #
-  # This runs on the GitHub runner, not on strix: only the local hook offloads, because a
-  # GitHub runner cannot reach the LAN.
+  # Full event history includes tests introduced before the tip commit.
+  mutation-policy:
+    name: Mutation Policy
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.scope.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Verify mutation admission
+        run: python3 -B scripts/test_mutants_ci_scope.py
+      - name: Inspect complete event diff
+        id: scope
+        run: python3 -B scripts/mutants-ci-scope.py "$GITHUB_EVENT_NAME" "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
+
+  # GitHub runners cannot reach the LAN; only the local hook offloads to Strix.
   mutants:
     name: Mutation Testing
+    needs: mutation-policy
+    if: needs.mutation-policy.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -200,4 +213,5 @@ jobs:
       - name: Benchmark pull request
         env:
           CARGO_TARGET_DIR: ${{ runner.temp }}/criterion-target
-        run: cargo bench --bench performance --all-features -- --baseline base
+        # Existing cases compare with base; new cases establish their first measurements.
+        run: cargo bench --bench performance --all-features -- --baseline-lenient base

@@ -1,55 +1,19 @@
-/// Builder for constructing [`AgentOptions`] with validation.
+/// Builds [`AgentOptions`] with runtime validation.
 ///
-/// This builder implements the typestate pattern using `Option<T>` to track
-/// which required fields have been set. The [`build()`](AgentOptionsBuilder::build)
-/// method validates that all required fields are present before creating
-/// the final [`AgentOptions`].
+/// `model` and `base_url` are required. Unset `temperature` and `max_tokens` are
+/// omitted from requests; other settings use the defaults documented below.
 ///
-/// # Required Fields
-///
-/// - `model`: The LLM model identifier
-/// - `base_url`: The API endpoint URL
-///
-/// All other fields have sensible defaults.
-///
-/// # Usage Pattern
-///
-/// 1. Call [`AgentOptions::builder()`]
-/// 2. Chain method calls to set configuration
-/// 3. Call [`build()`](AgentOptionsBuilder::build) to validate and create the final options
-///
-/// Methods return `self` for chaining, following the fluent interface pattern.
-///
-/// # Examples
-///
-/// ```no_run
-/// use open_agent::AgentOptions;
-/// use open_agent::Tool;
-///
-/// let calculator = Tool::new(
-///     "calculate",
-///     "Perform arithmetic",
-///     serde_json::json!({
-///         "type": "object",
-///         "properties": {
-///             "expression": {"type": "string"}
-///         }
-///     }),
-///     |input| Box::pin(async move {
-///         Ok(serde_json::json!({"result": 42}))
-///     }),
-/// );
+/// ```rust
+/// use open_agent::{AgentOptions, ApiProtocol};
 ///
 /// let options = AgentOptions::builder()
-///     .model("qwen2.5-32b-instruct")
+///     .model("my-model")
 ///     .base_url("http://localhost:1234/v1")
-///     .system_prompt("You are a helpful assistant")
-///     .max_turns(10)
-///     .temperature(0.8)
-///     .tool(calculator)
-///     .auto_execute_tools(true)
-///     .build()
-///     .expect("Valid configuration");
+///     .protocol(ApiProtocol::OpenAiChat)
+///     .system_prompt("Answer concisely.")
+///     .timeout(120)
+///     .build()?;
+/// # Ok::<(), open_agent::Error>(())
 /// ```
 #[derive(Default)]
 pub struct AgentOptionsBuilder {
@@ -85,12 +49,7 @@ pub struct AgentOptionsBuilder {
     hooks: Hooks,
 }
 
-/// Custom Debug implementation for builder to show minimal useful information.
-///
-/// Similar to [`AgentOptions`], we provide a simplified debug output that:
-/// - Omits sensitive fields like API keys and headers (not shown at all in builder)
-/// - Shows tool count rather than tool details
-/// - Focuses on the most important configuration fields
+/// Shows configuration identifiers and tool count, omitting credentials.
 impl std::fmt::Debug for AgentOptionsBuilder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AgentOptionsBuilder")
@@ -108,401 +67,134 @@ impl std::fmt::Debug for AgentOptionsBuilder {
 /// and return `self` for method chaining. The generic `impl Into<String>` parameters
 /// allow passing `&str`, `String`, or any other type that converts to `String`.
 impl AgentOptionsBuilder {
-    /// Sets the system prompt that defines agent behavior.
-    ///
-    /// The system prompt is sent at the beginning of every conversation to
-    /// establish context, personality, and instructions for the agent.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use open_agent::AgentOptions;
-    /// let options = AgentOptions::builder()
-    ///     .model("qwen2.5-32b-instruct")
-    ///     .base_url("http://localhost:1234/v1")
-    ///     .system_prompt("You are a helpful coding assistant. Be concise.")
-    ///     .build()
-    ///     .unwrap();
-    /// ```
+    /// Sets the system prompt. Defaults to empty; an empty prompt is omitted.
     pub fn system_prompt(mut self, prompt: impl Into<String>) -> Self {
         self.system_prompt = Some(prompt.into());
         self
     }
 
-    /// Sets the model identifier (required).
-    ///
-    /// This must match a model available at your configured endpoint.
-    /// Common examples: "qwen2.5-32b-instruct", "gpt-4", "claude-3-sonnet".
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use open_agent::AgentOptions;
-    /// let options = AgentOptions::builder()
-    ///     .model("gpt-4")
-    ///     .base_url("https://api.openai.com/v1")
-    ///     .build()
-    ///     .unwrap();
-    /// ```
+    /// Sets the required model identifier. Empty or whitespace-only names are rejected.
     pub fn model(mut self, model: impl Into<String>) -> Self {
         self.model = Some(model.into());
         self
     }
 
-    /// Sets the API endpoint URL (required).
+    /// Sets the required base URL, beginning with `http://` or `https://`.
     ///
-    /// The path and auth header come from [`protocol`](Self::protocol). Common values:
-    /// - Local: "http://localhost:1234/v1" (LM Studio default)
-    /// - OpenAI: <https://api.openai.com/v1>
-    /// - Anthropic: <https://api.anthropic.com/v1> (with `ApiProtocol::Anthropic`)
-    /// - Custom: Your inference server URL
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use open_agent::AgentOptions;
-    /// let options = AgentOptions::builder()
-    ///     .model("qwen2.5-32b-instruct")
-    ///     .base_url("http://localhost:1234/v1")
-    ///     .build()
-    ///     .unwrap();
-    /// ```
+    /// The selected [`protocol`](Self::protocol) adds `/chat/completions` or `/messages`.
+    /// Unlike [`BaseUrl::new`], the builder does not trim before checking the scheme.
     pub fn base_url(mut self, url: impl Into<String>) -> Self {
         self.base_url = Some(url.into());
         self
     }
 
-    /// Sets the API key for authentication.
+    /// Sets the authentication key; defaults to `"not-needed"`.
     ///
-    /// Required for cloud providers like OpenAI. Most local servers don't
-    /// need this - the default "not-needed" works fine.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use open_agent::AgentOptions;
-    /// let options = AgentOptions::builder()
-    ///     .model("gpt-4")
-    ///     .base_url("https://api.openai.com/v1")
-    ///     .api_key("sk-...")
-    ///     .build()
-    ///     .unwrap();
-    /// ```
+    /// An empty key suppresses the SDK authentication header. Caller headers may
+    /// override protocol defaults.
     pub fn api_key(mut self, key: impl Into<String>) -> Self {
         self.api_key = Some(key.into());
         self
     }
 
-    /// Sets the maximum number of conversation turns.
+    /// Stores a compatibility value that the SDK does not enforce. Defaults to 1.
     ///
-    /// One turn = user message + assistant response. Higher values enable
-    /// longer conversations but may increase costs and latency.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use open_agent::AgentOptions;
-    /// let options = AgentOptions::builder()
-    ///     .model("qwen2.5-32b-instruct")
-    ///     .base_url("http://localhost:1234/v1")
-    ///     .max_turns(10)  // Allow multi-turn conversation
-    ///     .build()
-    ///     .unwrap();
-    /// ```
+    /// This setting does not limit conversation length or enable multi-turn support.
+    /// Use [`max_tool_iterations`](Self::max_tool_iterations) for automatic tool rounds;
+    /// limit conversation turns in your application.
     pub fn max_turns(mut self, turns: u32) -> Self {
         self.max_turns = Some(turns);
         self
     }
 
-    /// Sets the maximum tokens to generate per response.
+    /// Sets a positive generation-token limit.
     ///
-    /// Constrains response length. Lower values reduce costs but may truncate
-    /// responses. Higher values allow longer, more complete answers.
-    ///
-    /// Leaving this unset omits `max_tokens` from the request entirely, so the server applies
-    /// its own limit. That is the right default for long-context and reasoning models, which
-    /// a client-side cap would cut off mid-response.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use open_agent::AgentOptions;
-    /// let options = AgentOptions::builder()
-    ///     .model("qwen2.5-32b-instruct")
-    ///     .base_url("http://localhost:1234/v1")
-    ///     .max_tokens(1000)  // Limit to shorter responses
-    ///     .build()
-    ///     .unwrap();
-    /// ```
+    /// Unset by default: omission lets the server choose. An explicit cap may truncate
+    /// a response, including reasoning generated before visible text.
     pub fn max_tokens(mut self, tokens: u32) -> Self {
         self.max_tokens = Some(tokens);
         self
     }
 
-    /// Sets whether the model's reasoning channel is surfaced to the caller.
+    /// Emits reasoning through [`StreamEvent::Reasoning`](crate::StreamEvent::Reasoning)
+    /// and [`Client::reasoning`](crate::Client::reasoning). Defaults to false.
     ///
-    /// Reasoning models stream their chain of thought on a side channel —
-    /// `reasoning_content` on DeepSeek, `reasoning` on OpenRouter. That text is **never**
-    /// merged into assistant content, whatever this is set to; splicing deliberation prose
-    /// into a response a caller parses as JSON is exactly the corruption the SDK keeps out.
-    /// This flag only decides whether the reasoning is buffered and emitted as
-    /// [`StreamEvent::Reasoning`](crate::StreamEvent::Reasoning) — readable from
-    /// [`Client::reasoning()`](crate::Client::reasoning) — or read off the wire and dropped.
-    ///
-    /// Defaults to `false`: a caller that does not want a long chain of thought should not
-    /// pay to buffer it.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use open_agent::AgentOptions;
-    /// let options = AgentOptions::builder()
-    ///     .model("deepseek-reasoner")
-    ///     .base_url("http://localhost:1234/v1")
-    ///     .include_reasoning(true)  // Emit reasoning as its own stream event
-    ///     .build()
-    ///     .unwrap();
-    /// ```
+    /// Reasoning is kept separate from content and history regardless of this flag.
     pub fn include_reasoning(mut self, include: bool) -> Self {
         self.include_reasoning = Some(include);
         self
     }
 
-    /// Sets the sampling temperature for response generation.
+    /// Sets a sampling temperature in the inclusive range 0.0–2.0.
     ///
-    /// Controls randomness:
-    /// - 0.0: Deterministic, always picks most likely tokens
-    /// - 0.7: Balanced
-    /// - 1.0+: More creative/random
-    ///
-    /// Leaving it unset omits the parameter from the request, which is the default and the
-    /// only thing that works against a model that rejects it outright.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use open_agent::AgentOptions;
-    /// let options = AgentOptions::builder()
-    ///     .model("qwen2.5-32b-instruct")
-    ///     .base_url("http://localhost:1234/v1")
-    ///     .temperature(0.0)  // Deterministic for coding tasks
-    ///     .build()
-    ///     .unwrap();
-    /// ```
+    /// Unset by default, which omits the field. Providers may impose a narrower range
+    /// or reject any explicit temperature.
     pub fn temperature(mut self, temp: f32) -> Self {
         self.temperature = Some(temp);
         self
     }
 
-    /// Sets the wire protocol the endpoint speaks.
+    /// Selects the request path, credentials, body, and stream vocabulary.
     ///
-    /// Defaults to [`ApiProtocol::OpenAiChat`]. Set [`ApiProtocol::Anthropic`] for an
-    /// endpoint exposing the messages API, including the Anthropic-compatible tiers several
-    /// third-party vendors publish.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use open_agent::{AgentOptions, ApiProtocol};
-    /// let options = AgentOptions::builder()
-    ///     .model("k3")
-    ///     .base_url("https://api.kimi.com/coding/v1")
-    ///     .protocol(ApiProtocol::Anthropic)
-    ///     .build()
-    ///     .unwrap();
-    /// ```
+    /// Defaults to [`ApiProtocol::OpenAiChat`]. Use [`ApiProtocol::Anthropic`] for a
+    /// messages endpoint.
     pub fn protocol(mut self, protocol: ApiProtocol) -> Self {
         self.protocol = Some(protocol);
         self
     }
 
-    /// Sets the HTTP request timeout in seconds.
+    /// Sets the timeout for each HTTP request, including its stream. Defaults to 60 seconds.
     ///
-    /// How long to wait for the API to respond. Increase for slower models
-    /// or when expecting long responses.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use open_agent::AgentOptions;
-    /// let options = AgentOptions::builder()
-    ///     .model("qwen2.5-32b-instruct")
-    ///     .base_url("http://localhost:1234/v1")
-    ///     .timeout(120)  // 2 minutes for complex tasks
-    ///     .build()
-    ///     .unwrap();
-    /// ```
+    /// This does not bound an entire conversation or automatic tool loop.
     pub fn timeout(mut self, timeout: u64) -> Self {
         self.timeout = Some(timeout);
         self
     }
 
-    /// Enables or disables automatic tool execution.
+    /// Enables automatic tool calls and continuation. Defaults to false.
     ///
-    /// When true, the SDK automatically executes tool calls and continues
-    /// the conversation. When false, tool calls are returned for manual
-    /// handling, allowing approval workflows.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use open_agent::AgentOptions;
-    /// let options = AgentOptions::builder()
-    ///     .model("qwen2.5-32b-instruct")
-    ///     .base_url("http://localhost:1234/v1")
-    ///     .auto_execute_tools(true)  // Automatic execution
-    ///     .build()
-    ///     .unwrap();
-    /// ```
+    /// Manual mode returns tool calls to the caller. Automatic mode buffers the response
+    /// and returns final text after the tool loop.
     pub fn auto_execute_tools(mut self, auto: bool) -> Self {
         self.auto_execute_tools = Some(auto);
         self
     }
 
-    /// Sets the maximum tool execution iterations in automatic mode.
+    /// Limits automatic tool rounds. Defaults to 5; each round may contain multiple calls.
     ///
-    /// Prevents infinite loops where the agent continuously calls tools.
-    /// Only relevant when `auto_execute_tools` is true.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use open_agent::AgentOptions;
-    /// let options = AgentOptions::builder()
-    ///     .model("qwen2.5-32b-instruct")
-    ///     .base_url("http://localhost:1234/v1")
-    ///     .auto_execute_tools(true)
-    ///     .max_tool_iterations(10)  // Allow up to 10 tool calls
-    ///     .build()
-    ///     .unwrap();
-    /// ```
+    /// At the limit, [`Client::finish_reason`](crate::Client::finish_reason) reports
+    /// [`FinishReason::MaxToolIterations`](crate::FinishReason::MaxToolIterations).
     pub fn max_tool_iterations(mut self, iterations: u32) -> Self {
         self.max_tool_iterations = Some(iterations);
         self
     }
 
-    /// Adds a single tool to the agent's available tools.
-    ///
-    /// The tool is wrapped in `Arc` for efficient sharing. Can be called
-    /// multiple times to add multiple tools.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use open_agent::AgentOptions;
-    /// # use open_agent::Tool;
-    /// let calculator = Tool::new(
-    ///     "calculate",
-    ///     "Evaluate a math expression",
-    ///     serde_json::json!({"type": "object"}),
-    ///     |input| Box::pin(async move { Ok(serde_json::json!({"result": 42})) }),
-    /// );
-    ///
-    /// let options = AgentOptions::builder()
-    ///     .model("qwen2.5-32b-instruct")
-    ///     .base_url("http://localhost:1234/v1")
-    ///     .tool(calculator)
-    ///     .build()
-    ///     .unwrap();
-    /// ```
+    /// Appends one tool. Handlers are shared through [`Arc`].
     pub fn tool(mut self, tool: Tool) -> Self {
         self.tools.push(Arc::new(tool));
         self
     }
 
-    /// Adds multiple tools at once to the agent's available tools.
-    ///
-    /// Convenience method for bulk tool addition. All tools are wrapped
-    /// in `Arc` automatically.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use open_agent::AgentOptions;
-    /// # use open_agent::Tool;
-    /// let tools = vec![
-    ///     Tool::new("add", "Add numbers", serde_json::json!({}),
-    ///         |input| Box::pin(async move { Ok(serde_json::json!({})) })),
-    ///     Tool::new("multiply", "Multiply numbers", serde_json::json!({}),
-    ///         |input| Box::pin(async move { Ok(serde_json::json!({})) })),
-    /// ];
-    ///
-    /// let options = AgentOptions::builder()
-    ///     .model("qwen2.5-32b-instruct")
-    ///     .base_url("http://localhost:1234/v1")
-    ///     .tools(tools)
-    ///     .build()
-    ///     .unwrap();
-    /// ```
+    /// Appends tools without replacing those already registered.
     pub fn tools(mut self, tools: Vec<Tool>) -> Self {
         self.tools.extend(tools.into_iter().map(Arc::new));
         self
     }
 
-    /// Sets lifecycle hooks for monitoring and intercepting agent operations.
-    ///
-    /// Hooks allow custom logic at various points: before/after API calls,
-    /// tool execution, response streaming, etc. Useful for logging, metrics,
-    /// debugging, and custom authorization.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use open_agent::{AgentOptions, Hooks, HookDecision};
-    /// let hooks = Hooks::new()
-    ///     .add_user_prompt_submit(|event| async move {
-    ///         println!("User prompt: {}", event.prompt);
-    ///         Some(HookDecision::continue_())
-    ///     });
-    ///
-    /// let options = AgentOptions::builder()
-    ///     .model("qwen2.5-32b-instruct")
-    ///     .base_url("http://localhost:1234/v1")
-    ///     .hooks(hooks)
-    ///     .build()
-    ///     .unwrap();
-    /// ```
+    /// Replaces the hook registry. See [`Hooks`] for event ordering and examples.
     pub fn hooks(mut self, hooks: Hooks) -> Self {
         self.hooks = hooks;
         self
     }
 
-    /// Validates configuration and builds the final [`AgentOptions`].
-    ///
-    /// This method performs validation to ensure required fields are set and
-    /// applies default values for optional fields. Returns an error if
-    /// validation fails.
-    ///
-    /// # Required Fields
-    ///
-    /// - `model`: Must be set or build() returns an error
-    /// - `base_url`: Must be set or build() returns an error
+    /// Validates configuration and applies defaults.
     ///
     /// # Errors
     ///
-    /// Returns an error if a required field is missing, a model or endpoint value is invalid,
-    /// or a caller-supplied HTTP header name or value cannot be encoded on the wire.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use open_agent::AgentOptions;
-    /// // Success - all required fields set
-    /// let options = AgentOptions::builder()
-    ///     .model("qwen2.5-32b-instruct")
-    ///     .base_url("http://localhost:1234/v1")
-    ///     .build()
-    ///     .expect("Valid configuration");
-    ///
-    /// // Error - missing model
-    /// let result = AgentOptions::builder()
-    ///     .base_url("http://localhost:1234/v1")
-    ///     .build();
-    /// assert!(result.is_err());
-    /// ```
+    /// Returns an error for missing model/base URL, empty names or endpoints, unsupported
+    /// URL schemes, invalid header names/values, out-of-range temperature, or zero
+    /// `max_tokens`. Provider-specific parameter restrictions are enforced by the server.
     pub fn build(self) -> crate::Result<AgentOptions> {
-        // Validate required fields - these must be explicitly set by the user
-        // because they're fundamental to connecting to an LLM provider
         let model = self
             .model
             .ok_or_else(|| crate::Error::config("model is required"))?;
@@ -511,18 +203,15 @@ impl AgentOptionsBuilder {
             .base_url
             .ok_or_else(|| crate::Error::config("base_url is required"))?;
 
-        // Validate model is not empty or whitespace
         if model.trim().is_empty() {
             return Err(crate::Error::invalid_input(
                 "model cannot be empty or whitespace",
             ));
         }
 
-        // Validate base_url is not empty and has valid URL format
         if base_url.trim().is_empty() {
             return Err(crate::Error::invalid_input("base_url cannot be empty"));
         }
-        // Check if URL has a valid scheme (http:// or https://)
         if !base_url.starts_with("http://") && !base_url.starts_with("https://") {
             return Err(crate::Error::invalid_input(
                 "base_url must start with http:// or https://",
@@ -531,19 +220,9 @@ impl AgentOptionsBuilder {
 
         http_headers::validate(&self.headers)?;
 
-        // Validate temperature when one was set, through the `Temperature` newtype that
-        // exists for exactly this check rather than a second copy of its range and message.
-        // Unset is passed through as None so the field is omitted from the wire request,
-        // which is the only way to express "the server decides" — and the only thing that
-        // works against a model that rejects the parameter. The accepted range is OpenAI's;
-        // Anthropic's stops at 1.0, and rejecting 1.5 here would be this SDK inventing a
-        // limit for an endpoint that already has one and reports it.
+        // Reuse the exported validator; an unset value remains omitted on the wire.
         self.temperature.map(Temperature::new).transpose()?;
 
-        // Validate max_tokens if set. An unset value is passed through as None so the field is
-        // omitted from the wire request entirely, letting the server apply its own limit —
-        // there is otherwise no way to express "no cap", and a client-imposed default truncates
-        // long-context and reasoning models mid-response.
         if let Some(tokens) = self.max_tokens {
             if tokens == 0 {
                 return Err(crate::Error::invalid_input(
@@ -552,32 +231,21 @@ impl AgentOptionsBuilder {
             }
         }
 
-        // Construct the final options, applying defaults where values weren't set
         Ok(AgentOptions {
-            // Empty system prompt is valid - not all use cases need one
             system_prompt: self.system_prompt.unwrap_or_default(),
             model,
             base_url,
-            // Default API key works for most local servers
             api_key: self.api_key.unwrap_or_else(|| "not-needed".to_string()),
             headers: self.headers,
-            // Default to single-turn for simplicity
             max_turns: self.max_turns.unwrap_or(1),
             max_tokens: self.max_tokens,
             temperature: self.temperature,
-            // Conservative timeout that works for most requests
             timeout: self.timeout.unwrap_or(60),
-            // Tools vector was built up during configuration, use as-is
             tools: self.tools,
-            // Manual execution by default for safety and control
             auto_execute_tools: self.auto_execute_tools.unwrap_or(false),
-            // Reasonable limit to prevent runaway tool loops
             max_tool_iterations: self.max_tool_iterations.unwrap_or(5),
-            // Hooks were built up during configuration, use as-is
             hooks: self.hooks,
-            // Reasoning is dropped unless a caller explicitly asks for it
             include_reasoning: self.include_reasoning.unwrap_or(false),
-            // OpenAI chat completions: the only protocol the SDK spoke before 0.9.0
             protocol: self.protocol.unwrap_or_default(),
         })
     }

@@ -18,6 +18,7 @@ exclude = [
     ".gitignore",
     ".github/",
     ".markdownlint.json",
+    "AGENTS.md",
     "CLAUDE.md",
     "mutants.out/",
     "scripts/",
@@ -34,8 +35,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 # Async runtime
-tokio = { version = "1.50", features = ["full"] }
-tokio-stream = "0.1"
+tokio = { version = "1.50", features = ["time"] }
 
 # HTTP client
 reqwest = { version = "0.12.28", features = ["json", "stream"] }
@@ -46,11 +46,9 @@ serde_json = "1.0"
 
 # Error handling
 thiserror = "2.0"
-anyhow = "1.0.103"
 
 # Async utilities
 futures = "0.3.32"
-async-trait = "0.1"
 
 # Streaming
 eventsource-stream = "0.2"
@@ -65,77 +63,21 @@ log = "0.4.29"
 base64 = { version = "0.23", default-features = false, features = ["std"] }
 
 [dev-dependencies]
-tokio-test = "0.4"
 regex = "1.10"
 criterion = "0.7"
 env_logger = "0.11"
+serde_yaml_ng = "0.10"
 tempfile = "3.27"
 # Pinned exactly: wiremock 0.6.5 uses let-chains and fails to build on the 1.85 MSRV.
 wiremock = "=0.6.4"
-# test-util is not part of tokio's "full" feature set; it provides the paused virtual clock
-# that lets retry tests assert exact backoff timing without real sleeps or flaky tolerances.
-tokio = { version = "1.50", features = ["test-util"] }
+# Runtime features are needed by tests and examples, not by library consumers.
+# test-util provides the paused clock for deterministic backoff assertions.
+tokio = { version = "1.50", features = ["macros", "rt-multi-thread", "net", "io-util", "sync", "test-util"] }
 
 [lib]
 name = "open_agent"
 path = "src/lib.rs"
 bench = false
-
-[[example]]
-name = "simple_query"
-path = "examples/simple_query.rs"
-
-[[example]]
-name = "calculator_tools"
-path = "examples/calculator_tools.rs"
-
-[[example]]
-name = "hooks_example"
-path = "examples/hooks_example.rs"
-
-[[example]]
-name = "context_management"
-path = "examples/context_management.rs"
-
-[[example]]
-name = "interrupt_demo"
-path = "examples/interrupt_demo.rs"
-
-[[example]]
-name = "git_commit_agent"
-path = "examples/git_commit_agent.rs"
-
-[[example]]
-name = "log_analyzer_agent"
-path = "examples/log_analyzer_agent.rs"
-
-[[example]]
-name = "advanced_patterns"
-path = "examples/advanced_patterns.rs"
-
-[[example]]
-name = "auto_execution_demo"
-path = "examples/auto_execution_demo.rs"
-
-[[example]]
-name = "multi_tool_agent"
-path = "examples/multi_tool_agent.rs"
-
-[[example]]
-name = "vision_example"
-path = "examples/vision_example.rs"
-
-[[example]]
-name = "vision_api_demo"
-path = "examples/vision_api_demo.rs"
-
-[[example]]
-name = "test_tool_serialization"
-path = "examples/test_tool_serialization.rs"
-
-[[example]]
-name = "anthropic_query"
-path = "examples/anthropic_query.rs"
 
 [[bench]]
 name = "performance"

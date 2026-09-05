@@ -1,10 +1,4 @@
-//! Arithmetic and boundary coverage for the context-management helpers.
-//!
-//! The inline tests in `src/context.rs` exercise text-only and image messages plus coarse
-//! threshold behaviour, which leaves the tool-call accumulation in `estimate_tokens`, the
-//! exact comparison in `is_approaching_limit`, and the truncation boundaries
-//! asserted-but-not-discriminated: those tests pass whether the arithmetic is right or wrong.
-//! These assert exact values instead.
+//! Exact tool-content arithmetic, threshold and truncation boundaries.
 
 mod common;
 

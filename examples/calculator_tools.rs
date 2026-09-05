@@ -67,7 +67,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .base_url("http://localhost:11434/v1")
         .tools(vec![add_tool, subtract_tool, multiply_tool, divide_tool])
         .auto_execute_tools(false) // Manual mode for this example
-        .max_turns(5)
         .temperature(0.1)
         .build()?;
 

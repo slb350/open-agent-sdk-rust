@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Reset pending output for new requests and history clearing. Auto-mode responses no
+  longer retain stale fragments across turns, and interruption stops buffered delivery.
+- Close failed client streams and honor cancellation within automatic tool rounds.
+- Preserve manual tool-result call IDs through OpenAI and Anthropic request translation.
+- Truncate logged image URLs at UTF-8 boundaries and reject non-ASCII Base64 characters.
+- Forward custom mutation-result directories to the remote execution environment.
+
+### Maintenance
+
+- Replace construction-only integration tests and copied implementations with compact
+  loopback request, hook, logging, and lifecycle coverage. Consolidate image validation
+  and keep one opt-in provider smoke test; isolate environment tests in one process.
+- Share request assembly, remove unused dependencies and redundant example declarations,
+  and move Tokio test/example runtime features out of production dependencies.
+- Shorten repeated API tutorials, correct stale contracts, and document `max_turns` as
+  an inert compatibility value. Public signatures and defaults remain unchanged.
+- Validate workflow structure and actual package contents instead of source substrings.
+  Run full mutation CI for complete event diffs adding Rust tests or doctests, plus
+  manual dispatch and monthly backstops; retain fast policy checks on other revisions.
+- Exercise both branches of the context-management workflow benchmark.
+
 ## [0.11.2] - 2026-08-31
 
 ### Security

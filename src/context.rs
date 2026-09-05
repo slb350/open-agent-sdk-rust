@@ -1,81 +1,21 @@
-//! Context management utilities for manual history management
+//! Opt-in estimates and truncation for conversation history.
 //!
-//! This module provides low-level helpers for managing conversation history.
-//! These are opt-in utilities - nothing is automatic. You decide when and how
-//! to manage context.
-//!
-//! # Features
-//!
-//! - Token estimation (character-based approximation)
-//! - Message truncation with system prompt preservation
-//! - Manual history management patterns
-//!
-//! # Examples
-//!
-//! ```rust
-//! use open_agent::{estimate_tokens, truncate_messages};
-//!
-//! // Estimate tokens
-//! let messages = vec![/* your messages */];
-//! let tokens = estimate_tokens(&messages);
-//! println!("Estimated tokens: {}", tokens);
-//!
-//! // Truncate when needed
-//! if tokens > 28000 {
-//!     let truncated = truncate_messages(&messages, 10, true);
-//!     // Use truncated messages...
-//! }
-//! ```
+//! The SDK never applies these helpers automatically. Token estimates are fixed
+//! heuristics, not tokenizer output or a guaranteed upper bound.
 
 use crate::types::Message;
 
-/// Estimate token count for message list
+/// Estimates tokens using UTF-8 byte lengths and fixed image allowances.
 ///
-/// Uses character-based approximation (1 token ≈ 4 characters).
-/// For images, uses OpenAI Vision API token costs adjusted for different
-/// detail levels.
+/// Text, tool names/IDs, and serialized tool JSON contribute one token per four
+/// bytes, rounded up after adding message/conversation overhead. Images contribute
+/// 85 (`Low`), 300 (`High`), or 200 (`Auto`) tokens before overhead. Empty history
+/// estimates to zero.
 ///
-/// # Arguments
-///
-/// * `messages` - List of messages to estimate tokens for
-///
-/// # Returns
-///
-/// Estimated token count
-///
-/// # Note
-///
-/// This is an APPROXIMATION. Actual token counts vary by model family:
-/// - GPT models: ~70-85% accurate (different tokenizers)
-/// - Llama, Qwen, Mistral: ~70-85% accurate
-/// - Always include 10-20% safety margin when checking limits
-///
-/// Image token costs are based on OpenAI's Vision API and may differ significantly for local models.
-///
-/// For more accurate estimation, consider using tiktoken bindings
-/// (not included to keep dependencies minimal).
-///
-/// # Examples
-///
-/// ```rust
-/// use open_agent::{Message, MessageRole, estimate_tokens};
-///
-/// let messages = vec![
-///     Message::system("You are a helpful assistant"),
-///     Message::user("Hello!"),
-/// ];
-///
-/// let tokens = estimate_tokens(&messages);
-/// println!("Estimated tokens: {}", tokens);
-///
-/// // Check if approaching context limit
-/// if tokens > 28000 {
-///     println!("Need to truncate!");
-/// }
-/// ```
+/// These heuristics do not account for the provider's tokenizer, image dimensions,
+/// or model-specific costs. Use a provider tokenizer when exact limits matter.
 pub fn estimate_tokens(messages: &[Message]) -> usize {
-    // Character-based approximation: 1 token ≈ 4 characters
-    // This is a conservative estimate that works across model families
+    // String lengths are UTF-8 bytes; divide the combined estimate only once.
 
     if messages.is_empty() {
         return 0;
@@ -94,12 +34,11 @@ pub fn estimate_tokens(messages: &[Message]) -> usize {
                     total_chars += text.text.len();
                 }
                 crate::types::ContentBlock::Image(image) => {
-                    // Token estimates based on OpenAI Vision API
-                    // Local models may have significantly different token costs
+                    // Fixed allowances because image dimensions and tokenizer are unavailable.
                     use crate::types::ImageDetail;
                     let token_estimate = match image.detail() {
-                        ImageDetail::Low => 85 * 4,   // Fixed ~85 tokens (512x512 max)
-                        ImageDetail::High => 300 * 4, // Conservative upper bound (variable based on dimensions)
+                        ImageDetail::Low => 85 * 4,   // Fixed low-detail allowance
+                        ImageDetail::High => 300 * 4, // Fixed heuristic; dimensions are unavailable
                         ImageDetail::Auto => 200 * 4, // Middle ground default
                     };
                     total_chars += token_estimate;
@@ -122,49 +61,25 @@ pub fn estimate_tokens(messages: &[Message]) -> usize {
     // Add conversation-level overhead (~2-4 tokens)
     total_chars += 16;
 
-    // Convert characters to tokens (4 chars ≈ 1 token, round up for safety)
+    // Round up after adding all byte-equivalent allowances.
     total_chars.div_ceil(4)
 }
 
-/// Truncate message history, keeping recent messages
+/// Clones the most recent `keep` messages, optionally preserving the first system message.
 ///
-/// Always preserves the system prompt (if present) and keeps the most
-/// recent N messages. This is a simple truncation - it does NOT attempt
-/// to preserve tool chains or important context.
-///
-/// # Arguments
-///
-/// * `messages` - List of messages to truncate
-/// * `keep` - Number of recent messages to keep (default: 10)
-/// * `preserve_system` - Keep system message if present (default: true)
-///
-/// # Returns
-///
-/// Truncated message list (new Vec, original unchanged)
-///
-/// # Examples
+/// When `preserve_system` is true and the first message is a system message, it is
+/// kept in addition to the tail. The original slice is unchanged. This does not
+/// preserve tool-call/result pairs; callers must choose suitable truncation points.
 ///
 /// ```rust
-/// use open_agent::{Message, Client, truncate_messages, estimate_tokens};
+/// use open_agent::{Client, is_approaching_limit, truncate_messages};
 ///
-/// # async fn example(mut client: Client) {
-/// // Manual truncation when needed
-/// let tokens = estimate_tokens(client.history());
-/// if tokens > 28000 {
-///     let truncated = truncate_messages(client.history(), 10, true);
-///     *client.history_mut() = truncated;
+/// fn trim_history(client: &mut Client) {
+///     if is_approaching_limit(client.history(), 32_000, 0.9) {
+///         *client.history_mut() = truncate_messages(client.history(), 10, true);
+///     }
 /// }
-/// # }
 /// ```
-///
-/// # Note
-///
-/// This is a SIMPLE truncation. For domain-specific needs (e.g.,
-/// preserving tool call chains, keeping important context), implement
-/// your own logic or use this as a starting point.
-///
-/// Warning: Truncating mid-conversation may remove context that the
-/// model needs to properly respond. Use judiciously at natural breakpoints.
 pub fn truncate_messages(messages: &[Message], keep: usize, preserve_system: bool) -> Vec<Message> {
     if messages.is_empty() {
         return Vec::new();
@@ -194,31 +109,10 @@ pub fn truncate_messages(messages: &[Message], keep: usize, preserve_system: boo
     }
 }
 
-/// Check if history is approaching a token limit
+/// Returns whether [`estimate_tokens`] is strictly greater than `limit * margin`.
 ///
-/// Convenience function that combines estimation with a threshold check.
-///
-/// # Arguments
-///
-/// * `messages` - Messages to check
-/// * `limit` - Token limit (e.g., 32000 for a 32k context window)
-/// * `margin` - Safety margin as a percentage (default: 0.9 = 90%)
-///
-/// # Returns
-///
-/// `true` if estimated tokens exceed limit * margin
-///
-/// # Examples
-///
-/// ```rust
-/// use open_agent::{is_approaching_limit, Message};
-///
-/// # fn example(messages: Vec<Message>) {
-/// if is_approaching_limit(&messages, 32000, 0.9) {
-///     println!("Time to truncate!");
-/// }
-/// # }
-/// ```
+/// The floating-point threshold is converted to `usize` before comparison.
+/// For example, `margin = 0.9` checks against 90% of the supplied limit.
 pub fn is_approaching_limit(messages: &[Message], limit: usize, margin: f32) -> bool {
     let estimated = estimate_tokens(messages);
     let threshold = (limit as f32 * margin) as usize;
@@ -228,88 +122,27 @@ pub fn is_approaching_limit(messages: &[Message], limit: usize, margin: f32) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{ContentBlock, Message, MessageRole, TextBlock};
+    use crate::types::{ContentBlock, ImageBlock, ImageDetail, Message, MessageRole};
 
     #[test]
-    fn test_estimate_tokens_empty() {
-        let messages: Vec<Message> = vec![];
-        assert_eq!(estimate_tokens(&messages), 0);
+    fn text_estimates_include_overhead_and_round_up() {
+        assert_eq!(estimate_tokens(&[]), 0);
+        // 11 text bytes + 8 message bytes + 16 conversation bytes = 35; ceil(35 / 4) = 9.
+        assert_eq!(estimate_tokens(&[Message::user("Hello world")]), 9);
     }
 
     #[test]
-    fn test_estimate_tokens_simple() {
-        let messages = vec![Message::new(
-            MessageRole::User,
-            vec![ContentBlock::Text(TextBlock::new("Hello world"))],
-        )];
-
-        let tokens = estimate_tokens(&messages);
-        // "Hello world" = 11 chars + overhead ≈ 5-8 tokens
-        assert!((3..=10).contains(&tokens));
-    }
-
-    #[test]
-    fn test_is_approaching_limit() {
-        let messages = vec![Message::user("x".repeat(1000))];
-
-        // ~250 tokens, should not exceed 90% of 1000
-        assert!(!is_approaching_limit(&messages, 1000, 0.9));
-
-        // Should exceed 90% of 200
-        assert!(is_approaching_limit(&messages, 200, 0.9));
-    }
-
-    #[test]
-    fn test_estimate_tokens_image_detail_low() {
-        use crate::types::{ImageBlock, ImageDetail};
-
-        let img = ImageBlock::from_url("https://example.com/img.jpg")
-            .unwrap()
-            .with_detail(ImageDetail::Low);
-        let msg = Message::new(MessageRole::User, vec![ContentBlock::Image(img)]);
-
-        let token_count = estimate_tokens(&[msg]);
-        // Low detail: ~85 tokens * 4 chars/token = 340 chars
-        assert!(
-            (75..=95).contains(&token_count),
-            "Low detail should be ~85 tokens, got {}",
-            token_count
-        );
-    }
-
-    #[test]
-    fn test_estimate_tokens_image_detail_high() {
-        use crate::types::{ImageBlock, ImageDetail};
-
-        let img = ImageBlock::from_url("https://example.com/img.jpg")
-            .unwrap()
-            .with_detail(ImageDetail::High);
-        let msg = Message::new(MessageRole::User, vec![ContentBlock::Image(img)]);
-
-        let token_count = estimate_tokens(&[msg]);
-        // High detail: ~300 tokens * 4 chars/token = 1200 chars (conservative)
-        assert!(
-            token_count >= 250,
-            "High detail should be ~300+ tokens, got {}",
-            token_count
-        );
-    }
-
-    #[test]
-    fn test_estimate_tokens_image_detail_auto() {
-        use crate::types::{ImageBlock, ImageDetail};
-
-        let img = ImageBlock::from_url("https://example.com/img.jpg")
-            .unwrap()
-            .with_detail(ImageDetail::Auto);
-        let msg = Message::new(MessageRole::User, vec![ContentBlock::Image(img)]);
-
-        let token_count = estimate_tokens(&[msg]);
-        // Auto detail: ~200 tokens * 4 chars/token = 800 chars (middle ground)
-        assert!(
-            (150..=250).contains(&token_count),
-            "Auto detail should be ~200 tokens, got {}",
-            token_count
-        );
+    fn image_estimates_include_detail_allowance_and_message_overhead() {
+        for (detail, expected) in [
+            (ImageDetail::Low, 91),
+            (ImageDetail::High, 306),
+            (ImageDetail::Auto, 206),
+        ] {
+            let image = ImageBlock::from_url("https://example.com/img.jpg")
+                .unwrap()
+                .with_detail(detail);
+            let message = Message::new(MessageRole::User, vec![ContentBlock::Image(image)]);
+            assert_eq!(estimate_tokens(&[message]), expected, "{detail:?}");
+        }
     }
 }

@@ -1,26 +1,6 @@
 #!/usr/bin/env bash
-#
-# Pre-commit gate for open-agent-sdk.
-#
-# Install with:
-#   git config core.hooksPath .githooks
-#
-# The fmt/clippy/test commands below are deliberately identical to the ones in
-# .github/workflows/ci.yml. A hook that runs weaker checks than CI lets a commit pass locally
-# and fail remotely, which is exactly what it exists to prevent; tests/ci_workflow_policy_test.rs
-# asserts the two stay in step.
-#
-# The mutation step is the one deliberate difference: CI sweeps the whole tree, while the hook
-# scopes to the staged Rust diff. That matters for cost — a full sweep takes minutes, while
-# --in-diff costs roughly 30s for a single changed file. A surviving mutant is a test that
-# asserts correct behaviour while being unable to distinguish it from incorrect behaviour, so
-# it fails the commit like any other error.
-#
-# Both scopes run through scripts/mutants-run.sh, which owns the verdict, so the hook and CI
-# cannot disagree about what counts as a failure. The verdict is missed.txt, not the exit
-# code: cargo-mutants reports exit 3 (Timeout) in preference to exit 2 (FoundProblems), so a
-# run with one hanging mutant and one genuine survivor also exits 3, and gating on the exit
-# code alone would wave that survivor through.
+# Install with: git config core.hooksPath .githooks
+# Run the CI checks locally, then mutation-test the staged Rust diff.
 
 set -euo pipefail
 
@@ -36,14 +16,13 @@ cargo clippy --all-targets --all-features -- -D warnings
 echo "pre-commit: cargo test --all-features --all"
 cargo test --all-features --all
 
+python3 -B scripts/test_mutants_ci_scope.py
+
 if ! command -v cargo-mutants > /dev/null 2>&1; then
     echo "pre-commit: cargo-mutants is required but not installed." >&2
     echo "            install it with: cargo install cargo-mutants --version '=${CARGO_MUTANTS_VERSION}'" >&2
     exit 1
 fi
 
-# Offloaded to strix.local when it answers, and run here with a warning when it does not.
-# Mutation testing is the most CPU-hungry gate in the repo and it fires on the machine the
-# developer is still typing on; see ~/.claude/docs/rust-mutants-offload.md.
 echo "pre-commit: scripts/mutants-staged.sh"
-exec ./scripts/mutants-staged.sh
+exec bash ./scripts/mutants-staged.sh

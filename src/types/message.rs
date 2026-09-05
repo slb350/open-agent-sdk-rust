@@ -1,13 +1,7 @@
 /// A complete message in a conversation.
 ///
-/// Messages are the primary unit of communication in the agent system. Each
-/// message has a role (who sent it) and content (what it contains). Content
-/// is structured as a vector of blocks to support multi-modal communication.
-///
-/// # Structure
-///
-/// - `role`: Who sent the message ([`MessageRole`])
-/// - `content`: What the message contains (one or more [`ContentBlock`]s)
+/// Each message has a role and a sequence of text, image, tool-call, or tool-result
+/// blocks.
 ///
 /// # Message Patterns
 ///
@@ -58,38 +52,12 @@ pub struct Message {
 }
 
 impl Message {
-    /// Creates a new message with the specified role and content.
-    ///
-    /// This is the most general constructor. For convenience, use the
-    /// role-specific constructors like [`user()`](Message::user),
-    /// [`assistant()`](Message::assistant), etc.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use open_agent::{Message, MessageRole, ContentBlock, TextBlock};
-    ///
-    /// let msg = Message::new(
-    ///     MessageRole::User,
-    ///     vec![ContentBlock::Text(TextBlock::new("Hello"))]
-    /// );
-    /// ```
+    /// Creates a message with the supplied role and content blocks.
     pub fn new(role: MessageRole, content: Vec<ContentBlock>) -> Self {
         Self { role, content }
     }
 
-    /// Creates a user message with simple text content.
-    ///
-    /// This is the most common way to create user messages. For more complex
-    /// content with multiple blocks, use [`user_with_blocks()`](Message::user_with_blocks).
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use open_agent::Message;
-    ///
-    /// let msg = Message::user("What is 2+2?");
-    /// ```
+    /// Creates a user message containing one text block.
     pub fn user(text: impl Into<String>) -> Self {
         Self {
             role: MessageRole::User,
@@ -97,20 +65,7 @@ impl Message {
         }
     }
 
-    /// Creates an assistant message with the specified content blocks.
-    ///
-    /// Assistant messages often contain multiple content blocks (text + tool use).
-    /// This method takes a vector of blocks for maximum flexibility.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use open_agent::{Message, ContentBlock, TextBlock};
-    ///
-    /// let msg = Message::assistant(vec![
-    ///     ContentBlock::Text(TextBlock::new("The answer is 4"))
-    /// ]);
-    /// ```
+    /// Creates an assistant message with the supplied text and/or tool-call blocks.
     pub fn assistant(content: Vec<ContentBlock>) -> Self {
         Self {
             role: MessageRole::Assistant,
@@ -118,18 +73,7 @@ impl Message {
         }
     }
 
-    /// Creates a system message with simple text content.
-    ///
-    /// System messages establish the agent's behavior and context. They're
-    /// typically sent at the start of a conversation.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use open_agent::Message;
-    ///
-    /// let msg = Message::system("You are a helpful assistant. Be concise.");
-    /// ```
+    /// Creates a system message containing one text block.
     pub fn system(text: impl Into<String>) -> Self {
         Self {
             role: MessageRole::System,
@@ -137,25 +81,9 @@ impl Message {
         }
     }
 
-    /// Creates a user message with custom content blocks.
+    /// Creates a user message with arbitrary blocks, including tool results.
     ///
-    /// Use this when you need to send structured content beyond simple text,
-    /// such as tool results. For simple text messages, prefer
-    /// [`user()`](Message::user).
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use open_agent::{Message, ContentBlock, ToolResultBlock};
-    /// use serde_json::json;
-    ///
-    /// let msg = Message::user_with_blocks(vec![
-    ///     ContentBlock::ToolResult(ToolResultBlock::new(
-    ///         "call_123",
-    ///         json!({"result": "success"})
-    ///     ))
-    /// ]);
-    /// ```
+    /// See [`Message`] for a tool-result example.
     pub fn user_with_blocks(content: Vec<ContentBlock>) -> Self {
         Self {
             role: MessageRole::User,
@@ -204,10 +132,8 @@ impl Message {
 
     /// Creates a user message with text and an image with specified detail level.
     ///
-    /// Use this when you need control over the image detail level for token cost
-    /// management. On OpenAI's Vision API: `ImageDetail::Low` uses ~85 tokens,
-    /// `ImageDetail::High` uses more tokens based on image dimensions, and
-    /// `ImageDetail::Auto` lets the model decide. Local models may have very different token costs.
+    /// Detail is a provider hint; its effect on quality and token costs depends on
+    /// the endpoint and model.
     ///
     /// # Arguments
     ///

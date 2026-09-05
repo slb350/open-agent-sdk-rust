@@ -67,20 +67,6 @@ fn bench_estimate_tokens_by_count(c: &mut Criterion) {
     group.finish();
 }
 
-// Benchmark: estimate_tokens with varying message sizes
-fn bench_estimate_tokens_by_size(c: &mut Criterion) {
-    let mut group = c.benchmark_group("estimate_tokens_by_size");
-
-    for size in [10, 100, 1000, 10000].iter() {
-        let messages = create_messages(10, *size);
-        group.bench_with_input(BenchmarkId::from_parameter(size), &messages, |b, msgs| {
-            b.iter(|| estimate_tokens(black_box(msgs)));
-        });
-    }
-
-    group.finish();
-}
-
 // Benchmark: estimate_tokens with tool calls
 fn bench_estimate_tokens_with_tools(c: &mut Criterion) {
     let mut group = c.benchmark_group("estimate_tokens_with_tools");
@@ -151,19 +137,21 @@ fn bench_is_approaching_limit(c: &mut Criterion) {
 fn bench_realistic_workflow(c: &mut Criterion) {
     let mut group = c.benchmark_group("realistic_workflow");
 
-    let messages = create_messages(50, 200);
-
-    group.bench_function("check_and_truncate", |b| {
-        b.iter(|| {
-            let msgs = black_box(&messages);
-            let tokens = estimate_tokens(msgs);
-            if tokens > black_box(10000) {
-                truncate_messages(msgs, black_box(10), black_box(true))
-            } else {
-                msgs.to_vec()
-            }
+    for (name, size, should_truncate) in [("below_limit", 200, false), ("above_limit", 1000, true)]
+    {
+        let messages = create_messages(50, size);
+        assert_eq!(estimate_tokens(&messages) > 10_000, should_truncate);
+        group.bench_function(name, |b| {
+            b.iter(|| {
+                let msgs = black_box(&messages);
+                if estimate_tokens(msgs) > black_box(10_000) {
+                    truncate_messages(msgs, black_box(10), black_box(true))
+                } else {
+                    msgs.to_vec()
+                }
+            });
         });
-    });
+    }
 
     group.finish();
 }
@@ -171,7 +159,6 @@ fn bench_realistic_workflow(c: &mut Criterion) {
 criterion_group!(
     benches,
     bench_estimate_tokens_by_count,
-    bench_estimate_tokens_by_size,
     bench_estimate_tokens_with_tools,
     bench_truncate_messages,
     bench_truncate_messages_with_tools,

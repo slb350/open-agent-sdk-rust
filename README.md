@@ -15,9 +15,6 @@
 - **Local or hosted** - run on your own hardware at no API cost and with no data leaving the machine, or point it at a vendor
 - **Control** - pick your model (Qwen, Llama, Mistral, Claude, etc.)
 
-**How fast?**
-From zero to working agent in under 5 minutes. Rust-native performance (zero-cost abstractions, no GC), fearless concurrency, with 595 active tests.
-
 [![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.11.2)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -26,7 +23,7 @@ From zero to working agent in under 5 minutes. Rust-native performance (zero-cos
 
 ## Overview
 
-Open Agent SDK (Rust) provides a clean, streaming API for working with local and cloud model servers over two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint. 100% feature parity with the Python SDK—complete with transport-boundary-safe SSE streaming, tool call aggregation, hooks, and automatic tool execution—built on Tokio for high-performance async I/O.
+Open Agent SDK (Rust) provides a clean, streaming API for working with local and cloud model servers over two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint. It supports SSE streaming across transport boundaries, tool call aggregation, lifecycle hooks, and automatic tool execution.
 
 **Streaming is tolerant of real-world servers.** SSE events are buffered across arbitrary HTTP
 transport chunk boundaries, and anything still held is flushed when the stream ends — including
@@ -867,9 +864,13 @@ When you call `client.interrupt()`:
 
 1. **Atomic signal** - A thread-safe flag tells the receive loop to stop
 2. **Stream cleanup** - `receive()` observes the flag, drops the active stream, and returns `Ok(None)`
-3. **Clean history** - Partial manual responses are discarded instead of committing incomplete assistant messages
+3. **Clean history** - Partial responses are discarded instead of committing incomplete assistant messages
 4. **Idempotent** - Safe to call multiple times
 5. **Cross-task safe** - `interrupt_handle()` lets another task cancel without locking the `Client`
+
+Cancellation is observed between stream events, tool calls, and hook phases. A pending
+network read or running tool/hook future must finish first. Auto mode retains completed
+tool results and marks skipped calls as cancelled, keeping history valid for a later send.
 
 See `examples/interrupt_demo.rs` for comprehensive patterns.
 
@@ -1006,9 +1007,9 @@ AgentOptions::builder()
     .tools(Vec<Tool>)                    // Add multiple tools at once
     .hooks(Hooks)                        // Lifecycle hooks for monitoring/control
     .auto_execute_tools(bool)            // Enable automatic tool execution
-    .max_tool_iterations(u32)            // Max tool calls per query in auto mode
+    .max_tool_iterations(u32)            // Max automatic Client tool rounds
     .max_tokens(u32)                     // Tokens to generate (unset: omitted, server decides); getter returns Option<u32>
-    .max_turns(u32)                      // Max conversation turns (default: 1)
+    .max_turns(u32)                      // Legacy stored value; does not limit execution
     .temperature(f32)                    // Sampling temperature (unset: omitted, server decides)
     .protocol(ApiProtocol)               // Wire protocol (default: ApiProtocol::OpenAiChat)
     .timeout(u64)                        // Request timeout in seconds (default: 60)
@@ -1087,7 +1088,7 @@ client.send_message(msg).await?;
 // Access the AgentOptions this client was created with
 let opts = client.options();
 
-// Clear conversation history (resets to system prompt only)
+// Clear conversation history and pending output, retaining configuration
 client.clear_history();
 
 // Look up a registered tool by name
@@ -1399,36 +1400,10 @@ open-agent-sdk-rust/
 │   └── test_tool_serialization.rs   # Tool call serialization verification
 ├── benches/
 │   └── performance.rs               # Criterion benchmarks (token estimation, history ops)
-├── tests/
-│   ├── integration_tests.rs         # Core integration tests
-│   ├── regression_incremental_streaming_test.rs  # Per-fragment delivery; joined history
-│   ├── advanced_integration_test.rs
-│   ├── anthropic_protocol_test.rs   # Path, headers, body, and event vocabulary per protocol
-│   ├── auto_execution_test.rs
-│   ├── backward_compatibility_test.rs
-│   ├── ci_workflow_policy_test.rs   # GitHub CI runner, coverage, mutation, and security guards
-│   ├── client_image_serialization_test.rs
-│   ├── config_env_test.rs           # get_model env resolution (own process: mutates env)
-│   ├── context_estimation_test.rs   # Token arithmetic and truncation boundaries
-│   ├── custom_headers_test.rs       # Caller-supplied header storage, case-insensitive override, empty api_key auth suppression
-│   ├── debug_logging_test.rs
-│   ├── defensive_validation_test.rs
-│   ├── edge_cases_test.rs
-│   ├── hooks_history_snapshot_test.rs
-│   ├── hooks_integration_test.rs
-│   ├── image_serialization_test.rs
-│   ├── package_manifest_test.rs     # Package exclusion coverage
-│   ├── regression_finish_reason_test.rs
-│   ├── regression_max_tokens_test.rs
-│   ├── regression_reasoning_channel_test.rs
-│   ├── regression_retry_classification_test.rs
-│   ├── regression_stream_flush_test.rs
-│   ├── security_bypass_test.rs
-│   ├── send_message_test.rs         # Manual-mode history regression (v0.6.2)
-│   ├── source_file_size_test.rs     # Repository Rust hard-limit guard
-│   ├── tool_call_content_test.rs    # Tool call serialization tests
-│   └── common/mod.rs                # Shared wiremock SSE harness and block helpers
+├── tests/                         # Wire protocol, lifecycle, validation, and infrastructure tests
+│   └── common/mod.rs                # Shared loopback-server and stream helpers
 ├── scripts/
+│   ├── mutants-ci-scope.py          # Complete event diff policy for CI mutation runs
 │   ├── mutants-common.sh            # The one definition of the results directory
 │   ├── mutants-run.sh               # Owns the verdict (missed.txt); called by the hook and CI
 │   ├── mutants-remote.sh            # rsync + ssh to a build host, falls back loudly
@@ -1488,20 +1463,18 @@ cargo test -- --nocapture
 cargo test test_agent_options_builder
 
 # Mutation sweep (must report zero survivors)
-cargo mutants --no-shuffle -j 4
+./scripts/mutants-remote.sh
 ```
 
-**Test Coverage:**
+Tests exercise request bodies on loopback servers, stream events, tool/hook outcomes,
+validation boundaries, and client lifecycle transitions. One provider smoke test is
+ignored by default and requires an explicitly configured local server. Run `cargo test`
+for the current results instead of relying on a manually maintained test count.
 
-- 248 unit tests (lib)
-- 180 active integration tests across 30 test files (12 require a live Ollama server and are `#[ignore]`d)
-- 164 active doctests
-
-Total: 592 active unit, integration, and documentation tests
-
-**Mutation testing** is part of the gate, not an optional extra: a green suite proves the
-tests ran, not that they would notice if the code were wrong. CI runs the full sweep on every
-push. To run the same check before each commit:
+Mutation testing checks whether the suite detects changed behavior. Ordinary CI runs a
+full sweep when the complete pushed or pull-request diff adds Rust tests or doctests;
+manual dispatch and the monthly schedule also run a full sweep. Other revisions run
+the fast policy check. To run the same check before each commit:
 
 ```bash
 git config core.hooksPath .githooks
@@ -1512,8 +1485,7 @@ The hook runs `cargo fmt --all -- --check`,
 `cargo test --all-features --all`, and a `cargo mutants --in-diff` sweep scoped to the staged
 Rust changes. Both the hook and CI reach their verdict through `scripts/mutants-run.sh`, which
 reads `missed.txt` rather than the exit code — cargo-mutants reports a timeout in preference
-to a survivor, so a run with one of each would otherwise look like a timeout. The current
-sweep is 243 mutants, 0 missed.
+to a survivor, so a run with one of each would otherwise look like a timeout.
 
 ## Requirements
 
