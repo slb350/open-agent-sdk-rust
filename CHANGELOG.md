@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Maintenance
+
+- Updated the immutable `taiki-e/install-action` pin from v2.87.1 to v2.87.6 and
+  standardized mutation-repair artifact retention on `actions/upload-artifact` v7.0.1.
+  Workflow policy coverage now asserts both exact action pins.
+- Refreshed 19 Rust-1.85-compatible lockfile entries, including `cc` 1.4.5,
+  `crossbeam-*` updates, `indexmap` 2.14.2, `mio` 1.2.3, `smallvec` 1.16.0,
+  `syn` 3.0.5, `tokio-rustls` 0.26.5, and the current `wasm-bindgen` family.
+
 ## [0.11.3] - 2026-09-05
 
 ### Changed

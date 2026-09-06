@@ -2,6 +2,10 @@ use serde_yaml_ng::Value;
 
 const CI: &str = include_str!("../.github/workflows/ci.yml");
 const AUDIT: &str = include_str!("../.github/workflows/scheduled-audit.yml");
+const MUTATION_INSTALL_ACTION: &str =
+    "taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c";
+const UPLOAD_ARTIFACT_ACTION: &str =
+    "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
 
 fn workflow(source: &str) -> Value {
     serde_yaml_ng::from_str(source).expect("workflow must be valid YAML")
@@ -109,6 +113,7 @@ fn msrv_audit_and_coverage_keep_their_required_checks() {
                 .is_some_and(|action| action.starts_with("actions/upload-artifact@"))
         })
         .unwrap();
+    assert_eq!(upload["uses"], UPLOAD_ARTIFACT_ACTION);
     assert_eq!(upload["with"]["path"], "cobertura.xml");
     assert_eq!(upload["with"]["if-no-files-found"], "error");
 }
@@ -155,11 +160,17 @@ fn mutation_sweep_uses_complete_event_scope_and_an_explicit_backstop() {
         .iter()
         .find(|step| step["with"]["tool"] == "cargo-mutants@27.1.0")
         .unwrap();
-    assert_eq!(
-        installer["uses"],
-        "taiki-e/install-action@742a3317eac7bd62f91cd888b4eead5e784ba833"
-    );
+    assert_eq!(installer["uses"], MUTATION_INSTALL_ACTION);
     // The exact installer pin/comment is a documented project requirement.
-    assert!(CI.lines().any(|line| line.trim()
-        == "- uses: taiki-e/install-action@742a3317eac7bd62f91cd888b4eead5e784ba833 # v2.87.1"));
+    let expected_installer_line = format!("- uses: {MUTATION_INSTALL_ACTION} # v2.87.6");
+    assert!(
+        CI.lines()
+            .any(|line| line.trim() == expected_installer_line.as_str())
+    );
+    let repair_upload = steps(mutants)
+        .iter()
+        .find(|step| step["with"]["name"] == "mutation-repair")
+        .unwrap();
+    assert_eq!(repair_upload["uses"], UPLOAD_ARTIFACT_ACTION);
+    assert_eq!(repair_upload["if"], "failure()");
 }
