@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refreshed 19 Rust-1.85-compatible lockfile entries, including `cc` 1.4.5,
   `crossbeam-*` updates, `indexmap` 2.14.2, `mio` 1.2.3, `smallvec` 1.16.0,
   `syn` 3.0.5, `tokio-rustls` 0.26.5, and the current `wasm-bindgen` family.
+- Updated transitive `ipnet` from 2.12.1 to 2.12.2 for its aggregation-boundary
+  fix and advanced the immutable `dtolnay/rust-toolchain` pin to the current
+  upstream `master` commit.
 
 ## [0.11.3] - 2026-09-05
 
