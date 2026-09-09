@@ -10,7 +10,7 @@ A lightweight Rust SDK (v0.11.3 source) for building AI agents with local or clo
 open-agent-sdk-rust/
 ├── src/
 │   ├── client.rs      # Public client module docs/imports and fragment orchestration
-│   ├── client/        # Query, send, request assembly, streaming, receive, history, state, and tests
+│   ├── client/        # Query, send, send_message, setup, request assembly, streaming, receive, history, state, and tests
 │   ├── config.rs      # Provider enum, get_base_url(), get_model() helpers
 │   ├── context.rs     # estimate_tokens(), is_approaching_limit(), truncate_messages()
 │   ├── error.rs       # Error type and Result alias
@@ -50,10 +50,32 @@ open-agent-sdk-rust/
 ├── benches/
 │   └── performance.rs               # Criterion benchmarks
 ├── tests/                         # Loopback protocol, lifecycle, validation, and infrastructure tests
-│   ├── regression_client_lifecycle_test.rs # Repeated/abandoned requests, interruption, history reset
-│   ├── hooks_integration_test.rs   # Real auto-tool and hook outcomes
-│   ├── send_message_test.rs        # Text/image request-body and failed-send history checks
-│   └── common/mod.rs              # Shared loopback-server and stream helpers
+│   ├── anthropic_protocol_test.rs           # End-to-end Anthropic protocol path through query()
+│   ├── auto_execution_test.rs               # Optional provider smoke; deterministic behavior via mock-server tests
+│   ├── ci_workflow_policy_test.rs           # CI workflow YAML policy assertions (pinned actions, permissions)
+│   ├── config_env_test.rs                   # Environment-dependent provider helper isolation
+│   ├── context_estimation_test.rs           # Exact tool-content arithmetic, threshold and truncation boundaries
+│   ├── custom_headers_test.rs               # Custom caller HTTP header application and override semantics
+│   ├── debug_logging_test.rs                # Image payload truncation and UTF-8 safety in logging
+│   ├── hooks_history_snapshot_test.rs       # Structured conversation history in hook events
+│   ├── hooks_integration_test.rs            # Real auto-tool and hook outcomes
+│   ├── mutation_ci_scope_test.rs            # Mutation test scope classification (CI diffs)
+│   ├── mutation_scripts_test.rs             # Mutation sweep scripts correctness (Unix)
+│   ├── mutation_transport_scripts_test.rs   # Remote mutation transport script correctness (Unix)
+│   ├── package_manifest_test.rs             # Crate archive excludes development-only files
+│   ├── redirect_policy_test.rs              # Model requests reject all HTTP redirects
+│   ├── regression_client_lifecycle_test.rs  # Repeated/abandoned requests, interruption, history reset
+│   ├── regression_finish_reason_test.rs     # finish_reason surfaced to callers (regression since 0.8.0)
+│   ├── regression_incremental_streaming_test.rs # Token-by-token text delivery (regression since 0.10.0)
+│   ├── regression_max_tokens_test.rs        # max_tokens unset omits the field (regression since 0.7.0)
+│   ├── regression_reasoning_channel_test.rs # Reasoning channel separated from content (regression since 0.8.0)
+│   ├── regression_retry_classification_test.rs # HTTP status classification for retry (regression since 0.7.0)
+│   ├── regression_stream_flush_test.rs      # Stream flush when server omits finish_reason (regression since 0.7.0)
+│   ├── send_message_test.rs                 # Text/image request-body and failed-send history checks
+│   ├── source_file_size_test.rs             # Architecture guard: Rust source-file 800-line hard limit
+│   ├── tool_call_content_test.rs            # Tool-call content field preserved in HTTP request body
+│   └── common/mod.rs                        # Shared loopback-server and stream helpers (no #[test] functions)
+│   └── support/process.rs                   # Shared process/filesystem helpers for script tests
 ├── scripts/
 │   ├── mutants-ci-scope.sh          # Classifies mutation work for complete CI diffs
 │   ├── mutants-common.sh            # The one definition of the results directory
