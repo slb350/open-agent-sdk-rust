@@ -1382,7 +1382,9 @@ open-agent-sdk-rust/
 │   ├── utils.rs           # SSE parsing, stream accumulation, and the shared stream driver
 │   └── utils/             # accumulator.rs + anthropic_accumulator.rs (wire decoding),
 │                          # buffers.rs (the shared drain), coalesce.rs (text joining for
-│                          # history), driver.rs, sse.rs
+│                          # history), driver.rs, sse.rs,
+│                          # test_support.rs (shared streaming test assertions),
+│                          # tests/ (accumulator.rs, sse.rs unit tests)
 ├── examples/
 │   ├── simple_query.rs              # Basic streaming query
 │   ├── anthropic_query.rs           # Anthropic messages endpoint via ApiProtocol

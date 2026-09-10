@@ -31,7 +31,9 @@ open-agent-sdk-rust/
 │                      # accumulator.rs (StreamAccumulator) and anthropic_accumulator.rs
 │                      # (AnthropicAccumulator), both decoding into buffers.rs
 │                      # (StreamBuffers, the shared drain), driver.rs (EventAccumulator +
-│                      # drive) and sse.rs (both SSE parsers), all real mods
+│                      # drive) and sse.rs (both SSE parsers), all real mods;
+│                      # test_support.rs (shared streaming test assertions);
+│                      # tests/ subdir (accumulator.rs, sse.rs unit tests)
 ├── examples/
 │   ├── simple_query.rs              # Minimal streaming query
 │   ├── anthropic_query.rs           # Anthropic messages endpoint via ApiProtocol
