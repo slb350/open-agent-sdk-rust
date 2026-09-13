@@ -3,7 +3,7 @@ use serde_yaml_ng::Value;
 const CI: &str = include_str!("../.github/workflows/ci.yml");
 const AUDIT: &str = include_str!("../.github/workflows/scheduled-audit.yml");
 const MUTATION_INSTALL_ACTION: &str =
-    "taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c";
+    "taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375";
 const UPLOAD_ARTIFACT_ACTION: &str =
     "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
 
@@ -162,7 +162,7 @@ fn mutation_sweep_uses_complete_event_scope_and_an_explicit_backstop() {
         .unwrap();
     assert_eq!(installer["uses"], MUTATION_INSTALL_ACTION);
     // The exact installer pin/comment is a documented project requirement.
-    let expected_installer_line = format!("- uses: {MUTATION_INSTALL_ACTION} # v2.87.6");
+    let expected_installer_line = format!("- uses: {MUTATION_INSTALL_ACTION} # v2.87.12");
     assert!(
         CI.lines()
             .any(|line| line.trim() == expected_installer_line.as_str())

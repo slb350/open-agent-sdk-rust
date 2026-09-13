@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Maintenance
 
-- Updated the immutable `taiki-e/install-action` pin from v2.87.1 to v2.87.6 and
+- Updated the immutable `taiki-e/install-action` pin from v2.87.1 to v2.87.12 and
   standardized mutation-repair artifact retention on `actions/upload-artifact` v7.0.1.
   Workflow policy coverage now asserts both exact action pins.
 - Refreshed 19 Rust-1.85-compatible lockfile entries, including `cc` 1.4.5,
@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated transitive `ipnet` from 2.12.1 to 2.12.2 for its aggregation-boundary
   fix and advanced the immutable `dtolnay/rust-toolchain` pin to the current
   upstream `master` commit.
+- Refreshed eight additional Rust-1.85-compatible lockfile entries: `bitflags`
+  2.13.2, `jiff` and `jiff-static` 0.2.37, `jiff-core` 0.1.1, `rustls`
+  0.23.44, `smallvec` 1.16.1, and the `zerocopy` family at 0.8.57.
 
 ## [0.11.3] - 2026-09-05
 
