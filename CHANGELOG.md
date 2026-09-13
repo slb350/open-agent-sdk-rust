@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refreshed eight additional Rust-1.85-compatible lockfile entries: `bitflags`
   2.13.2, `jiff` and `jiff-static` 0.2.37, `jiff-core` 0.1.1, `rustls`
   0.23.44, `smallvec` 1.16.1, and the `zerocopy` family at 0.8.57.
+- Updated target-specific transitive `cc` from 1.4.5 to 1.4.6, which preserves
+  configured flags during executable probing and modernizes file-descriptor handling.
 
 ## [0.11.3] - 2026-09-05
 
