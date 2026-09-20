@@ -185,7 +185,7 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3 # v2.87.16
+      - uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
         with:
           tool: cargo-mutants@27.1.0
       - name: Run mutation sweep
@@ -257,8 +257,8 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Install tarpaulin
-        # Do not use 0.37.2's upstream lockfile: it pins vulnerable anyhow 1.0.102.
-        run: cargo install cargo-tarpaulin --version =0.37.2
+        # Do not use 0.37.3's upstream lockfile: it pins vulnerable anyhow 1.0.102.
+        run: cargo install cargo-tarpaulin --version =0.37.3
       - name: Generate coverage
         run: cargo tarpaulin --engine llvm --out xml --all-features --workspace
       - name: Verify coverage report

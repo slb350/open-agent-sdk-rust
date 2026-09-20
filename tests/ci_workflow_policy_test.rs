@@ -4,7 +4,7 @@ const CI: &str = include_str!("../.github/workflows/ci.yml");
 const AUDIT: &str = include_str!("../.github/workflows/scheduled-audit.yml");
 const DEPENDABOT: &str = include_str!("../.github/dependabot.yml");
 const MUTATION_INSTALL_ACTION: &str =
-    "taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3";
+    "taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73";
 const UPLOAD_ARTIFACT_ACTION: &str =
     "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
 
@@ -125,7 +125,7 @@ fn msrv_audit_and_coverage_keep_their_required_checks() {
     }
     let coverage = &ci["jobs"]["coverage"];
     let install = command(coverage, &["cargo", "install", "cargo-tarpaulin"]);
-    assert!(install.contains(&"=0.37.2") && !install.contains(&"--locked"));
+    assert!(install.contains(&"=0.37.3") && !install.contains(&"--locked"));
     let run = command(coverage, &["cargo", "tarpaulin"]);
     for required in [["--engine", "llvm"], ["--out", "xml"]] {
         assert!(run.windows(2).any(|pair| pair == required));
@@ -188,7 +188,7 @@ fn mutation_sweep_uses_complete_event_scope_and_an_explicit_backstop() {
         .unwrap();
     assert_eq!(installer["uses"], MUTATION_INSTALL_ACTION);
     // The exact installer pin/comment is a documented project requirement.
-    let expected_installer_line = format!("- uses: {MUTATION_INSTALL_ACTION} # v2.87.16");
+    let expected_installer_line = format!("- uses: {MUTATION_INSTALL_ACTION} # v2.87.17");
     assert!(
         CI.lines()
             .any(|line| line.trim() == expected_installer_line.as_str())
