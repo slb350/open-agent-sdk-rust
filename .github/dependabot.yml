@@ -16,6 +16,10 @@ updates:
       - dependency-name: wiremock
         versions:
           - "0.6.5"
+      # yoke-derive 0.8.3 calls str::from_utf8, which is unavailable on Rust 1.85.
+      - dependency-name: yoke-derive
+        versions:
+          - "0.8.3"
     groups:
       cargo-dependencies:
         patterns:

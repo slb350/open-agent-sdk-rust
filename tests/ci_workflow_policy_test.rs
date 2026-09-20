@@ -2,8 +2,9 @@ use serde_yaml_ng::Value;
 
 const CI: &str = include_str!("../.github/workflows/ci.yml");
 const AUDIT: &str = include_str!("../.github/workflows/scheduled-audit.yml");
+const DEPENDABOT: &str = include_str!("../.github/dependabot.yml");
 const MUTATION_INSTALL_ACTION: &str =
-    "taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375";
+    "taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3";
 const UPLOAD_ARTIFACT_ACTION: &str =
     "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
 
@@ -49,6 +50,31 @@ fn workflows_keep_hosted_runners_read_only_permissions_and_immutable_actions() {
     let ci = workflow(CI);
     assert_eq!(ci["jobs"]["test-linux"]["runs-on"], "ubuntu-latest");
     assert_eq!(ci["jobs"]["test-macos"]["runs-on"], "macos-latest");
+}
+
+#[test]
+fn dependabot_excludes_known_msrv_breaking_releases() {
+    let config = workflow(DEPENDABOT);
+    let cargo = config["updates"]
+        .as_sequence()
+        .unwrap()
+        .iter()
+        .find(|update| update["package-ecosystem"] == "cargo")
+        .unwrap();
+    let ignored = cargo["ignore"].as_sequence().unwrap();
+
+    for (dependency, version) in [("wiremock", "0.6.5"), ("yoke-derive", "0.8.3")] {
+        let rule = ignored
+            .iter()
+            .find(|rule| rule["dependency-name"] == dependency)
+            .unwrap_or_else(|| panic!("{dependency} must have an MSRV exception"));
+        assert!(
+            rule["versions"]
+                .as_sequence()
+                .unwrap()
+                .contains(&Value::from(version))
+        );
+    }
 }
 
 #[test]
@@ -162,7 +188,7 @@ fn mutation_sweep_uses_complete_event_scope_and_an_explicit_backstop() {
         .unwrap();
     assert_eq!(installer["uses"], MUTATION_INSTALL_ACTION);
     // The exact installer pin/comment is a documented project requirement.
-    let expected_installer_line = format!("- uses: {MUTATION_INSTALL_ACTION} # v2.87.12");
+    let expected_installer_line = format!("- uses: {MUTATION_INSTALL_ACTION} # v2.87.16");
     assert!(
         CI.lines()
             .any(|line| line.trim() == expected_installer_line.as_str())

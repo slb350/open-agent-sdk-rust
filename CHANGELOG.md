@@ -7,9 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Updated locked `rustls` from 0.23.44 to 0.23.45, resolving
+  RUSTSEC-2026-0285's cross-encryption-level TLS 1.3 handshake acceptance.
+
 ### Maintenance
 
-- Updated the immutable `taiki-e/install-action` pin from v2.87.1 to v2.87.12 and
+- Refreshed nine additional Rust-1.85-compatible lockfile entries: `cc` 1.4.7,
+  `cfg-if` 1.0.5, the `clap` family at 4.6.7 / 1.1.1,
+  `find-msvc-tools` 0.1.13, `rustix` 1.1.5, `syn` 3.0.6, and
+  `unicode-ident` 1.0.26. Retained `yoke-derive` 0.8.2 and
+  `zerofrom-derive` 0.1.7 because updating either alone breaks the supported
+  Rust 1.85 toolchain or adds a duplicate compiler dependency.
+- Updated the immutable `taiki-e/install-action` pin from v2.87.1 to v2.87.16 and
   standardized mutation-repair artifact retention on `actions/upload-artifact` v7.0.1.
   Workflow policy coverage now asserts both exact action pins.
 - Refreshed 19 Rust-1.85-compatible lockfile entries, including `cc` 1.4.5,
