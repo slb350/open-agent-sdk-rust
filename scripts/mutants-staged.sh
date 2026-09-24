@@ -1,40 +1,23 @@
 #!/usr/bin/env bash
-# Mutation-test staged Rust changes through the shared remote/verdict runner.
+#
+# Mutation-test only the lines this commit changes.
+#
+# A passing test suite proves the tests run; it does not prove they would notice
+# if the code were wrong. cargo-mutants perturbs the implementation and reports
+# mutations no test catches - a surviving mutant IS a non-discriminating test.
+#
+# The hook tests the staged diff; CI tests the complete pushed diff on main.
+# Full sweeps run separately. scripts/mutants-run.sh owns every verdict.
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/mutants-common.sh
-# shellcheck disable=SC1091
-. "$SCRIPT_DIR/mutants-common.sh"
-STAGED_DIR="$MUTANTS_OUT_DIR/staged"
-mkdir -p "$STAGED_DIR"
-DIFF="$(mktemp "$STAGED_DIR/staged.XXXXXX")"
+. "$(dirname "$0")/mutants-common.sh"
+DIFF="$MUTANTS_OUT_DIR/staged.diff"
+mkdir -p "$MUTANTS_OUT_DIR"
 
-# The diff is an input to the remote run, so it must live until that run has
-# copied it. Give every invocation its own file and delete only that exact file
-# on every exit; concurrent pre-commit hooks must never overwrite one another.
-# Invoked indirectly by the EXIT trap.
-# shellcheck disable=SC2329
-cleanup_staged_diff() {
-  local original_status=$?
-  local cleanup_status
-  trap - EXIT
-  set +e
-  mutants_delete_exact_path "$DIFF"
-  cleanup_status=$?
-  if [ "$cleanup_status" -ne 0 ]; then
-    echo "mutants-staged: failed to clean staged diff $DIFF" >&2
-  fi
-  mutants_reconcile_cleanup_status "$original_status" "$cleanup_status"
-  original_status=$?
-  exit "$original_status"
-}
-trap cleanup_staged_diff EXIT
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
-
+# Diffing the index is only correct when the working tree matches it.
+require_matching_index
 git diff --cached -- '*.rs' > "$DIFF"
 
 if [ ! -s "$DIFF" ]; then
@@ -42,5 +25,12 @@ if [ ! -s "$DIFF" ]; then
   exit 0
 fi
 
-# Explicitly transfer the diff, which lives under excluded target/.
-MUTANTS_EXTRA_FILE="$DIFF" bash ./scripts/mutants-remote.sh --in-diff "$DIFF"
+# Through mutants-remote.sh, which offloads the run to a bigger machine and
+# falls back to a local run when it cannot be reached. The verdict is
+# scripts/mutants-run.sh's either way.
+#
+# The diff lands under the one directory the remote sync excludes - target/ -
+# so it is named here as a file the run needs. The alternative was for the
+# transport layer to scan the arguments for `--in-diff`, which is cargo-mutants
+# grammar it has no business knowing.
+MUTANTS_EXTRA_FILES="$DIFF" exec ./scripts/mutants-remote.sh --in-diff "$DIFF"

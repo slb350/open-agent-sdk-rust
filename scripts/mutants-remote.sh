@@ -1,154 +1,284 @@
 #!/usr/bin/env bash
-# Offload mutation sweeps to SSH; unreachable hosts fall back locally.
-# Measured compilation/linking contention made -j 4 faster than -j 8 or 16.
-# The runner owns the verdict; transport failures must never hide it.
 #
-#   DREP_MUTANTS_HOST    ssh target (default: strix.local)
-#   DREP_MUTANTS_DIR     remote base, $HOME-relative (default: ci/<repo name>)
+# Run the mutation sweep on a bigger machine over SSH, then report its verdict
+# here.
+#
+# Mutation testing is the most CPU-hungry gate in this repo: every mutant is a
+# full build plus a full test run, and the hook fires on a laptop the developer
+# is still using. (Measured in drep, where this script comes from, on 12 mutants from src/docs/fence.rs: a local M5 Max at -j 4 took 1m54 with the machine pinned.) The offload runs as this repository's open-agent-sdk-rust-mutants role on ai-1 and costs this machine nothing.
+#
+# More jobs is not automatically better. Each job
+# gets its own copy of the tree *including* target/, which is how its builds
+# stay warm - so raising -j multiplies a multi-gigabyte copy before any mutant
+# is tested. On the former 32-thread host, the same scope measured 38s at -j 4,
+# 54s at -j 8, and 72s at -j 16: the copy path was I/O-bound, not CPU-bound.
+# Keep the measured worker baseline until a complete sweep gives
+# a measured reason to change it.
+#
+# The verdict rule is NOT duplicated here. This script syncs, invokes
+# scripts/mutants-run.sh on the remote, and propagates its exit code - so the
+# hook, CI and the remote sweep cannot disagree about what counts as a failure.
+#
+# Falls back to a local run, loudly, when the host is unreachable. A commit gate
+# that silently skips itself because the LAN blipped is worse than a slow one.
+#
+#   DREP_MUTANTS_HOST    ssh target (default: steve@192.168.68.88)
+#   DREP_MUTANTS_DIR     remote path, $HOME-relative
+#                        (default: .cache/open-agent-sdk-rust-mutants/<repo name>)
+#   DREP_MUTANTS_REMOTE_HOST_LOCK
+#                        absolute lock path shared with the hosted runner
+#                        (default: /srv/ci/fleet/open-agent-sdk-rust-mutants/home/host.lock)
+#   DREP_MUTANTS_HOST_LOCK_WAIT_SECONDS
+#                        wait for both remote locks (default: 1800)
+#   DREP_MUTANTS_RSYNC_TIMEOUT_SECONDS
+#                        rsync I/O timeout while the host lock is held
+#                        (default: 300)
 #   DREP_MUTANTS_REMOTE  0 to force a local run
 #   MUTANTS_JOBS         -j for the remote run (default: 4)
 #   MUTANTS_LOCAL_JOBS   -j for a local or fallback run (default: 4)
-#   MUTANTS_EXTRA_FILE   one repo-relative file this run needs that the sync
-#                        would otherwise skip
+#   MUTANTS_EXTRA_FILES  repo-relative paths this run needs that the sync
+#                        would otherwise skip (space-separated, no spaces in
+#                        the paths themselves)
 
 set -euo pipefail
 
+# `git rev-parse`, not `dirname "$0"/..`: the same answer install.sh already
+# uses, and it does not care whether the script was reached through a symlink,
+# a relative path or PATH.
 cd "$(git rev-parse --show-toplevel)"
 # shellcheck source=scripts/mutants-common.sh
-# shellcheck disable=SC1091
 . scripts/mutants-common.sh
 
-HOST="${DREP_MUTANTS_HOST:-strix.local}"
-REMOTE_BASE="${DREP_MUTANTS_DIR:-ci/${PWD##*/}}"
+HOST="${DREP_MUTANTS_HOST:-steve@192.168.68.88}"
+REMOTE_DIR="${DREP_MUTANTS_DIR:-.cache/open-agent-sdk-rust-mutants/$(basename "$PWD")}"
+REMOTE="$HOST:$REMOTE_DIR"
 JOBS="${MUTANTS_JOBS:-4}"
+REMOTE_HOST_LOCK="${DREP_MUTANTS_REMOTE_HOST_LOCK:-/srv/ci/fleet/open-agent-sdk-rust-mutants/home/host.lock}"
+RSYNC_IO_TIMEOUT_SECONDS="${DREP_MUTANTS_RSYNC_TIMEOUT_SECONDS:-300}"
 
-case "$REMOTE_BASE" in
-  ''|/*|*..*) echo "mutants-remote: DREP_MUTANTS_DIR must be a safe HOME-relative path" >&2
-              exit 64 ;;
+case "$REMOTE_HOST_LOCK" in
+/*) ;;
+*)
+  echo "mutants-remote: DREP_MUTANTS_REMOTE_HOST_LOCK must be absolute" >&2
+  exit 64
+  ;;
 esac
-case "$MUTANTS_OUT_DIR" in
-  ''|/*|*..*) echo "mutants-remote: MUTANTS_OUT_DIR must be repo-relative" >&2
-              exit 64 ;;
+validate_mutants_host_lock_wait_seconds mutants-remote
+case "$RSYNC_IO_TIMEOUT_SECONDS" in
+0 | '' | *[!0-9]*)
+  echo "mutants-remote: DREP_MUTANTS_RSYNC_TIMEOUT_SECONDS must be a positive integer" >&2
+  exit 64
+  ;;
 esac
-case "$JOBS" in
-  ''|*[!0-9]*|0) echo "mutants-remote: MUTANTS_JOBS must be a positive integer" >&2
-                  exit 64 ;;
-esac
-
-LOCAL_HOST_ID="$(mutants_host_id)"
-RUN_ID="run_${LOCAL_HOST_ID}_$$_$(date +%s)-${RANDOM:-0}"
-REMOTE_RUN_DIR="$REMOTE_BASE/runs/$RUN_ID"
-REMOTE="$HOST:$REMOTE_RUN_DIR"
-LOCAL_RUNS_DIR="$MUTANTS_OUT_DIR/runs"
-mkdir -p "$LOCAL_RUNS_DIR"
-mutants_sweep_stale_owned_paths "$LOCAL_RUNS_DIR" "$LOCAL_HOST_ID" "mutation results"
-LOCAL_RESULTS="$LOCAL_RUNS_DIR/$RUN_ID"
-REMOVE_REMOTE_ON_EXIT=0
-
-printf -v REMOTE_RUN_Q '%q' "$REMOTE_RUN_DIR"
-if [ -n "${DREP_MUTANTS_TMPDIR:-}" ]; then
-  printf -v REMOTE_SCRATCH_Q '%q' "$DREP_MUTANTS_TMPDIR"
-  REMOTE_SCRATCH_COMMAND="export DREP_MUTANTS_TMPDIR=$REMOTE_SCRATCH_Q"
-else
-  printf -v REMOTE_SCRATCH_Q '%q' "$REMOTE_BASE/scratch"
-  REMOTE_SCRATCH_COMMAND="export DREP_MUTANTS_TMPDIR=\"\$HOME\"/$REMOTE_SCRATCH_Q"
-fi
-printf -v MUTANTS_OUT_DIR_Q '%q' "$MUTANTS_OUT_DIR"
-
-# Invoked indirectly by the EXIT trap.
-# shellcheck disable=SC2329
-cleanup_remote_run() {
-  local original_status=$?
-  local cleanup_status=0
-  trap - EXIT
-  set +e
-  if [ "$REMOVE_REMOTE_ON_EXIT" -eq 1 ]; then
-    ssh -o BatchMode=yes -o ConnectTimeout=5 "$HOST" \
-      "find \"\$HOME\"/$REMOTE_RUN_Q -depth -delete"
-    cleanup_status=$?
-    if [ "$cleanup_status" -ne 0 ]; then
-      echo "mutants-remote: failed to clean remote run $HOST:~/$REMOTE_RUN_DIR" >&2
-    fi
-  fi
-  mutants_reconcile_cleanup_status "$original_status" "$cleanup_status"
-  original_status=$?
-  exit "$original_status"
-}
-trap cleanup_remote_run EXIT
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
 
 run_local() {
-  MUTANTS_JOBS="${MUTANTS_LOCAL_JOBS:-4}" exec bash ./scripts/mutants-run.sh "$@"
+  MUTANTS_JOBS="${MUTANTS_LOCAL_JOBS:-4}" exec ./scripts/mutants-run.sh "$@"
 }
 
 if [ "${DREP_MUTANTS_REMOTE:-1}" = "0" ]; then
   run_local "$@"
 fi
 
-# Only an unreachable host permits fallback; rsync failures must fail the gate.
+# A bare probe rather than letting the first rsync fail and reading its exit
+# code: "the host is down, here is what I am doing instead" is the message the
+# developer needs, and inferring it from an rsync failure would also swallow a
+# full disk or an unwritable directory as "unreachable". One handshake, ~145ms,
+# against a run measured in minutes.
+AI1_CI_ROLE=open-agent-sdk-rust-mutants
+# shellcheck source=scripts/mutants-ai1-transport.sh
+if ! . scripts/mutants-ai1-transport.sh; then
+  echo "warning: ai-1 transport unavailable; running mutation locally" >&2
+  run_local "$@"
+fi
+
 if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$HOST" true 2>/dev/null; then
   echo "warning: $HOST is unreachable - running the mutation sweep locally instead." >&2
   echo "         This will use this machine's CPU for the duration." >&2
   run_local "$@"
 fi
 
-echo "mutants: running on $HOST (-j $JOBS), results will mirror to $LOCAL_RESULTS"
+echo "mutants: running on $HOST (-j $JOBS), results mirrored back to $MUTANTS_OUT_DIR"
 
-# Unique checkouts prevent an overlapping rsync from changing a running sweep.
-REMOVE_REMOTE_ON_EXIT=1
-rsync -a --mkpath \
+# Keep one remote SSH process alive for the entire transaction. Its open file
+# descriptor holds the host-wide lock while this process synchronizes source,
+# runs mutation, and mirrors the matching result. Named pipes are used instead
+# of Bash 4's `coproc` because macOS still ships Bash 3.2.
+RUN_TOKEN="$$-$RANDOM-$RANDOM"
+SESSION_DIR="$MUTANTS_OUT_DIR/remote-session-$RUN_TOKEN"
+CONTROL_IN="$SESSION_DIR/control-in"
+CONTROL_OUT="$SESSION_DIR/control-out"
+mkdir -p "$SESSION_DIR"
+mkfifo "$CONTROL_IN" "$CONTROL_OUT"
+
+# shellcheck disable=SC2016  # This is the literal remote Bash program.
+REMOTE_SCRIPT='set -euo pipefail
+host_lock=$1
+wait_seconds=$2
+remote_dir=$3
+out_dir=$4
+jobs=$5
+run_token=$6
+shift 6
+export PATH="$HOME/.cargo/bin:$PATH"
+exec 9>"$host_lock"
+flock -E 75 -w "$wait_seconds" 9
+printf "mutants-lock-ready:%s\n" "$run_token"
+IFS= read -r action
+[[ $action == run ]] || exit 74
+cd "$HOME/$remote_dir"
+mkdir -p "$out_dir"
+unset DREP_MUTANTS_HOST_LOCK DREP_MUTANTS_HOST_LOCK_WAIT_SECONDS
+set +e
+DREP_MUTANTS_RESULT_TOKEN="$run_token" MUTANTS_JOBS="$jobs" \
+  ./scripts/mutants-run.sh "$@"
+status=$?
+set -e
+result_token_file="$out_dir/.run-token"
+[[ -f $result_token_file && ! -L $result_token_file ]] || exit 76
+[[ $(<"$result_token_file") == "$run_token" ]] || exit 76
+printf "mutants-run-finished:%s:%s\n" "$run_token" "$status"
+IFS= read -r action
+[[ $action == mirrored ]] || exit 74
+exit "$status"'
+
+REMOTE_COMMAND=
+printf -v REMOTE_COMMAND 'bash -c %q bash' "$REMOTE_SCRIPT"
+for remote_arg in \
+  "$REMOTE_HOST_LOCK" \
+  "$MUTANTS_HOST_LOCK_WAIT_SECONDS" \
+  "$REMOTE_DIR" \
+  "$MUTANTS_OUT_DIR" \
+  "$JOBS" \
+  "$RUN_TOKEN" \
+  "$@"; do
+  printf -v remote_arg_q '%q' "$remote_arg"
+  REMOTE_COMMAND+=" $remote_arg_q"
+done
+
+ssh -o BatchMode=yes "$HOST" "$REMOTE_COMMAND" \
+  <"$CONTROL_IN" >"$CONTROL_OUT" &
+REMOTE_SESSION_PID=$!
+exec 7>"$CONTROL_IN"
+exec 8<"$CONTROL_OUT"
+remote_session_open=1
+
+# shellcheck disable=SC2317,SC2329  # Invoked by the EXIT trap (SC2317 on shellcheck before 0.10, SC2329 after).
+cleanup_remote_session() {
+  if [ "$remote_session_open" -eq 1 ]; then
+    kill "$REMOTE_SESSION_PID" 2>/dev/null || true
+    wait "$REMOTE_SESSION_PID" 2>/dev/null || true
+  fi
+  exec 7>&- 8<&-
+  find "$SESSION_DIR" -depth -delete 2>/dev/null || true
+}
+trap cleanup_remote_session EXIT
+
+exit_after_remote_session_failure() {
+  if wait "$REMOTE_SESSION_PID"; then
+    status=74
+  else
+    status=$?
+  fi
+  remote_session_open=0
+  exit "$status"
+}
+
+if ! IFS= read -r ready <&8; then
+  exit_after_remote_session_failure
+fi
+if [ "$ready" != "mutants-lock-ready:$RUN_TOKEN" ]; then
+  echo "mutants-remote: unexpected remote lock handshake" >&2
+  exit 74
+fi
+
+# --mkpath creates the destination directory as part of the transfer, which is
+# an `ssh mkdir -p` round trip saved on every commit.
+#
+# --delete so a file deleted locally cannot linger and be mutated remotely.
+# target/ is excluded in both directions: the remote keeps its own, which is
+# what makes the second run incremental. The cache directories are excluded
+# because they are 64MB of this checkout that no mutation run reads, re-diffed
+# on every commit against a Rust payload of about 1MB. Credentials are excluded
+# because nothing in the suite reads them and they have no business on another
+# host.
+# --delete alone leaves the remote tree stale, and the sweep then tests a tree
+# the commit does not have. An excluded name *inside* a directory protects that
+# directory from removal, so `docs/api/build/html` kept `docs/api` alive after
+# the commit that deleted it, and a test asserting the directory is gone failed
+# on the remote while passing here. --force is not enough - it deletes
+# non-empty directories, not protected ones.
+#
+# So: --delete-excluded, which removes the excluded leftovers too, with an
+# explicit `P` (protect) rule for `/target`. That directory is the build cache
+# this whole offload exists to reuse - 1.7GB of it - and --delete-excluded
+# would otherwise take it, turning every run into a cold build.
+rsync -a --delete --force --delete-excluded --filter='P /target' --mkpath \
+  --timeout="$RSYNC_IO_TIMEOUT_SECONDS" \
   --exclude target --exclude 'mutants.out*' \
-  --exclude .git --exclude venv --exclude node_modules \
-  --exclude .mypy_cache --exclude .pytest_cache --exclude .ruff_cache \
-  --exclude '*.egg-info' --exclude dist --exclude build --exclude .drep \
-  --exclude '.tokens' --exclude '.env*' \
+  --exclude .git --exclude node_modules \
+  --exclude dist --exclude build \
+  --exclude '.env*' \
   ./ "$REMOTE/"
 
-# The staged diff lives under excluded target/, so transfer it explicitly.
-if [ -n "${MUTANTS_EXTRA_FILE:-}" ]; then
-  case "$MUTANTS_EXTRA_FILE" in
-    /*|../*|*/../*|*/..)
-      echo "mutants-remote: MUTANTS_EXTRA_FILE must stay within the repo, got $MUTANTS_EXTRA_FILE" >&2
-      exit 64 ;;
+# Files the run needs that the sync above skipped - in practice the staged diff,
+# which mutants-staged.sh writes under the excluded target/. Named by the caller
+# rather than recovered by scanning "$@" for cargo-mutants' own flags: what
+# belongs at this layer is "move these bytes", not that layer's argument
+# grammar. -R recreates each path under the remote root, directories included.
+if [ -n "${MUTANTS_EXTRA_FILES:-}" ]; then
+  for extra in ${MUTANTS_EXTRA_FILES}; do
+    case "$extra" in
+    /*)
+      echo "mutants-remote: MUTANTS_EXTRA_FILES must be repo-relative, got $extra" >&2
+      exit 64
+      ;;
+    esac
+  done
+  # shellcheck disable=SC2086  # word splitting is the interface: it is a list
+  rsync -aR --mkpath --timeout="$RSYNC_IO_TIMEOUT_SECONDS" \
+    ${MUTANTS_EXTRA_FILES} "$REMOTE/"
+fi
+
+printf 'run\n' >&7
+finished_status=
+while IFS= read -r remote_line <&8; do
+  case "$remote_line" in
+  "mutants-run-finished:$RUN_TOKEN:"*)
+    finished_status=${remote_line##*:}
+    break
+    ;;
+  *) printf '%s\n' "$remote_line" ;;
   esac
-  if [ ! -e "$MUTANTS_EXTRA_FILE" ]; then
-    echo "mutants-remote: required extra file does not exist: $MUTANTS_EXTRA_FILE" >&2
-    exit 66
-  fi
-  rsync -aR --mkpath "$MUTANTS_EXTRA_FILE" "$REMOTE/"
+done
+
+case "$finished_status" in
+'' | *[!0-9]*)
+  exit_after_remote_session_failure
+  ;;
+esac
+
+# Mirror the results back so `missed.txt`, the logs and the diffs of surviving
+# mutants can be read here, where the fix gets written. The remote process still
+# owns the host lock here, and its unique `.run-token` proved this run reached
+# cargo-mutants rather than exposing a previous result after an early failure.
+rsync -a --mkpath --timeout="$RSYNC_IO_TIMEOUT_SECONDS" \
+  "$REMOTE/$MUTANTS_OUT_DIR/" "$MUTANTS_OUT_DIR/" 2>/dev/null ||
+  echo "warning: mutation completed but its result mirror failed" >&2
+printf 'mirrored\n' >&7
+
+while IFS= read -r remote_line <&8; do
+  printf '%s\n' "$remote_line"
+done
+if wait "$REMOTE_SESSION_PID"; then
+  status=0
+else
+  status=$?
+fi
+remote_session_open=0
+
+if [ "$status" -ne "$finished_status" ]; then
+  echo "mutants-remote: remote status changed after the result handshake" >&2
+  exit 74
 fi
 
-# %q requires bash. With no arguments it would emit one empty argument.
-QUOTED_ARGS=""
-if [ "$#" -gt 0 ]; then
-  printf -v QUOTED_ARGS '%q ' "$@"
-fi
-
-status=0
-# shellcheck disable=SC2087  # local expansion is the point: the unique remote
-# dir, job count, scratch command and %q-quoted args are all known here.
-ssh -o BatchMode=yes "$HOST" bash -s <<EOF || status=$?
-set -euo pipefail
-export PATH=\$HOME/.cargo/bin:\$PATH
-cd "\$HOME"/$REMOTE_RUN_Q
-$REMOTE_SCRATCH_COMMAND
-export MUTANTS_OUT_DIR=$MUTANTS_OUT_DIR_Q
-mkdir -p $MUTANTS_OUT_DIR_Q
-MUTANTS_JOBS=$JOBS bash ./scripts/mutants-run.sh $QUOTED_ARGS
-EOF
-
-# Preserve the remote checkout if its diagnostics cannot be mirrored.
-mkdir -p "$LOCAL_RESULTS"
-mirror_status=0
-rsync -a --mkpath "$REMOTE/$MUTANTS_OUT_DIR/" "$LOCAL_RESULTS/" || mirror_status=$?
-if [ "$mirror_status" -ne 0 ]; then
-  REMOVE_REMOTE_ON_EXIT=0
-  echo "mutants-remote: failed to mirror results; remote run retained at $HOST:~/$REMOTE_RUN_DIR" >&2
-  if [ "$status" -eq 0 ]; then
-    status=74
-  fi
-fi
-
-exit "$status"
+exit "$finished_status"

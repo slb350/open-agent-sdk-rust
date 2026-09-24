@@ -172,19 +172,26 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "mutation scope: $mode"
 
+  # Every mutation workload runs on homelab-ai-1, under this repository's sandboxed role there.
+  # This repository is public, so pull requests from forks never reach that runner.
   mutants:
     name: Mutation Testing
     needs: mutation-policy
-    if: needs.mutation-policy.outputs.run == 'true'
-    runs-on: ubuntu-latest
+    if: needs.mutation-policy.outputs.run == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, linux, x64, homelab-ai-1, open-agent-sdk-rust-mutants]
+    # A full 262-mutant sweep took 9m37s alone on this runner at MUTANTS_JOBS=3, and 31 minutes
+    # while two other repositories' sweeps shared the fleet's CPU and memory budget (2026-09-24).
+    timeout-minutes: 90
     steps:
+      # cargo-mutants builds every mutant in its own scratch copy of the tree, which excludes
+      # target/, so an ordinary clean checkout loses nothing.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
         with:
           tool: cargo-mutants@27.1.0
