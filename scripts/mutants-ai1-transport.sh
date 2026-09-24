@@ -9,14 +9,15 @@ is_ai1_host() {
   esac
 }
 
+# offload.py decides which roles exist. This only keeps a missing or malformed
+# name, or one that is not a mutation role, off the remote command line.
 ai1_role_check() {
   case "${AI1_CI_ROLE:-}" in
-  open-agent-sdk-rust-mutants) return 0 ;;
-  *)
-    printf 'ai-1 transport: invalid or missing CI role\n' >&2
-    return 2
-    ;;
+  '' | *[![:lower:][:digit:]-]*) ;;
+  *-mutants) return 0 ;;
   esac
+  printf 'ai-1 transport: invalid or missing CI role\n' >&2
+  return 2
 }
 
 ssh() {

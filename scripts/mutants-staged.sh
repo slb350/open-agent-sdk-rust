@@ -13,17 +13,21 @@ set -euo pipefail
 
 # shellcheck source=scripts/mutants-common.sh
 . "$(dirname "$0")/mutants-common.sh"
-DIFF="$MUTANTS_OUT_DIR/staged.diff"
-mkdir -p "$MUTANTS_OUT_DIR"
 
 # Diffing the index is only correct when the working tree matches it.
 require_matching_index
-git diff --cached -- '*.rs' > "$DIFF"
-
-if [ ! -s "$DIFF" ]; then
+if git diff --cached --quiet -- '*.rs'; then
   echo "no staged Rust changes; nothing to mutate"
   exit 0
 fi
+
+# The diff and the run it feeds belong to this checkout's one mutation run, so
+# a manual sweep started meanwhile waits rather than overwriting it. A commit
+# with nothing to mutate has already left without waiting.
+acquire_checkout_lock mutants-staged || exit $?
+DIFF="$MUTANTS_OUT_DIR/staged.diff"
+mkdir -p "$MUTANTS_OUT_DIR"
+git diff --cached -- '*.rs' > "$DIFF"
 
 # Through mutants-remote.sh, which offloads the run to a bigger machine and
 # falls back to a local run when it cannot be reached. The verdict is
