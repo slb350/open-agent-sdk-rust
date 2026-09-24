@@ -110,12 +110,16 @@ fn remote_mutation_takes_the_checkout_lock_before_probing_the_host() {
 }
 
 /// The source sync mirrors this checkout with --delete, so its remote
-/// directory is named for the checkout's path: two checkouts with the same name
+/// directory is named for this machine and the checkout's path: two checkouts
 /// never share one, and holding the checkout lock is all it takes to own it.
 #[test]
 fn checkouts_with_one_name_get_their_own_remote_directories() {
     let harness = Harness::new();
-    let remote_dir = |parent: &str, name: &str| {
+    write_executable(
+        &harness.path("bin").join("hostname"),
+        "#!/bin/sh\necho other-machine\n",
+    );
+    let remote_dir_on = |parent: &str, name: &str, machine: bool| {
         let scripts = harness.path(parent).join(name).join("scripts");
         fs::create_dir_all(&scripts).expect("scripts directory");
         fs::copy(
@@ -123,18 +127,22 @@ fn checkouts_with_one_name_get_their_own_remote_directories() {
             scripts.join("mutants-common.sh"),
         )
         .expect("copy mutation script");
-        let output = Command::new("bash")
+        let mut command = Command::new("bash");
+        command
             .args([
                 "-c",
                 &format!(". \"$1/mutants-common.sh\" && remote_checkout_dir {ROLE}"),
                 "remote-dir-test",
             ])
-            .arg(&scripts)
-            .output()
-            .expect("derive the remote directory");
+            .arg(&scripts);
+        if machine {
+            command.env("PATH", process::prepend_path(&harness.path("bin")));
+        }
+        let output = command.output().expect("derive the remote directory");
         assert!(output.status.success(), "{output:?}");
         String::from_utf8(output.stdout).expect("utf-8 directory")
     };
+    let remote_dir = |parent: &str, name: &str| remote_dir_on(parent, name, false);
 
     let first = remote_dir("one", "sdk");
     let second = remote_dir("two", "sdk");
@@ -165,6 +173,11 @@ fn checkouts_with_one_name_get_their_own_remote_directories() {
         first,
         remote_dir("one", "sdk"),
         "a checkout keeps its directory"
+    );
+    assert_ne!(
+        first,
+        remote_dir_on("one", "sdk", true),
+        "the same path on another machine must not share a directory"
     );
 }
 

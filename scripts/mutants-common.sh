@@ -93,13 +93,14 @@ acquire_checkout_lock() {
 }
 
 # This checkout's own directory in an ai-1 role's cache. The source sync mirrors
-# into it with --delete, so it is named for the checkout's path as well as its
-# name: no other checkout shares it, and holding the checkout lock is all it
-# takes to own it.
+# into it with --delete, so it is named for this machine and the checkout's path
+# as well as its name: no other checkout shares it, even one at the same path on
+# another machine, and holding the checkout lock is all it takes to own it. A
+# renamed machine starts again from a fresh copy.
 remote_checkout_dir() {
   printf '.cache/%s/%s-%s' "$1" \
     "$(basename "$MUTANTS_ROOT" | LC_ALL=C tr -cd 'A-Za-z0-9._-')" \
-    "$(printf '%s' "$MUTANTS_ROOT" | cksum | cut -d' ' -f1)"
+    "$(printf '%s:%s' "$(hostname)" "$MUTANTS_ROOT" | cksum | cut -d' ' -f1)"
 }
 
 # The hook is a plain Git hook, so nothing stashes unstaged work, and the remote
