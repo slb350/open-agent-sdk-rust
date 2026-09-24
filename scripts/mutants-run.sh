@@ -2,76 +2,156 @@
 #
 # Run cargo-mutants and decide the verdict from the results.
 #
-# Shared by the pre-commit hook (scoped to the staged diff) and by CI (full
-# sweep), so the two cannot disagree about what counts as a failure. Any
-# arguments given are passed through to cargo-mutants; the scope is the
-# caller's business, the verdict is this script's.
+# Shared verdict for staged-diff, pushed-diff and full mutation runs.
+# Arguments pass through to cargo-mutants; the caller chooses the scope.
 
 set -euo pipefail
 
-# The runner and result reader must use the same output directory.
+# --output pins the results directory because this script reads `missed.txt` out
+# of it to reach its verdict, so it has to know where it is rather than inherit
+# whatever the caller's cwd happened to be. The path itself is defined once, in
+# mutants-common.sh, because all three scripts in this trio need it. This is not
+# concurrency protection: two runs in the same checkout share this directory
+# exactly as they shared a cwd-relative `mutants.out`.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/mutants-common.sh
-# shellcheck disable=SC1091
 . "$SCRIPT_DIR/mutants-common.sh"
 OUT_DIR="$MUTANTS_OUT_DIR"
 mkdir -p "$OUT_DIR"
 
-# Keep stranded copies off Strix's tmpfs. Each invocation owns a namespace;
-# stale cleanup may remove only dead owners on this host.
-ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-SCRATCH_ROOT="${DREP_MUTANTS_TMPDIR:-${ROOT}.mutants-tmp}"
-case "$SCRATCH_ROOT" in
-  /*) ;;
-  *) echo "mutants-run: DREP_MUTANTS_TMPDIR must be absolute: $SCRATCH_ROOT" >&2
-     exit 64 ;;
-esac
-if [ "$SCRATCH_ROOT" = "/" ]; then
-  echo "mutants-run: refusing to use / as the scratch root" >&2
-  exit 64
-fi
-mkdir -p "$SCRATCH_ROOT"
-
-HOST_ID="$(mutants_host_id)"
-
-mutants_sweep_stale_owned_paths "$SCRATCH_ROOT" "$HOST_ID" "scratch namespace"
-RUN_TMPDIR="$(mktemp -d "$SCRATCH_ROOT/run_${HOST_ID}_$$_XXXXXX")"
-export TMPDIR="$RUN_TMPDIR"
-
-# Invoked indirectly by the EXIT trap.
-# shellcheck disable=SC2329
-cleanup_owned_scratch() {
-  local original_status=$?
-  local cleanup_status
-  trap - EXIT
-  set +e
-  mutants_delete_exact_path "$RUN_TMPDIR"
-  cleanup_status=$?
-  if [ "$cleanup_status" -ne 0 ]; then
-    echo "mutants-run: failed to clean owned scratch $RUN_TMPDIR" >&2
+# A dedicated mutation host may serve both GitHub and laptop-offloaded runs in
+# separate persistent workspaces. When its operator provides a shared lock,
+# serialize those otherwise independent checkouts before either can clean
+# scratch or start cargo-mutants. Local fallback runs leave the variable unset
+# and retain checkout-local behavior.
+HOST_LOCK="${DREP_MUTANTS_HOST_LOCK:-}"
+if [ -n "$HOST_LOCK" ]; then
+  case "$HOST_LOCK" in
+    /*) ;;
+    *)
+      echo "mutants-run: DREP_MUTANTS_HOST_LOCK must be absolute" >&2
+      exit 64
+      ;;
+  esac
+  validate_mutants_host_lock_wait_seconds mutants-run
+  command -v flock >/dev/null || {
+    echo "mutants-run: flock is required for the configured host lock" >&2
+    exit 69
+  }
+  exec 9>"$HOST_LOCK"
+  if ! flock -w "$MUTANTS_HOST_LOCK_WAIT_SECONDS" 9; then
+    echo "mutants-run: another mutation sweep owns $HOST_LOCK" >&2
+    exit 75
   fi
-  mutants_reconcile_cleanup_status "$original_status" "$cleanup_status"
-  original_status=$?
-  exit "$original_status"
-}
-trap cleanup_owned_scratch EXIT
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
+fi
 
-# Concurrent builds need headroom beyond the short unmutated baseline.
-cargo mutants -j "${MUTANTS_JOBS:-4}" --no-shuffle --minimum-test-timeout 60 \
-  --output "$OUT_DIR" "$@" && status=0 || status=$?
+# Scratch copies go beside the checkout, not in the system temp dir.
+#
+# cargo-mutants copies the whole tree, target/ included, into `$TMPDIR` once per
+# job and deletes the copies only on a clean exit. A run that is cancelled or
+# hits the job timeout strands them. The former Strix host mounted `/tmp` as a
+# tmpfs; in another repository five such sweeps pinned 31 GiB of RAM with
+# nothing else running. Here the copies sit on disk and a stale one costs
+# storage instead of memory.
+#
+# A sibling of the checkout rather than a child, because cargo-mutants' copy
+# excludes only `mutants.out`: a scratch copy under `target/` would itself be
+# copied into every later copy. The root is taken from this script's location
+# rather than the cwd so every caller resolves the same directory.
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+export TMPDIR="${DREP_MUTANTS_TMPDIR:-${ROOT}.mutants-tmp}"
+mkdir -p "$TMPDIR"
+
+# Sweep what the last run left. cargo-mutants never sees a SIGKILL, and the
+# runner's cancellation ends in one, so the trap below is the common case and
+# this is the backstop. The caller's lock means nothing else is copying into
+# this directory right now.
+cleanup_mutation_scratch() {
+  # `find` does not follow symlinks by default. Descendants match the path arm,
+  # then -depth removes the matching top-level cargo-mutants directory last.
+  # No other entry directly under a caller-supplied TMPDIR can match.
+  find "$TMPDIR" -depth -mindepth 1 \
+    \( -name 'cargo-mutants-*.tmp' -o \
+    -path "$TMPDIR"/'cargo-mutants-*.tmp/*' \) -delete 2>/dev/null || true
+}
+
+cleanup_mutation_scratch
+# `find -delete` can race with a copy still tearing itself down and report ENOENT
+# for an entry that has already vanished. Losing stale scratch is harmless, so
+# cleanup ignores that status and the EXIT trap preserves the script's verdict.
+trap cleanup_mutation_scratch EXIT
+
+# --cap-lints: `[lints.rust] warnings = "deny"` in Cargo.toml applies to the
+# mutated build too, and a mutant that replaces a function body leaves the
+# arguments unread. `unused_variable` is then a hard error, the mutant is
+# recorded UNVIABLE, and unviable is silently not a failure - so the gate passes
+# having compiled the mutant and never run it. On the branch that found this, 16
+# of 17 mutants in the diff were unviable for that reason and for one missing
+# `use`, and the sweep still exited 0. Capping lints for the scratch build only
+# took that to 1, which is a mutant whose return type has no `Default` and is
+# genuinely unbuildable.
+#
+# --minimum-test-timeout: cargo-mutants derives the per-mutant timeout from the
+# unmutated baseline, which on a fast suite is a second or two. With -j running
+# several full suites at once on a loaded machine, a healthy mutant can exceed
+# that and be recorded as TIMEOUT. Give it real headroom so a timeout means what
+# it should.
+# MUTANTS_JOBS so the same script can be driven harder on a 32-thread box than
+# on the laptop the hook runs on; see scripts/mutants-remote.sh.
+
+# A caller that mirrors results across machines needs proof that the output is
+# from this invocation, not a previous sweep. Clear only the exact prior result
+# tree, remove any old marker without following it, and publish the caller's
+# unique token immediately before cargo-mutants starts.
+find "$OUT_DIR/mutants.out" -depth -delete 2>/dev/null || true
+RESULT_TOKEN_FILE="$OUT_DIR/.run-token"
+find "$RESULT_TOKEN_FILE" -depth -delete 2>/dev/null || true
+if [ -n "${DREP_MUTANTS_RESULT_TOKEN:-}" ]; then
+  (umask 077; printf '%s\n' "$DREP_MUTANTS_RESULT_TOKEN" >"$RESULT_TOKEN_FILE")
+fi
+
+cargo mutants -j "${MUTANTS_JOBS:-4}" --no-shuffle --minimum-test-timeout 120 \
+  --cap-lints true --output "$OUT_DIR" "$@" && status=0 || status=$?
 
 MISSED="$OUT_DIR/mutants.out/missed.txt"
+UNVIABLE="$OUT_DIR/mutants.out/unviable.txt"
 
-# cargo-mutants prioritizes timeout exit 3 over survivor exit 2. Check the
-# actual survivor list first; a timeout alone counts as detection.
+# The verdict comes from the results, not from the exit code alone.
+#
+# A timeout is NOT a failure: some mutations produce an infinite loop (`i += 1`
+# becoming `i *= 1` never advances), and a suite that hangs has detected the
+# mutant as surely as one that fails. But cargo-mutants reports exit 3
+# (Timeout) in preference to exit 2 (FoundProblems) - see `Outcome::exit_code`,
+# where `timeout > 0` is tested before `missed > 0` - so a run with one hanging
+# mutant AND a genuine survivor also exits 3. Mapping 3 to success on the exit
+# code alone would wave that survivor through.
+#
+# Both callers previously carried a comment asserting that cargo-mutants exits
+# 0 for timeouts. It does not, and neither had ever seen a timeout to find out:
+# the hook would have blocked on a hang that was really a detection, and CI
+# would have done the same.
+#
+# So: any missed mutant fails, whatever the exit code says. Otherwise a timeout
+# passes, and everything else (usage error, failing baseline, unparseable diff)
+# fails with the code cargo-mutants chose.
 if [ -s "$MISSED" ]; then
   echo "mutants survived - a surviving mutant is a test that cannot tell" >&2
   echo "correct behaviour from incorrect. Fix the test, never the mutant list." >&2
   cat "$MISSED" >&2
   exit 2
+fi
+
+# Unviable is reported rather than passed over in silence. It is not a failure -
+# some mutants cannot be built at all, and there is nothing to fix in a test for
+# one whose return type has no `Default` - but it is also not a verdict, because
+# the mutant never ran. Left unprinted it reads as a pass: the summary line
+# scrolls past, `missed.txt` is empty, and a sweep that built its whole scope and
+# tested none of it exits 0. Naming the count is what makes "the gate has stopped
+# covering this file" something a reader can notice.
+if [ -s "$UNVIABLE" ]; then
+  echo "note: $(wc -l <"$UNVIABLE" | tr -d ' ') mutant(s) did not build, so nothing was"
+  echo "proven about them either way. A count that climbs means the gate is losing scope."
+  cat "$UNVIABLE"
 fi
 
 if [ "$status" -eq 3 ]; then

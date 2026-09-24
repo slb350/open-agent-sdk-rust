@@ -1413,8 +1413,8 @@ open-agent-sdk-rust/
 │   ├── hooks_history_snapshot_test.rs       # Structured conversation history in hook events
 │   ├── hooks_integration_test.rs            # Real auto-tool and hook outcomes
 │   ├── mutation_ci_scope_test.rs            # Mutation test scope classification (CI diffs)
-│   ├── mutation_scripts_test.rs             # Mutation sweep scripts correctness (Unix)
-│   ├── mutation_transport_scripts_test.rs   # Remote mutation transport script correctness (Unix)
+│   ├── mutation_scripts_test.rs             # Mutation scripts: ai-1 role, host lock, verdict, scratch (Unix)
+│   ├── ai1-transport.sh                     # ai-1 transport refuses anything that would bypass its sandbox
 │   ├── package_manifest_test.rs             # Crate archive excludes development-only files
 │   ├── redirect_policy_test.rs              # Model requests reject all HTTP redirects
 │   ├── regression_client_lifecycle_test.rs  # Repeated/abandoned requests, interruption, history reset
@@ -1431,9 +1431,10 @@ open-agent-sdk-rust/
 │   └── support/process.rs                   # Shared process/filesystem helpers for script tests
 ├── scripts/
 │   ├── mutants-ci-scope.sh          # Complete event diff policy for CI mutation runs
-│   ├── mutants-common.sh            # The one definition of the results directory
+│   ├── mutants-ai1-transport.sh     # Sends every ai-1 command and rsync through the role's sandbox
+│   ├── mutants-common.sh            # The one definition of the results directory and lock wait
 │   ├── mutants-run.sh               # Owns the verdict (missed.txt); called by the hook and CI
-│   ├── mutants-remote.sh            # rsync + ssh to a build host, falls back loudly
+│   ├── mutants-remote.sh            # Runs the sweep on homelab-ai-1, falls back loudly
 │   └── mutants-staged.sh            # Staged-diff scope, through mutants-remote.sh
 ├── .githooks/
 │   └── pre-commit                   # fmt, clippy, tests, and a --in-diff cargo-mutants sweep
@@ -1504,7 +1505,9 @@ and ambiguous mappings trigger the complete sweep. Production-only revisions run
 fast policy check. Manual dispatch and the monthly run on the fifteenth always sweep
 the tree. Failed runs retain bounded evidence for the following day's shared
 `Monthly Mutation Repair` automation, which repairs survivors through a PR and merges
-only after its checks pass. Enable the staged local gate with:
+only after its checks pass.
+Every sweep, from CI or from the local hook, runs on homelab-ai-1 as this repository's `open-agent-sdk-rust-mutants` role, and CI never runs one for a pull request from a fork. The hook's mutation step refuses to run while the working tree differs from the index or has untracked files.
+Enable the staged local gate with:
 
 ```bash
 git config core.hooksPath .githooks

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Mutation testing moved to homelab-ai-1, where every mutation workload now runs. The CI sweep runs on this repository's `open-agent-sdk-rust-mutants` runner there instead of a GitHub-hosted runner, keeps its build cache between runs behind a workspace hygiene check, and never runs for pull requests from forks. The local hook offloads to the same role instead of Strix.
+- The mutation scripts are now drep's five, copied with this repository's role, host lock and workspace, so hosted and local runs share one lock and a mirrored result is proven to come from its own run. Their tests are drep's contract tests plus the existing verdict and hook tests; the per-run scratch namespace tests went with the scripts they tested.
+- The hook's mutation step now refuses to run unless the working tree matches the index, with no untracked inputs. The remote run syncs the working tree while the staged diff comes from the index, so a partial commit could previously mutate lines that differ from what was being committed.
+
 ### Security
 
 - Updated locked `rustls` from 0.23.44 to 0.23.45, resolving

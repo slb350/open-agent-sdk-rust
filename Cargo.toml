@@ -26,7 +26,7 @@ exclude = [
     "tests/mutation_ci_scope_test.rs",
     "tests/fixtures/",
     "tests/mutation_scripts_test.rs",
-    "tests/mutation_transport_scripts_test.rs",
+    "tests/ai1-transport.sh",
     "tests/package_manifest_test.rs",
     "tests/support/",
 ]

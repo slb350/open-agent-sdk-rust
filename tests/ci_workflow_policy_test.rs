@@ -7,6 +7,16 @@ const MUTATION_INSTALL_ACTION: &str =
     "taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73";
 const UPLOAD_ARTIFACT_ACTION: &str =
     "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
+/// About five times the measured full sweep; see the mutation job in ci.yml.
+const MUTATION_TIMEOUT_MINUTES: u64 = 45;
+/// Every mutation workload runs on homelab-ai-1 as this repository's role.
+const MUTATION_RUNNER: [&str; 5] = [
+    "self-hosted",
+    "linux",
+    "x64",
+    "homelab-ai-1",
+    "open-agent-sdk-rust-mutants",
+];
 
 fn workflow(source: &str) -> Value {
     serde_yaml_ng::from_str(source).expect("workflow must be valid YAML")
@@ -27,15 +37,28 @@ fn command<'a>(job: &'a Value, prefix: &[&str]) -> Vec<&'a str> {
 }
 
 #[test]
-fn workflows_keep_hosted_runners_read_only_permissions_and_immutable_actions() {
+fn only_mutation_runs_self_hosted_and_every_workflow_keeps_read_only_pinned_actions() {
     for source in [CI, AUDIT] {
         let workflow = workflow(source);
         assert_eq!(workflow["permissions"]["contents"], "read");
-        for job in workflow["jobs"].as_mapping().unwrap().values() {
-            assert!(matches!(
-                job["runs-on"].as_str(),
-                Some("ubuntu-latest" | "macos-latest")
-            ));
+        for (name, job) in workflow["jobs"].as_mapping().unwrap() {
+            if source == CI && name == "mutants" {
+                let labels = job["runs-on"]
+                    .as_sequence()
+                    .expect("the mutation job must name its runner labels")
+                    .iter()
+                    .map(|label| label.as_str().unwrap())
+                    .collect::<Vec<_>>();
+                assert_eq!(labels, MUTATION_RUNNER);
+            } else {
+                assert!(
+                    matches!(
+                        job["runs-on"].as_str(),
+                        Some("ubuntu-latest" | "macos-latest")
+                    ),
+                    "{name:?} must stay on a GitHub-hosted runner"
+                );
+            }
             for step in steps(job) {
                 if let Some(action) = step["uses"].as_str() {
                     let (name, sha) = action.split_once('@').expect("action must be pinned");
@@ -177,12 +200,27 @@ fn mutation_sweep_uses_complete_event_scope_and_an_explicit_backstop() {
     }
     let mutants = &ci["jobs"]["mutants"];
     assert_eq!(mutants["needs"], "mutation-policy");
-    assert_eq!(mutants["if"], "needs.mutation-policy.outputs.run == 'true'");
+    // A public repository's fork pull requests must never execute on the self-hosted runner.
+    assert_eq!(
+        mutants["if"],
+        "needs.mutation-policy.outputs.run == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)"
+    );
+    assert_eq!(mutants["timeout-minutes"], MUTATION_TIMEOUT_MINUTES);
+    let mutant_steps = steps(mutants);
+    let checkout = &mutant_steps[0];
+    assert_eq!(checkout["with"]["fetch-depth"], 0);
+    assert_eq!(checkout["with"]["persist-credentials"], false);
+    assert!(
+        !mutant_steps.iter().any(|step| step["uses"]
+            .as_str()
+            .is_some_and(|action| action.starts_with("Swatinem/rust-cache@"))),
+        "cargo-mutants never reads target/, and on a persistent runner the cache action deletes host-installed cargo binaries"
+    );
     assert_eq!(
         command(mutants, &["./scripts/mutants-run.sh"]),
         ["./scripts/mutants-run.sh", "\"${mutation_args[@]}\""]
     );
-    let installer = steps(mutants)
+    let installer = mutant_steps
         .iter()
         .find(|step| step["with"]["tool"] == "cargo-mutants@27.1.0")
         .unwrap();
@@ -193,7 +231,7 @@ fn mutation_sweep_uses_complete_event_scope_and_an_explicit_backstop() {
         CI.lines()
             .any(|line| line.trim() == expected_installer_line.as_str())
     );
-    let repair_upload = steps(mutants)
+    let repair_upload = mutant_steps
         .iter()
         .find(|step| step["with"]["name"] == "mutation-repair")
         .unwrap();
