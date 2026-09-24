@@ -1,19 +1,15 @@
 #![cfg(unix)]
-//! The mutation scripts are drep's (`~/dev/drep/scripts/`), copied with this
-//! repository's ai-1 role. These tests pin what the copy must keep: ai-1 as the
-//! only offload host, one host lock shared by hosted and laptop runs, results
-//! proven fresh, scratch beside the checkout, a sandboxed transport, and a
-//! verdict read from `missed.txt` rather than the exit code. The locks' behavior
-//! is exercised in `mutation_locks_test.rs`.
+//! The mutation scripts are drep's (`~/dev/drep/scripts/`), copied with this repository's ai-1 role. These tests pin what the copy must keep: ai-1 as the only offload host, one host lock shared by hosted and laptop runs, results proven fresh, scratch beside the checkout, a sandboxed transport, and a verdict read from `missed.txt` rather than the exit code. The locks' behavior is exercised in `mutation_locks_test.rs`.
 
 use std::fs;
-use std::process::Command;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
 
 #[path = "support/mutation.rs"]
 mod mutation;
 #[path = "support/process.rs"]
 mod process;
-use mutation::{Harness, ROLE, without_comments};
+use mutation::{Harness, ROLE, away_from_outer_git, git, without_comments};
 use process::{bash_with_fakes, repo_root, write_executable};
 
 #[test]
@@ -95,8 +91,7 @@ fn remote_mutation_session_owns_sync_run_and_fresh_result_mirroring() {
     );
 }
 
-/// The checkout lock is taken before the host is probed, so a run that waited
-/// for it does not act on a probe that is half an hour old.
+/// The checkout lock is taken before the host is probed, so a run that waited for it does not act on a probe that is half an hour old.
 #[test]
 fn remote_mutation_takes_the_checkout_lock_before_probing_the_host() {
     let script = without_comments("scripts/mutants-remote.sh");
@@ -109,9 +104,7 @@ fn remote_mutation_takes_the_checkout_lock_before_probing_the_host() {
     assert!(lock < probe);
 }
 
-/// The source sync mirrors this checkout with --delete, so its remote
-/// directory is named for this machine and the checkout's path: two checkouts
-/// never share one, and holding the checkout lock is all it takes to own it.
+/// The source sync mirrors this checkout with --delete, so its remote directory is named for this machine and the checkout's path: two checkouts never share one, and holding the checkout lock is all it takes to own it.
 #[test]
 fn checkouts_with_one_name_get_their_own_remote_directories() {
     let harness = Harness::new();
@@ -241,7 +234,10 @@ fn ai1_transport_fails_closed_without_bypassing_the_sandbox() {
 fn mutation_scratch_copies_stay_off_the_tmpfs() {
     let script = without_comments("scripts/mutants-run.sh");
     assert!(
-        script.contains("RUN_SCRATCH=\"${DREP_MUTANTS_TMPDIR:-${MUTANTS_ROOT}.mutants-tmp}/run\"")
+        script.contains("RUN_SCRATCH=\"$MUTANTS_SCRATCH_ROOT/run\"")
+            && without_comments("scripts/mutants-common.sh").contains(
+                "MUTANTS_SCRATCH_ROOT=\"${DREP_MUTANTS_TMPDIR:-${MUTANTS_ROOT}.mutants-tmp}\""
+            )
             && script.contains("export TMPDIR=\"$RUN_SCRATCH\""),
         "the run must place its scratch copies in its directory beside the checkout"
     );
@@ -285,12 +281,10 @@ fn mutation_verdict_prioritizes_survivors_over_timeouts() {
     }
 }
 
-#[test]
-fn pre_commit_executes_checks_and_stops_at_a_failed_check() {
-    let harness = Harness::new();
-    let scripts = harness.path("scripts");
-    fs::create_dir_all(&scripts).unwrap();
-    let log = harness.path("checks.log");
+/// A committed fixture repository for the pre-commit hook, with a fake `mutants-staged.sh`, and fakes for cargo and cargo-mutants; every check appends its name to `checks.log`.
+fn hook_fixture(harness: &Harness) -> PathBuf {
+    let repository = harness.path("repository");
+    fs::create_dir_all(repository.join("scripts")).unwrap();
     let shim = r#"#!/usr/bin/env bash
 set -euo pipefail
 printf '%s %s\n' "${0##*/}" "$*" >> "$FAKE_CHECKS"
@@ -299,9 +293,53 @@ if [ "${FAKE_FAIL:-}" = "$1" ]; then exit 7; fi
     write_executable(&harness.path("bin").join("cargo"), shim);
     write_executable(&harness.path("bin").join("cargo-mutants"), shim);
     write_executable(
-        &scripts.join("mutants-staged.sh"),
+        &repository.join("scripts/mutants-staged.sh"),
         "#!/usr/bin/env bash\nprintf 'mutants\n' >> \"$FAKE_CHECKS\"\n",
     );
+    fs::write(repository.join("lib.rs"), "fn one() {}\n").unwrap();
+    git(&repository, &["init", "-q", "-b", "main"]);
+    git(&repository, &["add", "."]);
+    git(
+        &repository,
+        &[
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "fixture",
+        ],
+    );
+    repository
+}
+
+/// Runs the pre-commit hook in `repository`, failing the check named by `failure`; returns its output and the checks it ran.
+fn run_hook(harness: &Harness, repository: &Path, failure: &str) -> (Output, Vec<String>) {
+    let log = harness.path("checks.log");
+    fs::write(&log, "").unwrap();
+    let mut command = bash_with_fakes(&harness.path("bin"));
+    away_from_outer_git(&mut command, repository);
+    let output = command
+        .arg(repo_root().join(".githooks/pre-commit"))
+        .env("FAKE_CHECKS", &log)
+        .env("FAKE_FAIL", failure)
+        .output()
+        .unwrap();
+    let checks = fs::read_to_string(&log)
+        .unwrap()
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    (output, checks)
+}
+
+#[test]
+fn pre_commit_executes_checks_and_stops_at_a_failed_check() {
+    let harness = Harness::new();
+    let repository = hook_fixture(&harness);
     for (failure, expected) in [
         ("fmt", vec!["cargo fmt --all -- --check"]),
         (
@@ -314,25 +352,46 @@ if [ "${FAKE_FAIL:-}" = "$1" ]; then exit 7; fi
             ],
         ),
     ] {
-        fs::write(&log, "").unwrap();
-        let output = bash_with_fakes(&harness.path("bin"))
-            .arg(repo_root().join(".githooks/pre-commit"))
-            .current_dir(harness.temp.path())
-            .env("FAKE_CHECKS", &log)
-            .env("FAKE_FAIL", failure)
-            .output()
-            .unwrap();
+        let (output, checks) = run_hook(&harness, &repository, failure);
         assert_eq!(
             output.status.code(),
             Some(if failure.is_empty() { 0 } else { 7 }),
             "{output:?}"
         );
-        assert_eq!(
-            fs::read_to_string(&log)
-                .unwrap()
-                .lines()
-                .collect::<Vec<_>>(),
-            expected
-        );
+        assert_eq!(checks, expected);
     }
+}
+
+/// fmt, clippy and the tests read the working tree, so the hook refuses one that differs from the index before running any of them.
+#[test]
+fn pre_commit_refuses_a_working_tree_that_differs_from_the_index() {
+    let harness = Harness::new();
+    let repository = hook_fixture(&harness);
+    for (kind, path) in [
+        ("unstaged", repository.join("lib.rs")),
+        ("untracked", repository.join("new.rs")),
+    ] {
+        fs::write(&path, "fn changed() {}\n").unwrap();
+        let (output, checks) = run_hook(&harness, &repository, "");
+        assert_eq!(output.status.code(), Some(1), "{kind}: {output:?}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("index"),
+            "{kind}: {output:?}"
+        );
+        assert!(checks.is_empty(), "{kind}: no check may run: {checks:?}");
+        if kind == "unstaged" {
+            fs::write(&path, "fn one() {}\n").unwrap();
+        } else {
+            fs::remove_file(&path).unwrap();
+        }
+    }
+}
+
+/// The staged run hands the wrapper a snapshot of the index: the sync ships that tree and a local fallback builds it.
+#[test]
+fn remote_mutation_builds_the_source_it_is_given() {
+    let script = without_comments("scripts/mutants-remote.sh");
+    assert!(script.contains("SOURCE=\"${MUTANTS_SOURCE_DIR:-.}\""));
+    assert!(script.contains("\"$SOURCE/\" \"$REMOTE/\""));
+    assert!(script.contains("exec ./scripts/mutants-run.sh --dir \"$SOURCE\" \"$@\""));
 }

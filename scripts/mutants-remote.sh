@@ -3,19 +3,9 @@
 # Run the mutation sweep on a bigger machine over SSH, then report its verdict
 # here.
 #
-# Mutation testing is the most CPU-hungry gate in this repo: every mutant is a
-# full build plus a full test run, and the hook fires on a laptop the developer
-# is still using. Measured in drep on 12 mutants from src/docs/fence.rs, a local
-# M5 Max at -j 4 took 1m54 with the machine pinned. The offload runs as this
-# repository's CI role on ai-1 and costs this machine nothing.
+# Mutation testing is the most CPU-hungry gate in this repo: every mutant is a full build plus a full test run, and the hook fires on a laptop the developer is still using. Measured in drep on 12 mutants from src/docs/fence.rs, a local M5 Max at -j 4 took 1m54 with the machine pinned. The offload runs as this repository's CI role on ai-1 and costs this machine nothing.
 #
-# More jobs is not automatically better. Each job builds in its own copy of the
-# tree, which cargo-mutants 27.1.0 makes without target/ unless copy_target is
-# set, so every job cold-builds the dependencies before its first mutant. On the
-# former 32-thread host, the same scope measured 38s at -j 4, 54s at -j 8, and
-# 72s at -j 16.
-# Keep the measured worker baseline until a complete sweep gives
-# a measured reason to change it.
+# More jobs is not automatically better. Each job builds in its own copy of the tree, which cargo-mutants 27.1.0 makes without target/ unless copy_target is set, so every job cold-builds the dependencies before its first mutant. On the former 32-thread host, the same scope measured 38s at -j 4, 54s at -j 8, and 72s at -j 16. Keep the measured worker baseline until a complete sweep gives a measured reason to change it.
 #
 # The verdict rule is NOT duplicated here. This script syncs, invokes
 # scripts/mutants-run.sh on the remote, and propagates its exit code - so the
@@ -33,6 +23,7 @@
 #   DREP_MUTANTS_REMOTE  0 to force a local run
 #   MUTANTS_JOBS         -j for the remote run (default: the role's MUTANTS_JOBS)
 #   MUTANTS_LOCAL_JOBS   -j for a local or fallback run (default: 4)
+#   MUTANTS_SOURCE_DIR   the tree to sync or build (default: this checkout)
 #   MUTANTS_EXTRA_FILES  repo-relative paths this run needs that the sync
 #                        would otherwise skip (space-separated, no spaces in
 #                        the paths themselves)
@@ -46,14 +37,15 @@ cd "$(git rev-parse --show-toplevel)"
 # shellcheck source=scripts/mutants-common.sh
 . scripts/mutants-common.sh
 
-# The ai-1 CI role this repository's mutation runs as, here and in its hosted
-# sweeps. The role's unit also supplies the host lock and the job count.
+# The ai-1 CI role this repository's mutation runs as, here and in its hosted sweeps. The role's unit also supplies the host lock and the job count.
 AI1_CI_ROLE=open-agent-sdk-rust-mutants
 HOST="${DREP_MUTANTS_HOST:-steve@192.168.68.88}"
 REMOTE_DIR="$(remote_checkout_dir "$AI1_CI_ROLE")"
 REMOTE="$HOST:$REMOTE_DIR"
 JOBS="${MUTANTS_JOBS:-}"
 RSYNC_IO_TIMEOUT_SECONDS="${DREP_MUTANTS_RSYNC_TIMEOUT_SECONDS:-300}"
+# The tree the run builds: this checkout, or the snapshot of the index mutants-staged.sh names.
+SOURCE="${MUTANTS_SOURCE_DIR:-.}"
 
 case "$RSYNC_IO_TIMEOUT_SECONDS" in
 0 | '' | *[!0-9]*)
@@ -63,12 +55,10 @@ case "$RSYNC_IO_TIMEOUT_SECONDS" in
 esac
 
 run_local() {
-  MUTANTS_JOBS="${MUTANTS_LOCAL_JOBS:-4}" exec ./scripts/mutants-run.sh "$@"
+  MUTANTS_JOBS="${MUTANTS_LOCAL_JOBS:-4}" exec ./scripts/mutants-run.sh --dir "$SOURCE" "$@"
 }
 
-# The mirror writes this checkout's results, so it is this checkout's one run.
-# Taken before anything else so a run that waits here probes the host once it
-# has the lock, and a local fallback inherits it through exec.
+# The mirror writes this checkout's results, so it is this checkout's one run. Taken before anything else so a run that waits here probes the host once it has the lock, and a local fallback inherits it through exec.
 acquire_checkout_lock mutants-remote || exit $?
 
 if [ "${DREP_MUTANTS_REMOTE:-1}" = "0" ]; then
@@ -166,8 +156,7 @@ cleanup_remote_session() {
   remove_tree "$SESSION_DIR"
 }
 trap cleanup_remote_session EXIT
-# A session that has ended turns the next control write into SIGPIPE, which
-# would kill this shell before the trap above could run.
+# A session that has ended turns the next control write into SIGPIPE, which would kill this shell before the trap above could run.
 trap 'exit 74' PIPE
 
 exit_after_remote_session_failure() {
@@ -188,10 +177,7 @@ if [ "$ready" != "mutants-lock-ready:$RUN_TOKEN" ]; then
   exit 74
 fi
 
-# The remote session created the destination before it reported the lock ready.
-# REMOTE_DIR is this checkout's alone and the checkout lock is held, so nothing
-# else writes it even if the session ends mid-transfer; the next control write
-# then fails the run.
+# The remote session created the destination before it reported the lock ready. REMOTE_DIR is this checkout's alone and the checkout lock is held, so nothing else writes it even if the session ends mid-transfer; the next control write then fails the run.
 #
 # --delete so a file deleted locally cannot linger and be mutated remotely.
 # target/ is excluded: the run writes its results there after this sync, and
@@ -200,6 +186,7 @@ fi
 # on every commit against a Rust payload of about 1MB. Credentials are excluded
 # because nothing in the suite reads them and they have no business on another
 # host.
+#
 # --delete alone leaves the remote tree stale, and the sweep then tests a tree
 # the commit does not have. An excluded name *inside* a directory protects that
 # directory from removal, so `docs/api/build/html` kept `docs/api` alive after
@@ -214,7 +201,7 @@ rsync -a --delete --force --delete-excluded \
   --exclude .git --exclude node_modules \
   --exclude dist --exclude build --exclude .drep \
   --exclude '.env*' \
-  ./ "$REMOTE/"
+  "$SOURCE/" "$REMOTE/"
 
 # Files the run needs that the sync above skipped - in practice the staged diff,
 # which mutants-staged.sh writes under the excluded target/. Named by the caller

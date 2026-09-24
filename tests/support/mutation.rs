@@ -61,8 +61,7 @@ impl Harness {
         self.run_script_after("")
     }
 
-    /// As `run_script`, with `prelude` run first in the shell that starts the
-    /// script, so it can hand the script an open descriptor.
+    /// As `run_script`, with `prelude` run first in the shell that starts the script, so it can hand the script an open descriptor.
     pub(crate) fn run_script_after(&self, prelude: &str) -> Command {
         write_executable(
             &self.path("bin").join("cargo"),
@@ -89,9 +88,7 @@ exit "${FAKE_EXIT:-0}"
     }
 }
 
-/// perl that exits 0 when the lock file named by its argument could be taken
-/// now and 1 while another process holds it: the same kernel flock the
-/// mutation scripts take through perl, since macOS has no flock(1).
+/// perl that exits 0 when the lock file named by its argument could be taken now and 1 while another process holds it: the same kernel flock the mutation scripts take through perl, since macOS has no flock(1).
 pub(crate) const LOCK_PROBE: &str =
     "open(my $f, '>>', $ARGV[0]) or exit 2; exit(flock($f, LOCK_EX | LOCK_NB) ? 0 : 1)";
 
@@ -105,8 +102,7 @@ pub(crate) fn lock_is_free(path: &Path) -> bool {
         .success()
 }
 
-/// A process holding the lock at `path` until it is killed or `seconds` pass;
-/// returns once the lock is held.
+/// A process holding the lock at `path` until it is killed or `seconds` pass; returns once the lock is held.
 pub(crate) fn hold_lock(path: &Path, seconds: &str) -> Child {
     let mut holder = Command::new("perl")
         .args([
@@ -131,6 +127,12 @@ pub(crate) fn hold_lock(path: &Path, seconds: &str) -> Child {
 /// A command that must not see the Git environment of a hook this suite may be running under.
 pub(crate) fn isolated(program: &str, repository: &Path) -> Command {
     let mut command = Command::new(program);
+    away_from_outer_git(&mut command, repository);
+    command
+}
+
+/// Runs `command` in `repository` without the Git environment of a hook this suite may be running under.
+pub(crate) fn away_from_outer_git(command: &mut Command, repository: &Path) {
     command.current_dir(repository);
     for variable in [
         "GIT_DIR",
@@ -141,7 +143,6 @@ pub(crate) fn isolated(program: &str, repository: &Path) -> Command {
     ] {
         command.env_remove(variable);
     }
-    command
 }
 
 pub(crate) fn git(repository: &Path, arguments: &[&str]) -> String {

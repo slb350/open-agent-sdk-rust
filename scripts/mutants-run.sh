@@ -10,7 +10,7 @@ set -euo pipefail
 # --output pins the results directory because this script reads `missed.txt` out
 # of it to reach its verdict, so it has to know where it is rather than inherit
 # whatever the caller's cwd happened to be. The path itself is defined once, in
-# mutants-common.sh, because all three scripts in this trio need it.
+# mutants-common.sh, because mutants-staged.sh and mutants-remote.sh need it too.
 # shellcheck source=scripts/mutants-common.sh
 . "$(dirname "$0")/mutants-common.sh"
 OUT_DIR="$MUTANTS_OUT_DIR"
@@ -44,25 +44,16 @@ fi
 # nothing else running. Here the copies sit on disk and a stale one costs
 # storage instead of memory.
 #
-# A sibling of the checkout rather than a child: cargo-mutants copies the
-# checkout, so scratch inside it would be copied into every later copy
-# (target/ included, once copy_target is on).
-RUN_SCRATCH="${DREP_MUTANTS_TMPDIR:-${MUTANTS_ROOT}.mutants-tmp}/run"
+# A sibling of the checkout rather than a child: cargo-mutants copies the checkout, so scratch inside it would be copied into every later copy (target/ included, once copy_target is on).
+RUN_SCRATCH="$MUTANTS_SCRATCH_ROOT/run"
 
-# The checkout lock means no other run is using this checkout's scratch, so
-# everything a previous run left in the run directory - tree copies and the
-# temporary files of tests it killed - can go. cargo-mutants never sees a
-# SIGKILL, and the runner's cancellation ends in one, so the trap below is the
-# common case and this is the backstop.
+# The checkout lock means no other run is using this checkout's scratch, so everything a previous run left in the run directory - tree copies and the temporary files of tests it killed - can go. cargo-mutants never sees a SIGKILL, and the runner's cancellation ends in one, so the trap below is the common case and this is the backstop.
 remove_tree "$RUN_SCRATCH"
 mkdir -p "$RUN_SCRATCH"
 export TMPDIR="$RUN_SCRATCH"
 trap 'remove_tree "$RUN_SCRATCH"' EXIT
 
-# A caller that mirrors results across machines needs proof that the output is
-# from this invocation, not a previous sweep. Clear only the exact prior result
-# tree, remove any old marker without following it, and publish the caller's
-# unique token immediately before cargo-mutants starts.
+# A caller that mirrors results across machines needs proof that the output is from this invocation, not a previous sweep. Clear only the exact prior result tree, remove any old marker without following it, and publish the caller's unique token immediately before cargo-mutants starts.
 remove_tree "$OUT_DIR/mutants.out"
 RESULT_TOKEN_FILE="$OUT_DIR/.run-token"
 remove_tree "$RESULT_TOKEN_FILE"
@@ -85,11 +76,11 @@ fi
 # several full suites at once on a loaded machine, a healthy mutant can exceed
 # that and be recorded as TIMEOUT. Give it real headroom so a timeout means what
 # it should.
+#
 # MUTANTS_JOBS so the same script can be driven harder on a 32-thread box than
 # on the laptop the hook runs on; see scripts/mutants-remote.sh.
 #
-# 6<&- 9<&-: the checkout and host locks stay with this script. A test fixture
-# that outlives its mutant must not inherit either and block the next run.
+# 6<&- 9<&-: the checkout and host locks stay with this script. A test fixture that outlives its mutant must not inherit either and block the next run.
 cargo mutants -j "${MUTANTS_JOBS:-4}" --no-shuffle --minimum-test-timeout 120 \
   --cap-lints true --output "$OUT_DIR" "$@" 6<&- 9<&- && status=0 || status=$?
 

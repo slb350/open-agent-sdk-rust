@@ -38,9 +38,7 @@ exec bash "$@"
     command
 }
 
-/// Writes an executable stub from a child process, so no descriptor of this
-/// process can hold it open for writing when another test thread forks: Linux
-/// refuses to `exec` such a file (`Text file busy`).
+/// Writes an executable stub from a child process, so no descriptor of this process can hold it open for writing when another test thread forks: Linux refuses to `exec` such a file (`Text file busy`).
 pub(crate) fn write_executable(path: &Path, contents: &str) {
     let status = Command::new("/bin/sh")
         .arg("-c")
