@@ -179,9 +179,9 @@ jobs:
     needs: mutation-policy
     if: needs.mutation-policy.outputs.run == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, linux, x64, homelab-ai-1, open-agent-sdk-rust-mutants]
-    # A full 262-mutant sweep took 9m37s on this runner at MUTANTS_JOBS=3 (2026-09-24); the
-    # headroom covers other roles' sweeps sharing the fleet's CPU and memory budget.
-    timeout-minutes: 45
+    # A full 262-mutant sweep took 9m37s alone on this runner at MUTANTS_JOBS=3, and 31 minutes
+    # while two other repositories' sweeps shared the fleet's CPU and memory budget (2026-09-24).
+    timeout-minutes: 90
     steps:
       # cargo-mutants builds every mutant in its own scratch copy of the tree, which excludes
       # target/, so an ordinary clean checkout loses nothing.

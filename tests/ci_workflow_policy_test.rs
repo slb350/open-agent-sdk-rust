@@ -7,8 +7,8 @@ const MUTATION_INSTALL_ACTION: &str =
     "taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73";
 const UPLOAD_ARTIFACT_ACTION: &str =
     "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
-/// About five times the measured full sweep; see the mutation job in ci.yml.
-const MUTATION_TIMEOUT_MINUTES: u64 = 45;
+/// About three times the slowest measured full sweep; see the mutation job in ci.yml.
+const MUTATION_TIMEOUT_MINUTES: u64 = 90;
 /// Every mutation workload runs on homelab-ai-1 as this repository's role.
 const MUTATION_RUNNER: [&str; 5] = [
     "self-hosted",
