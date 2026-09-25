@@ -1,6 +1,6 @@
+#![allow(dead_code)]
+
 use std::env;
-use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -38,11 +38,19 @@ exec bash "$@"
     command
 }
 
+/// Writes an executable stub from a child process, so no descriptor of this process can hold it open for writing when another test thread forks: Linux refuses to `exec` such a file (`Text file busy`).
 pub(crate) fn write_executable(path: &Path, contents: &str) {
-    fs::write(path, contents).expect("write fake executable");
-    let mut permissions = fs::metadata(path)
-        .expect("stat fake executable")
-        .permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(path, permissions).expect("make fake executable executable");
+    let status = Command::new("/bin/sh")
+        .arg("-c")
+        .arg(r#"printf '%s' "$2" > "$1" && chmod +x "$1""#)
+        .arg("sh")
+        .arg(path)
+        .arg(contents)
+        .status()
+        .expect("the writer process must start");
+    assert!(
+        status.success(),
+        "writing {} failed: {status}",
+        path.display()
+    );
 }

@@ -10,14 +10,13 @@ set -euo pipefail
 # --output pins the results directory because this script reads `missed.txt` out
 # of it to reach its verdict, so it has to know where it is rather than inherit
 # whatever the caller's cwd happened to be. The path itself is defined once, in
-# mutants-common.sh, because all three scripts in this trio need it. This is not
-# concurrency protection: two runs in the same checkout share this directory
-# exactly as they shared a cwd-relative `mutants.out`.
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# mutants-common.sh, because mutants-staged.sh and mutants-remote.sh need it too.
 # shellcheck source=scripts/mutants-common.sh
-. "$SCRIPT_DIR/mutants-common.sh"
+. "$(dirname "$0")/mutants-common.sh"
 OUT_DIR="$MUTANTS_OUT_DIR"
 mkdir -p "$OUT_DIR"
+
+acquire_checkout_lock mutants-run || exit $?
 
 # A dedicated mutation host may serve both GitHub and laptop-offloaded runs in
 # separate persistent workspaces. When its operator provides a shared lock,
@@ -33,53 +32,34 @@ if [ -n "$HOST_LOCK" ]; then
       exit 64
       ;;
   esac
-  validate_mutants_host_lock_wait_seconds mutants-run
-  command -v flock >/dev/null || {
-    echo "mutants-run: flock is required for the configured host lock" >&2
-    exit 69
-  }
-  exec 9>"$HOST_LOCK"
-  if ! flock -w "$MUTANTS_HOST_LOCK_WAIT_SECONDS" 9; then
-    echo "mutants-run: another mutation sweep owns $HOST_LOCK" >&2
-    exit 75
-  fi
+  hold_lock 9 "$HOST_LOCK" mutants-run || exit $?
 fi
 
 # Scratch copies go beside the checkout, not in the system temp dir.
 #
-# cargo-mutants copies the whole tree, target/ included, into `$TMPDIR` once per
-# job and deletes the copies only on a clean exit. A run that is cancelled or
+# cargo-mutants copies the tree into `$TMPDIR` once per job and deletes the
+# copies only on a clean exit. A run that is cancelled or
 # hits the job timeout strands them. The former Strix host mounted `/tmp` as a
 # tmpfs; in another repository five such sweeps pinned 31 GiB of RAM with
 # nothing else running. Here the copies sit on disk and a stale one costs
 # storage instead of memory.
 #
-# A sibling of the checkout rather than a child, because cargo-mutants' copy
-# excludes only `mutants.out`: a scratch copy under `target/` would itself be
-# copied into every later copy. The root is taken from this script's location
-# rather than the cwd so every caller resolves the same directory.
-ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-export TMPDIR="${DREP_MUTANTS_TMPDIR:-${ROOT}.mutants-tmp}"
-mkdir -p "$TMPDIR"
+# A sibling of the checkout rather than a child: cargo-mutants copies the checkout, so scratch inside it would be copied into every later copy (target/ included, once copy_target is on).
+RUN_SCRATCH="$MUTANTS_SCRATCH_ROOT/run"
 
-# Sweep what the last run left. cargo-mutants never sees a SIGKILL, and the
-# runner's cancellation ends in one, so the trap below is the common case and
-# this is the backstop. The caller's lock means nothing else is copying into
-# this directory right now.
-cleanup_mutation_scratch() {
-  # `find` does not follow symlinks by default. Descendants match the path arm,
-  # then -depth removes the matching top-level cargo-mutants directory last.
-  # No other entry directly under a caller-supplied TMPDIR can match.
-  find "$TMPDIR" -depth -mindepth 1 \
-    \( -name 'cargo-mutants-*.tmp' -o \
-    -path "$TMPDIR"/'cargo-mutants-*.tmp/*' \) -delete 2>/dev/null || true
-}
+# The checkout lock means no other run is using this checkout's scratch, so everything a previous run left in the run directory - tree copies and the temporary files of tests it killed - can go. cargo-mutants never sees a SIGKILL, and the runner's cancellation ends in one, so the trap below is the common case and this is the backstop.
+remove_tree "$RUN_SCRATCH"
+mkdir -p "$RUN_SCRATCH"
+export TMPDIR="$RUN_SCRATCH"
+trap 'remove_tree "$RUN_SCRATCH"' EXIT
 
-cleanup_mutation_scratch
-# `find -delete` can race with a copy still tearing itself down and report ENOENT
-# for an entry that has already vanished. Losing stale scratch is harmless, so
-# cleanup ignores that status and the EXIT trap preserves the script's verdict.
-trap cleanup_mutation_scratch EXIT
+# A caller that mirrors results across machines needs proof that the output is from this invocation, not a previous sweep. Clear only the exact prior result tree, remove any old marker without following it, and publish the caller's unique token immediately before cargo-mutants starts.
+remove_tree "$OUT_DIR/mutants.out"
+RESULT_TOKEN_FILE="$OUT_DIR/.run-token"
+remove_tree "$RESULT_TOKEN_FILE"
+if [ -n "${DREP_MUTANTS_RESULT_TOKEN:-}" ]; then
+  (umask 077; printf '%s\n' "$DREP_MUTANTS_RESULT_TOKEN" >"$RESULT_TOKEN_FILE")
+fi
 
 # --cap-lints: `[lints.rust] warnings = "deny"` in Cargo.toml applies to the
 # mutated build too, and a mutant that replaces a function body leaves the
@@ -96,22 +76,13 @@ trap cleanup_mutation_scratch EXIT
 # several full suites at once on a loaded machine, a healthy mutant can exceed
 # that and be recorded as TIMEOUT. Give it real headroom so a timeout means what
 # it should.
+#
 # MUTANTS_JOBS so the same script can be driven harder on a 32-thread box than
 # on the laptop the hook runs on; see scripts/mutants-remote.sh.
-
-# A caller that mirrors results across machines needs proof that the output is
-# from this invocation, not a previous sweep. Clear only the exact prior result
-# tree, remove any old marker without following it, and publish the caller's
-# unique token immediately before cargo-mutants starts.
-find "$OUT_DIR/mutants.out" -depth -delete 2>/dev/null || true
-RESULT_TOKEN_FILE="$OUT_DIR/.run-token"
-find "$RESULT_TOKEN_FILE" -depth -delete 2>/dev/null || true
-if [ -n "${DREP_MUTANTS_RESULT_TOKEN:-}" ]; then
-  (umask 077; printf '%s\n' "$DREP_MUTANTS_RESULT_TOKEN" >"$RESULT_TOKEN_FILE")
-fi
-
+#
+# 6<&- 9<&-: the checkout and host locks stay with this script. A test fixture that outlives its mutant must not inherit either and block the next run.
 cargo mutants -j "${MUTANTS_JOBS:-4}" --no-shuffle --minimum-test-timeout 120 \
-  --cap-lints true --output "$OUT_DIR" "$@" && status=0 || status=$?
+  --cap-lints true --output "$OUT_DIR" "$@" 6<&- 9<&- && status=0 || status=$?
 
 MISSED="$OUT_DIR/mutants.out/missed.txt"
 UNVIABLE="$OUT_DIR/mutants.out/unviable.txt"

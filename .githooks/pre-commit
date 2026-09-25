@@ -4,6 +4,13 @@
 
 set -euo pipefail
 
+# fmt, clippy and the tests read the working tree while the commit is the index, and this is a plain Git hook, so nothing stashes unstaged work first. The two must match, with no untracked inputs. The mutation run builds a snapshot of the index, so it needs no such check.
+if ! git diff --quiet -- || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+    echo "pre-commit: the working tree must match the index, with no untracked inputs" >&2
+    echo "            stage the intended changes or isolate the commit; no files have been altered" >&2
+    exit 1
+fi
+
 # Keep in sync with .github/workflows/ci.yml.
 CARGO_MUTANTS_VERSION="27.1.0"
 
