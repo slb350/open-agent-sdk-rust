@@ -14,7 +14,6 @@
 # Falls back to a local run, loudly, when the host is unreachable. A commit gate
 # that silently skips itself because the LAN blipped is worse than a slow one.
 #
-#   DREP_MUTANTS_HOST    ssh target (default: steve@192.168.68.88)
 #   DREP_MUTANTS_HOST_LOCK_WAIT_SECONDS
 #                        wait for the checkout and host locks (default: 1800)
 #   DREP_MUTANTS_RSYNC_TIMEOUT_SECONDS
@@ -39,9 +38,7 @@ cd "$(git rev-parse --show-toplevel)"
 
 # The ai-1 CI role this repository's mutation runs as, here and in its hosted sweeps. The role's unit also supplies the host lock and the job count.
 AI1_CI_ROLE=open-agent-sdk-rust-mutants
-HOST="${DREP_MUTANTS_HOST:-steve@192.168.68.88}"
 REMOTE_DIR="$(remote_checkout_dir "$AI1_CI_ROLE")"
-REMOTE="$HOST:$REMOTE_DIR"
 JOBS="${MUTANTS_JOBS:-}"
 RSYNC_IO_TIMEOUT_SECONDS="${DREP_MUTANTS_RSYNC_TIMEOUT_SECONDS:-300}"
 # The tree the run builds: this checkout, or the snapshot of the index mutants-staged.sh names.
@@ -76,13 +73,13 @@ if ! . scripts/mutants-ai1-transport.sh; then
   run_local "$@"
 fi
 
-if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$HOST" true 2>/dev/null; then
-  echo "warning: $HOST is unreachable - running the mutation sweep locally instead." >&2
+if ! ai1_ssh -o BatchMode=yes -o ConnectTimeout=5 true 2>/dev/null; then
+  echo "warning: $AI1_HOST is unreachable - running the mutation sweep locally instead." >&2
   echo "         This will use this machine's CPU for the duration." >&2
   run_local "$@"
 fi
 
-echo "mutants: running on $HOST as $AI1_CI_ROLE, results mirrored back to $MUTANTS_OUT_DIR"
+echo "mutants: running on $AI1_HOST as $AI1_CI_ROLE, results mirrored back to $MUTANTS_OUT_DIR"
 
 # Keep one remote SSH process alive for the entire transaction. Its open file
 # descriptor holds the host-wide lock while this process synchronizes source,
@@ -139,14 +136,14 @@ for remote_arg in \
   REMOTE_COMMAND+=" $remote_arg_q"
 done
 
-ssh -o BatchMode=yes "$HOST" "$REMOTE_COMMAND" \
+ai1_ssh -o BatchMode=yes "$REMOTE_COMMAND" \
   <"$CONTROL_IN" >"$CONTROL_OUT" &
 REMOTE_SESSION_PID=$!
 exec 7>"$CONTROL_IN"
 exec 8<"$CONTROL_OUT"
 remote_session_open=1
 
-# shellcheck disable=SC2317,SC2329  # Invoked by the EXIT trap (SC2317 on shellcheck before 0.10, SC2329 after).
+# shellcheck disable=SC2329  # Invoked by the EXIT trap.
 cleanup_remote_session() {
   if [ "$remote_session_open" -eq 1 ]; then
     kill "$REMOTE_SESSION_PID" 2>/dev/null || true
@@ -195,13 +192,13 @@ fi
 # non-empty directories, not protected ones.
 #
 # So: --delete-excluded, which removes the excluded leftovers too.
-rsync -a --delete --force --delete-excluded \
+ai1_push -a --delete --force --delete-excluded \
   --timeout="$RSYNC_IO_TIMEOUT_SECONDS" \
-  --exclude target --exclude 'mutants.out*' \
-  --exclude .git --exclude node_modules \
-  --exclude dist --exclude build --exclude .drep \
-  --exclude '.env*' \
-  "$SOURCE/" "$REMOTE/"
+  --exclude=target --exclude='mutants.out*' \
+  --exclude=.git --exclude=node_modules \
+  --exclude=dist --exclude=build --exclude=.drep \
+  --exclude='.env*' \
+  "$SOURCE/" "$REMOTE_DIR/"
 
 # Files the run needs that the sync above skipped - in practice the staged diff,
 # which mutants-staged.sh writes under the excluded target/. Named by the caller
@@ -216,8 +213,8 @@ if [ -n "${MUTANTS_EXTRA_FILES:-}" ]; then
     fi
   done
   # shellcheck disable=SC2086  # word splitting is the interface: it is a list
-  rsync -aR --timeout="$RSYNC_IO_TIMEOUT_SECONDS" \
-    ${MUTANTS_EXTRA_FILES} "$REMOTE/"
+  ai1_push -aR --timeout="$RSYNC_IO_TIMEOUT_SECONDS" \
+    ${MUTANTS_EXTRA_FILES} "$REMOTE_DIR/"
 fi
 
 printf 'run\n' >&7
@@ -242,8 +239,8 @@ esac
 # mutants can be read here, where the fix gets written. The remote process still
 # owns the host lock here, and its unique `.run-token` proved this run reached
 # cargo-mutants rather than exposing a previous result after an early failure.
-rsync -a --timeout="$RSYNC_IO_TIMEOUT_SECONDS" \
-  "$REMOTE/$MUTANTS_OUT_DIR/" "$MUTANTS_OUT_DIR/" 2>/dev/null ||
+ai1_pull -a --timeout="$RSYNC_IO_TIMEOUT_SECONDS" \
+  "$REMOTE_DIR/$MUTANTS_OUT_DIR/" "$MUTANTS_OUT_DIR/" 2>/dev/null ||
   echo "warning: mutation completed but its result mirror failed" >&2
 printf 'mirrored\n' >&7
 

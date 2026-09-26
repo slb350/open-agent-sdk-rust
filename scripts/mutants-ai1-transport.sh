@@ -1,13 +1,7 @@
 #!/usr/bin/env bash
-# Source after HOST and AI1_CI_ROLE are assigned. Legacy explicit host overrides
-# retain their transport; ai-1 always executes inside the installed CI sandbox.
-# This private adapter accepts only the -o option pairs used by its callers.
-is_ai1_host() {
-  case "${1##*@}" in
-  192.168.68.88 | homelab-ai-1 | homelab-ai-1.local) return 0 ;;
-  *) return 1 ;;
-  esac
-}
+# The only way the mutation scripts reach homelab-ai-1, where mutation runs. Source after AI1_CI_ROLE is assigned. Every command and transfer runs there inside the installed CI sandbox as that role, through root-owned offload.py, and each function accepts only the options its callers use.
+AI1_HOST=steve@192.168.68.88
+AI1_OFFLOAD=/usr/local/lib/ai-ci/offload.py
 
 # offload.py decides which roles exist. This only keeps a missing or malformed name, or one that is not a mutation role, off the remote command line.
 ai1_role_check() {
@@ -19,8 +13,9 @@ ai1_role_check() {
   return 2
 }
 
-ssh() {
-  local options=() target command_text
+# ai1_ssh [-o OPTION]... COMMAND...: run COMMAND on ai-1 as the role.
+ai1_ssh() {
+  local options=() command_text
   while [ "$#" -gt 0 ]; do
     case "$1" in
     -o)
@@ -32,24 +27,14 @@ ssh() {
       shift 2
       ;;
     -*)
-      printf 'ai-1 transport: unsupported SSH option %s\n' "$1" >&2
+      printf 'ai-1 transport: unsupported ssh option %s\n' "$1" >&2
       return 2
       ;;
     *) break ;;
     esac
   done
   if [ "$#" -eq 0 ]; then
-    printf 'ai-1 transport: destination required\n' >&2
-    return 2
-  fi
-  target="$1"
-  shift
-  if ! is_ai1_host "$target"; then
-    command ssh ${options[@]+"${options[@]}"} "$target" "$@"
-    return
-  fi
-  if [ "$#" -eq 0 ]; then
-    printf 'ai-1 transport: a sandboxed command is required\n' >&2
+    printf 'ai-1 transport: a command is required\n' >&2
     return 2
   fi
   ai1_role_check || return $?
@@ -58,40 +43,40 @@ ssh() {
   else
     printf -v command_text '%q ' "$@"
   fi
-  printf -v command_text 'sudo /usr/local/lib/ai-ci/offload.py %q %q' "$AI1_CI_ROLE" "$command_text"
-  command ssh ${options[@]+"${options[@]}"} "$target" "$command_text"
+  printf -v command_text 'sudo %s %q %q' "$AI1_OFFLOAD" "$AI1_CI_ROLE" "$command_text"
+  command ssh ${options[@]+"${options[@]}"} "$AI1_HOST" "$command_text"
 }
 
-rsync() {
-  local argument ai1_transfer=0 rsync_path url_host
-  for argument in "$@"; do
-    case "$argument" in
-    rsync://*)
-      url_host=${argument#rsync://}
-      url_host=${url_host%%/*}
-      if is_ai1_host "${url_host%%:*}"; then
-        printf 'ai-1 transport: daemon transfers are unsupported\n' >&2
-        return 2
-      fi
-      ;;
-    --rsync-path | --rsync-path=*)
-      printf 'ai-1 transport: caller may not replace the remote execution path\n' >&2
+# ai1_push [OPTION]... LOCAL... REMOTE and ai1_pull [OPTION]... REMOTE LOCAL copy between local paths and a path relative to the role's home on ai-1. The caller names which side is remote, so no operand is ever read as a host.
+ai1_push() { ai1_rsync push "$@"; }
+ai1_pull() { ai1_rsync pull "$@"; }
+
+ai1_rsync() {
+  local direction="$1" options=() operands=() operand rsync_path last
+  shift
+  for operand in "$@"; do
+    case "$operand" in
+    -a | -aR | --delete | --force | --delete-excluded | --no-times | --omit-dir-times | --timeout=* | --exclude=* | --filter=*) options+=("$operand") ;;
+    -*)
+      printf 'ai-1 transport: unsupported rsync option %s\n' "$operand" >&2
       return 2
       ;;
-    *::*)
-      if is_ai1_host "${argument%%:*}"; then
-        printf 'ai-1 transport: daemon transfers are unsupported\n' >&2
-        return 2
-      fi
-      ;;
-    *:*) if is_ai1_host "${argument%%:*}"; then ai1_transfer=1; fi ;;
+    # rsync reads a colon before any slash as a host; ./ keeps a relative path local.
+    /*) operands+=("$operand") ;;
+    *) operands+=("./$operand") ;;
     esac
   done
-  if [ "$ai1_transfer" -eq 1 ]; then
-    ai1_role_check || return $?
-    printf -v rsync_path 'sudo /usr/local/lib/ai-ci/offload.py %q rsync' "$AI1_CI_ROLE"
-    command rsync --rsync-path="$rsync_path" "$@"
-  else
-    command rsync "$@"
+  if [ "${#operands[@]}" -lt 2 ] || { [ "$direction" = pull ] && [ "${#operands[@]}" -ne 2 ]; }; then
+    printf 'ai-1 transport: %s needs local and remote paths\n' "ai1_$direction" >&2
+    return 2
   fi
+  ai1_role_check || return $?
+  if [ "$direction" = push ]; then
+    last=$((${#operands[@]} - 1))
+    operands[last]="$AI1_HOST:${operands[last]#./}"
+  else
+    operands[0]="$AI1_HOST:${operands[0]#./}"
+  fi
+  printf -v rsync_path 'sudo %s %q rsync' "$AI1_OFFLOAD" "$AI1_CI_ROLE"
+  command rsync --rsync-path="$rsync_path" ${options[@]+"${options[@]}"} "${operands[@]}"
 }
