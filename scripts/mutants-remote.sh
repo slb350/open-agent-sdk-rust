@@ -145,7 +145,7 @@ exec 7>"$CONTROL_IN"
 exec 8<"$CONTROL_OUT"
 remote_session_open=1
 
-# shellcheck disable=SC2317,SC2329  # Invoked by the EXIT trap (SC2317 on shellcheck before 0.10, SC2329 after).
+# shellcheck disable=SC2329  # Invoked by the EXIT trap.
 cleanup_remote_session() {
   if [ "$remote_session_open" -eq 1 ]; then
     kill "$REMOTE_SESSION_PID" 2>/dev/null || true
