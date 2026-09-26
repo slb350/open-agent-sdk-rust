@@ -16,7 +16,7 @@ use process::{bash_with_fakes, repo_root, write_executable};
 fn remote_mutation_defaults_to_this_repositorys_ai1_role() {
     let script = without_comments("scripts/mutants-remote.sh");
     for expected in [
-        "HOST=\"${DREP_MUTANTS_HOST:-steve@192.168.68.88}\"".to_owned(),
+        "\nHOST=steve@192.168.68.88\n".to_owned(),
         format!("AI1_CI_ROLE={ROLE}"),
         "REMOTE_DIR=\"$(remote_checkout_dir \"$AI1_CI_ROLE\")\"".to_owned(),
     ] {

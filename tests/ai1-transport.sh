@@ -28,12 +28,11 @@ expect_refusal rsync --rsync-path=sh source steve@192.168.68.88:dest
 output=$(ssh -o BatchMode=yes steve@192.168.68.88 'printf "%s" "literal $ text"')
 [[ $output == *"$offload"* ]] || fail
 [[ $output == *'literal'* ]] || fail
-output=$(ssh -o BatchMode=yes explicit-old-host true)
-[[ $output == '<ssh><-o><BatchMode=yes><explicit-old-host><true>' ]] || fail
+expect_refusal ssh -o BatchMode=yes explicit-old-host true
 output=$(rsync -a source steve@192.168.68.88:dest)
 [[ $output == *"<--rsync-path=$offload rsync>"* ]] || fail
-output=$(rsync -a explicit-old-host:source dest)
-[[ $output == '<rsync><-a><explicit-old-host:source><dest>' ]] || fail
+expect_refusal rsync -a explicit-old-host:source dest
+expect_refusal rsync -a source dest
 output=$(ssh 192.168.68.88 true)
 [[ $output == *"$offload"* ]] || fail
 output=$(rsync homelab-ai-1.local:source dest)
@@ -42,8 +41,7 @@ expect_refusal rsync rsync://192.168.68.88/module dest
 expect_refusal rsync 192.168.68.88::module dest
 expect_refusal rsync homelab-ai-1.local::module dest
 expect_refusal rsync steve@192.168.68.88::module dest
-output=$(rsync rsync://legacy-host/module/homelab-ai-1 dest)
-[[ $output == '<rsync><rsync://legacy-host/module/homelab-ai-1><dest>' ]] || fail
+expect_refusal rsync rsync://legacy-host/module/homelab-ai-1 dest
 # Decode only this fixed test payload through a mocked sudo; never contact SSH.
 command() {
   local last
