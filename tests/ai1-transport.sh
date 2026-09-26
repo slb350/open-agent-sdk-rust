@@ -13,35 +13,30 @@ offload="sudo /usr/local/lib/ai-ci/offload.py $expected_role"
 AI1_CI_ROLE=$expected_role
 # shellcheck source=scripts/mutants-ai1-transport.sh
 . "$(dirname "${BASH_SOURCE[0]}")/../scripts/mutants-ai1-transport.sh"
-# shellcheck disable=SC2329 # Called indirectly by the sourced transport wrappers.
+# shellcheck disable=SC2329 # Called indirectly by the sourced transport functions.
 command() { printf '<%s>' "$@"; }
 expect_refusal() {
   local status=0 output
   output=$("$@" 2>/dev/null) || status=$?
   [[ $status == 2 && -z $output ]] || fail
 }
-expect_refusal ssh -t steve@192.168.68.88 true
-expect_refusal ssh -o
-expect_refusal ssh
-expect_refusal ssh homelab-ai-1
-expect_refusal rsync --rsync-path=sh source steve@192.168.68.88:dest
-output=$(ssh -o BatchMode=yes steve@192.168.68.88 'printf "%s" "literal $ text"')
-[[ $output == *"$offload"* ]] || fail
-[[ $output == *'literal'* ]] || fail
-expect_refusal ssh -o BatchMode=yes explicit-old-host true
-output=$(rsync -a source steve@192.168.68.88:dest)
-[[ $output == *"<--rsync-path=$offload rsync>"* ]] || fail
-expect_refusal rsync -a explicit-old-host:source dest
-expect_refusal rsync -a source dest
-output=$(ssh 192.168.68.88 true)
-[[ $output == *"$offload"* ]] || fail
-output=$(rsync homelab-ai-1.local:source dest)
-[[ $output == *"<--rsync-path=$offload rsync>"* ]] || fail
-expect_refusal rsync rsync://192.168.68.88/module dest
-expect_refusal rsync 192.168.68.88::module dest
-expect_refusal rsync homelab-ai-1.local::module dest
-expect_refusal rsync steve@192.168.68.88::module dest
-expect_refusal rsync rsync://legacy-host/module/homelab-ai-1 dest
+expect_refusal ai1_ssh -t true
+expect_refusal ai1_ssh -o
+expect_refusal ai1_ssh
+output=$(ai1_ssh -o BatchMode=yes true)
+[[ $output == "<ssh><-o><BatchMode=yes><steve@192.168.68.88><$offload true>" ]] || fail
+for refused in "-e ssh" --rsh=other --rsync-path=sh --exclude; do
+  expect_refusal ai1_push -a "$refused" source/ remote/
+done
+expect_refusal ai1_push -a source/
+expect_refusal ai1_pull -a remote/ local/ extra/
+output=$(ai1_push -a --exclude=target source/ remote/dir/)
+[[ $output == "<rsync><--rsync-path=$offload rsync><-a><--exclude=target><./source/><steve@192.168.68.88:remote/dir/>" ]] || fail
+# A local path holding a colon stays local, relative or absolute.
+output=$(ai1_push -aR a:b/f /tmp/c:d/f remote/)
+[[ $output == "<rsync><--rsync-path=$offload rsync><-aR><./a:b/f></tmp/c:d/f><steve@192.168.68.88:remote/>" ]] || fail
+output=$(ai1_pull -a remote/out/ out/)
+[[ $output == "<rsync><--rsync-path=$offload rsync><-a><steve@192.168.68.88:remote/out/><./out/>" ]] || fail
 # Decode only this fixed test payload through a mocked sudo; never contact SSH.
 command() {
   local last
@@ -53,10 +48,9 @@ sudo() {
   printf '%s' "$3"
 }
 payload='printf "%s" "literal $ text"'
-# shellcheck disable=SC2029 # Exercise local argument quoting through the mocked transport.
-output=$(ssh 192.168.68.88 "$payload")
+output=$(ai1_ssh "$payload")
 [[ $output == "$payload" ]] || fail
 for AI1_CI_ROLE in 'bad; role' '' drep-linux Drep-mutants; do
-  expect_refusal ssh steve@192.168.68.88 true
-  expect_refusal rsync source steve@192.168.68.88:dest
+  expect_refusal ai1_ssh true
+  expect_refusal ai1_push source/ remote/
 done
