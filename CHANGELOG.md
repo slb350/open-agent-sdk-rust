@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Maintenance
 
+- Updated the immutable `taiki-e/install-action` pin to v2.87.21 and kept the
+  exact workflow policy assertion aligned, resolving the failed Dependabot
+  action-update checks. Declared the mutation runner's custom labels for
+  actionlint so the complete workflow passes local linting.
 - Updated direct `rand` from 0.10.2 to 0.10.3, advanced the immutable
   `taiki-e/install-action` pin to v2.87.17, and updated the unlocked
   cargo-tarpaulin coverage tool to 0.37.3.

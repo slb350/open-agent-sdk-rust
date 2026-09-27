@@ -1,0 +1,4 @@
+self-hosted-runner:
+  labels:
+    - homelab-ai-1
+    - open-agent-sdk-rust-mutants
