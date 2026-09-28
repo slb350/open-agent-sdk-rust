@@ -6,7 +6,7 @@
 //! parallel request builders drifting apart, which is the defect this arrangement exists to
 //! prevent.
 //!
-//! Three shape differences carry real logic rather than field renaming:
+//! Four differences carry real logic rather than field renaming:
 //!
 //! - **The system prompt is not a message.** OpenAI puts it in the `messages` array with
 //!   `role: "system"`; Anthropic takes it as a top-level `system` field. Multiple system
