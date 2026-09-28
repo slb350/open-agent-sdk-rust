@@ -4,6 +4,12 @@ use std::{fs, path::Path, process::Command};
 
 use tempfile::TempDir;
 
+#[path = "support/mutation.rs"]
+mod mutation;
+#[path = "support/process.rs"]
+mod process;
+use mutation::isolated;
+
 const SCOPE_SCRIPT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/scripts/mutants-ci-scope.sh");
 
 struct Repository {
@@ -34,9 +40,8 @@ impl Repository {
         fs::create_dir_all(destination.parent().expect("fixture path has a parent"))
             .expect("create fixture parent");
         fs::write(destination, contents).expect("write fixture");
-        let ignored = Command::new("git")
+        let ignored = isolated("git", self.path())
             .args(["check-ignore", "--quiet", "--", path])
-            .current_dir(self.path())
             .output()
             .expect("check fixture ignore rules");
         assert_eq!(ignored.status.code(), Some(1), "{path}: {ignored:?}");
@@ -49,11 +54,10 @@ impl Repository {
     }
 
     fn scope(&self, base: &str) -> Vec<String> {
-        let output = Command::new("bash")
+        let output = isolated("bash", self.path())
             .arg(SCOPE_SCRIPT)
             .arg(base)
             .arg("HEAD")
-            .current_dir(self.path())
             .output()
             .expect("run mutation scope classifier");
         assert!(output.status.success(), "{output:?}");
@@ -65,16 +69,7 @@ impl Repository {
     }
 
     fn git(&self, args: &[&str]) -> String {
-        let output = Command::new("git")
-            .args(args)
-            .current_dir(self.path())
-            .output()
-            .expect("run git");
-        assert!(output.status.success(), "git {args:?}: {output:?}");
-        String::from_utf8(output.stdout)
-            .expect("git output is UTF-8")
-            .trim()
-            .to_owned()
+        mutation::git(self.path(), args).trim().to_owned()
     }
 }
 
@@ -213,4 +208,60 @@ fn production_changes_after_an_inline_test_module_do_not_start_mutation_ci() {
     repository.commit("modify production after inline tests");
 
     assert_eq!(repository.scope(&base), ["none"]);
+}
+
+/// What a fixture leaking into a repository would change: what HEAD names, its configuration, its index and its branches.
+fn repository_state(git_dir: &Path) -> (Vec<u8>, Vec<u8>, Option<Vec<u8>>, Vec<String>) {
+    let mut branches: Vec<String> = fs::read_dir(git_dir.join("refs").join("heads"))
+        .expect("list the branches")
+        .map(|entry| {
+            entry
+                .expect("read a branch")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    branches.sort();
+    (
+        fs::read(git_dir.join("HEAD")).expect("read HEAD"),
+        fs::read(git_dir.join("config")).expect("read the configuration"),
+        fs::read(git_dir.join("index")).ok(),
+        branches,
+    )
+}
+
+/// A pre-commit hook runs this suite with what git exports to it: the committing repository's `GIT_DIR` and `GIT_INDEX_FILE`, and any `-c` configuration. Its fixtures must still act only on their own repositories.
+#[test]
+fn fixtures_leave_the_repository_a_hook_runs_them_in_alone() {
+    let enclosing = TempDir::new().expect("create the enclosing repository");
+    mutation::git(enclosing.path(), &["init", "--quiet"]);
+    let git_dir = enclosing.path().join(".git");
+    let before = repository_state(&git_dir);
+
+    let output = Command::new(std::env::current_exe().expect("this test binary"))
+        .args([
+            "modified_inline_test_scopes_mutants_to_its_owning_source_file",
+            "--exact",
+            "--test-threads=1",
+        ])
+        .env("GIT_DIR", &git_dir)
+        .env("GIT_INDEX_FILE", git_dir.join("index"))
+        // A `-c` setting the fixtures must not inherit: signing through `false` fails every commit.
+        .env(
+            "GIT_CONFIG_PARAMETERS",
+            "'commit.gpgsign'='true' 'gpg.program'='false'",
+        )
+        .output()
+        .expect("run a fixture test under a hook's environment");
+
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("1 passed"),
+        "the child ran its one test cleanly: {output:?}"
+    );
+    assert_eq!(
+        repository_state(&git_dir),
+        before,
+        "a fixture changed the enclosing repository"
+    );
 }
