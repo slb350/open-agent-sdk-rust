@@ -483,7 +483,9 @@ cargo test --test mutation_ci_scope_test
 
 ## Scheduled Maintenance
 
-Jobsy on homelab-ai-1 runs this repository's scheduled maintenance as a weekly dependency-security job and a weekly improvement job. Each job works in a fresh checkout of main and opens a draft pull request from a `jobsy/` branch. No job pushes main, creates tags, or publishes to crates.io. Mutation testing runs in CI on the pull request, scoped by `scripts/mutants-ci-scope.sh`. Merging and releasing are manual until the review policy is settled.
+Jobsy on homelab-ai-1 runs this repository's scheduled maintenance as a weekly dependency-security job and a weekly improvement job. Each works in a fresh checkout of main and opens a draft pull request from a `jobsy/` branch. Mutation testing runs in CI on the pull request, scoped by `scripts/mutants-ci-scope.sh`.
+
+A daily Jobsy review job reviews each open `jobsy/` pull request against this file, fixes it on its own branch when it is not solid, and merges it with a merge commit once every check on the reviewed head has passed; Jobsy refuses the merge otherwise. A weekly Jobsy release job decides under the release rules in this file whether the merged work warrants a release, and if so opens a `jobsy/release/` pull request that bumps the version and moves the changelog entries. When that pull request merges, Jobsy pushes the annotated tag `vX.Y.Z` on the merge commit, and `publish-crate.yml` publishes that commit to crates.io through trusted publishing, then creates the GitHub release from that version's changelog section. No Jobsy job pushes main directly or publishes from its own host.
 
 ## Security Advisories (resolved in v0.6.5, current v0.11.3)
 
