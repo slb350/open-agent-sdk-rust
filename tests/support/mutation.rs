@@ -5,6 +5,7 @@ use std::fs;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::OnceLock;
 
 use tempfile::TempDir;
 
@@ -134,15 +135,39 @@ pub(crate) fn isolated(program: &str, repository: &Path) -> Command {
 /// Runs `command` in `repository` without the Git environment of a hook this suite may be running under.
 pub(crate) fn away_from_outer_git(command: &mut Command, repository: &Path) {
     command.current_dir(repository);
-    for variable in [
-        "GIT_DIR",
-        "GIT_INDEX_FILE",
-        "GIT_WORK_TREE",
-        "GIT_OBJECT_DIRECTORY",
-        "GIT_COMMON_DIR",
-    ] {
+    for variable in outer_git_environment() {
         command.env_remove(variable);
     }
+}
+
+/// What a fixture's git must not inherit from a hook: every variable git itself calls repository-local (`git rev-parse --local-env-vars`: the repository, its index and object store, and `-c` configuration), the commit identity a hook exports, and a receiving push's quarantine.
+fn outer_git_environment() -> &'static [String] {
+    static VARIABLES: OnceLock<Vec<String>> = OnceLock::new();
+    VARIABLES.get_or_init(|| {
+        let output = Command::new("git")
+            .args(["rev-parse", "--local-env-vars"])
+            .output()
+            .expect("list git's repository-local environment");
+        assert!(output.status.success(), "{output:?}");
+        let mut variables: Vec<String> = String::from_utf8(output.stdout)
+            .expect("git output is UTF-8")
+            .lines()
+            .map(str::to_owned)
+            .collect();
+        variables.extend(
+            [
+                "GIT_AUTHOR_NAME",
+                "GIT_AUTHOR_EMAIL",
+                "GIT_AUTHOR_DATE",
+                "GIT_COMMITTER_NAME",
+                "GIT_COMMITTER_EMAIL",
+                "GIT_COMMITTER_DATE",
+                "GIT_QUARANTINE_PATH",
+            ]
+            .map(str::to_owned),
+        );
+        variables
+    })
 }
 
 pub(crate) fn git(repository: &Path, arguments: &[&str]) -> String {
