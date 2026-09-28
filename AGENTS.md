@@ -340,13 +340,14 @@ Context management is **opt-in** — the SDK never silently mutates history.
 ### Retry
 
 ```rust
+use std::time::Duration;
 use open_agent::retry::{RetryConfig, retry_with_backoff, retry_with_backoff_conditional, is_retryable_error};
 
 let config = RetryConfig::default()  // 3 attempts, exponential backoff
-    .max_attempts(5)
-    .initial_delay_ms(100)
-    .max_delay_ms(5000)
-    .backoff_multiplier(2.0);
+    .with_max_attempts(5)
+    .with_initial_delay(Duration::from_millis(100))
+    .with_max_delay(Duration::from_millis(5000))
+    .with_backoff_multiplier(2.0);
 
 let result = retry_with_backoff(config, || async { some_op().await }).await?;
 ```
