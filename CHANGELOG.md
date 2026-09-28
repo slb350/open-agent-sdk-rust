@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.4] - 2026-09-28
+
 ### Changed
 
 - Mutation testing moved to homelab-ai-1, where every mutation workload now runs. The CI sweep runs on this repository's `open-agent-sdk-rust-mutants` runner there instead of a GitHub-hosted runner, starts from a clean checkout, and never runs for pull requests from forks. The local hook offloads to the same role instead of Strix.
@@ -25,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   empty text part of `Message::user_with_image("", url)`, and omits a turn left with no
   content. The API combines consecutive user turns, so the `tool_result` turn continues the
   conversation. Conversation history and the OpenAI wire format are unchanged.
+- Keep the repository-only `tests/mutation_locks_test.rs` out of crate archives. It includes
+  `tests/support/`, which the archive already excludes, so an unpacked crate's test suite
+  failed to compile.
 
 ### Security
 
