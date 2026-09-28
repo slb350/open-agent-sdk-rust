@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mutation offloads go only to homelab-ai-1. `DREP_MUTANTS_HOST` is removed and the transport owns the host: callers use `ai1_ssh`, `ai1_push` and `ai1_pull`, which accept only the options the scripts use, in place of `ssh` and `rsync` wrappers that parsed every argument for a host. A host set in `DREP_MUTANTS_HOST` had no role unit to name the host lock, so the session aborted without running or falling back.
 - The staged hook mutation-tests what is being committed: it writes the index to a tree, builds a copy of that tree on ai-1 or locally, and fails if the index changed during the run, because `git commit` reads the index after the hook. Unstaged edits and untracked files no longer reach the run. The hook itself refuses a working tree that differs from the index, or has untracked inputs, before running fmt, clippy or the tests, which read the working tree.
 
+### Fixed
+
+- Tool continuations over `ApiProtocol::Anthropic` no longer send empty text, which the
+  Messages API schema forbids (text blocks have `minLength: 1`, and a string `content` is
+  shorthand for one text block). Every `Client` tool round sent it twice, in both automatic
+  execution and the documented `add_tool_result` + `send("")` pattern: an empty text block
+  beside a tool-only assistant turn's `tool_use`, and an empty user turn after the
+  `tool_result` turn. `AnthropicRequest::from_openai` now drops empty text, including the
+  empty text part of `Message::user_with_image("", url)`, and omits a turn left with no
+  content. The API combines consecutive user turns, so the `tool_result` turn continues the
+  conversation. Conversation history and the OpenAI wire format are unchanged.
+
 ### Security
 
 - Updated locked `rustls` from 0.23.44 to 0.23.45, resolving

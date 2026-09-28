@@ -221,6 +221,89 @@ fn malformed_tool_arguments_become_an_empty_object() {
 }
 
 #[test]
+fn an_empty_text_part_beside_an_image_is_dropped() {
+    // `Message::user_with_image("", url)` builds exactly this turn. The image is the whole of
+    // what the caller said, and an empty text block beside it would fail the request.
+    let user = OpenAIMessage {
+        role: "user".to_string(),
+        content: Some(OpenAIContent::Parts(vec![
+            OpenAIContentPart::text(""),
+            OpenAIContentPart::ImageUrl {
+                image_url: OpenAIImageUrl {
+                    url: "https://example.com/a.png".to_string(),
+                    detail: None,
+                },
+            },
+        ])),
+        tool_calls: None,
+        tool_call_id: None,
+    };
+
+    let out = wire(&request_with(vec![user]));
+
+    assert_eq!(
+        out["messages"][0]["content"],
+        json!([{
+            "type": "image",
+            "source": { "type": "url", "url": "https://example.com/a.png" },
+        }])
+    );
+}
+
+#[test]
+fn a_tool_continuation_carries_no_empty_text() {
+    // Anthropic text blocks have `minLength: 1`, and a string `content` is shorthand for one
+    // text block. `Client` history carries empty text twice on a tool continuation, and
+    // neither may reach the wire. The tool-only assistant turn keeps an empty `content` for
+    // OpenAI-compatible servers, which require the field; here only its call is sent.
+    let assistant = OpenAIMessage {
+        role: "assistant".to_string(),
+        content: Some(OpenAIContent::Text(String::new())),
+        tool_calls: Some(vec![OpenAIToolCall {
+            id: "call_1".to_string(),
+            call_type: "function".to_string(),
+            function: OpenAIFunction {
+                name: "search".to_string(),
+                arguments: r#"{"q":"rust"}"#.to_string(),
+            },
+        }]),
+        tool_call_id: None,
+    };
+    // `send("")` then appends an empty user turn. Anthropic has no empty turn, and the
+    // tool-result turn is already the user turn that continues the conversation.
+    let result = OpenAIMessage {
+        role: "tool".to_string(),
+        content: Some(OpenAIContent::Text("42".to_string())),
+        tool_calls: None,
+        tool_call_id: Some("call_1".to_string()),
+    };
+
+    let out = wire(&request_with(vec![
+        message("user", "hi"),
+        assistant,
+        result,
+        message("user", ""),
+    ]));
+
+    assert_eq!(
+        out["messages"],
+        json!([
+            { "role": "user", "content": "hi" },
+            {
+                "role": "assistant",
+                "content": [{
+                    "type": "tool_use", "id": "call_1", "name": "search", "input": { "q": "rust" },
+                }],
+            },
+            {
+                "role": "user",
+                "content": [{ "type": "tool_result", "tool_use_id": "call_1", "content": "42" }],
+            },
+        ])
+    );
+}
+
+#[test]
 fn a_tool_result_becomes_a_user_turn() {
     let result = OpenAIMessage {
         role: "tool".to_string(),

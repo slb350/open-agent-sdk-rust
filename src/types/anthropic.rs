@@ -6,7 +6,7 @@
 //! parallel request builders drifting apart, which is the defect this arrangement exists to
 //! prevent.
 //!
-//! Three shape differences carry real logic rather than field renaming:
+//! Four differences carry real logic rather than field renaming:
 //!
 //! - **The system prompt is not a message.** OpenAI puts it in the `messages` array with
 //!   `role: "system"`; Anthropic takes it as a top-level `system` field. Multiple system
@@ -17,6 +17,12 @@
 //!   answers only some of the outstanding calls.
 //! - **Tool schemas are flat.** OpenAI nests under `function` and calls the schema
 //!   `parameters`; Anthropic puts `name`/`description`/`input_schema` at the top level.
+//! - **Text is never empty.** Anthropic text blocks have `minLength: 1`, and a string
+//!   `content` is shorthand for one text block. The OpenAI-shaped history carries empty text
+//!   on every tool continuation: the `content: ""` kept beside a tool-only assistant turn's
+//!   calls, and the empty user turn `send("")` appends. Empty text is dropped, and so is a
+//!   turn left with nothing to say. The API combines consecutive user turns, so the
+//!   tool-result turn is itself the user turn that continues the conversation.
 
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -89,7 +95,7 @@ impl AnthropicRequest {
                     }
                 }
                 "tool" => push_tool_result(&mut messages, message),
-                _ => messages.push(convert_turn(message)),
+                _ => messages.extend(convert_turn(message)),
             }
         }
 
@@ -128,21 +134,28 @@ fn plain_text(message: &OpenAIMessage) -> Option<String> {
     }
 }
 
-/// Converts a user or assistant turn.
+/// Converts a user or assistant turn, or `None` when it has nothing to say.
 ///
 /// An assistant turn carrying tool calls becomes a block array: its text first (when it said
 /// anything alongside the calls), then one `tool_use` block per call, in the order the model
 /// requested them.
-fn convert_turn(message: &OpenAIMessage) -> AnthropicMessage {
+///
+/// A turn with no text, images or calls has no Anthropic representation, so it is dropped.
+/// The turn this exists for is the empty user turn `send("")` appends to continue a tool
+/// round, where the tool-result turn before it already continues the conversation. Dropped
+/// after an assistant turn instead, it leaves that turn last: a prefill, which the Messages
+/// API continues and models without prefill support reject. An empty turn was never a valid
+/// request, so neither outcome replaces one that worked.
+fn convert_turn(message: &OpenAIMessage) -> Option<AnthropicMessage> {
     // A text-only turn serializes as a bare string, which is what the API's own examples show
     // and what keeps a simple request readable on the wire. The decision reads the source
     // message rather than re-inspecting the JSON a sibling function just built, so it does not
     // depend on the shape of a literal no type checks.
     if let Some(text) = bare_text(message) {
-        return AnthropicMessage {
+        return Some(AnthropicMessage {
             role: message.role.clone(),
             content: Value::String(text),
-        };
+        });
     }
 
     let mut blocks = content_blocks(message);
@@ -163,48 +176,55 @@ fn convert_turn(message: &OpenAIMessage) -> AnthropicMessage {
         }
     }
 
-    AnthropicMessage {
+    (!blocks.is_empty()).then(|| AnthropicMessage {
         role: message.role.clone(),
         content: Value::Array(blocks),
-    }
+    })
 }
 
-/// The turn's content as a bare string, when it is text and nothing else.
+/// The turn's content as a bare string, when it is non-empty text and nothing else.
 ///
-/// A turn carrying tool calls, images, or several parts needs the block array, and a turn
-/// with no content at all becomes an empty one.
+/// A turn carrying tool calls, images, or several parts needs the block array. Empty text is
+/// not a bare string either: a string `content` is one text block, and text blocks cannot be
+/// empty.
 fn bare_text(message: &OpenAIMessage) -> Option<String> {
     if message.tool_calls.is_some() {
         return None;
     }
 
-    match message.content.as_ref()? {
-        OpenAIContent::Text(text) => Some(text.clone()),
+    let text = match message.content.as_ref()? {
+        OpenAIContent::Text(text) => text,
         OpenAIContent::Parts(parts) => match parts.as_slice() {
-            [OpenAIContentPart::Text { text }] => Some(text.clone()),
-            _ => None,
+            [OpenAIContentPart::Text { text }] => text,
+            _ => return None,
         },
-    }
+    };
+    (!text.is_empty()).then(|| text.clone())
 }
 
-/// The typed content blocks of a message, excluding tool calls.
+/// The typed content blocks of a message, excluding tool calls and empty text.
 fn content_blocks(message: &OpenAIMessage) -> Vec<Value> {
     match message.content.as_ref() {
         None => Vec::new(),
-        Some(OpenAIContent::Text(text)) => vec![json!({ "type": "text", "text": text })],
-        Some(OpenAIContent::Parts(parts)) => parts.iter().map(convert_part).collect(),
+        Some(OpenAIContent::Text(text)) => text_block(text).into_iter().collect(),
+        Some(OpenAIContent::Parts(parts)) => parts.iter().filter_map(convert_part).collect(),
     }
 }
 
-/// Converts one OpenAI content part.
+/// A text block, or `None` for empty text, which Anthropic rejects (`minLength: 1`).
+fn text_block(text: &str) -> Option<Value> {
+    (!text.is_empty()).then(|| json!({ "type": "text", "text": text }))
+}
+
+/// Converts one OpenAI content part, or `None` for an empty text part.
 ///
 /// A `data:` URI carries the bytes inline and becomes a `base64` source; anything else is
 /// passed through as a `url` source. Splitting on the scheme rather than fetching keeps this
 /// a pure transform.
-fn convert_part(part: &OpenAIContentPart) -> Value {
+fn convert_part(part: &OpenAIContentPart) -> Option<Value> {
     match part {
-        OpenAIContentPart::Text { text } => json!({ "type": "text", "text": text }),
-        OpenAIContentPart::ImageUrl { image_url } => match parse_data_uri(&image_url.url) {
+        OpenAIContentPart::Text { text } => text_block(text),
+        OpenAIContentPart::ImageUrl { image_url } => Some(match parse_data_uri(&image_url.url) {
             Some((media_type, data)) => json!({
                 "type": "image",
                 "source": { "type": "base64", "media_type": media_type, "data": data },
@@ -213,7 +233,7 @@ fn convert_part(part: &OpenAIContentPart) -> Value {
                 "type": "image",
                 "source": { "type": "url", "url": image_url.url },
             }),
-        },
+        }),
     }
 }
 

@@ -1,10 +1,11 @@
-//! End-to-end coverage of the Anthropic protocol through `query()`.
+//! End-to-end coverage of the Anthropic protocol through `query()` and `Client`.
 //!
 //! The unit tests under `src/` cover the translation and the accumulator in isolation. What
 //! only an integration test can establish is that `stream_request` actually selects them:
 //! the path it posts to, the headers it sets, the body it serializes, and the vocabulary it
 //! parses the answer with. A protocol wired up to the wrong half of any of those still
-//! passes every unit test in the crate.
+//! passes every unit test in the crate. The same holds for the history `Client` replays on a
+//! tool continuation, which only the real request assembly produces.
 
 mod common;
 
@@ -14,9 +15,13 @@ use common::{
 };
 use futures::StreamExt;
 use open_agent::{
-    AgentOptions, AgentOptionsBuilder, ApiProtocol, ContentBlock, FinishReason, StreamEvent, query,
+    AgentOptions, AgentOptionsBuilder, ApiProtocol, Client, ContentBlock, FinishReason,
+    StreamEvent, query, tool,
 };
-use wiremock::MockServer;
+use serde_json::json;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 /// A builder pointing at `server` and speaking Anthropic, for tests that need one more field.
 ///
@@ -285,6 +290,120 @@ async fn a_tool_call_arrives_as_a_tool_use_block() {
         other => panic!("expected a tool call, got {other:?}"),
     }
     assert_eq!(sole_finish_reason(&events), FinishReason::ToolCalls);
+}
+
+/// A server that asks for `add({"a":1})` on the first request and answers `done` after.
+async fn tool_round_server() -> MockServer {
+    let tool_call = [
+        anthropic_frame(
+            "content_block_start",
+            json!({
+                "type": "content_block_start", "index": 0,
+                "content_block": {
+                    "type": "tool_use", "id": "toolu_1", "name": "add", "input": {},
+                },
+            }),
+        ),
+        anthropic_frame(
+            "content_block_delta",
+            json!({
+                "type": "content_block_delta", "index": 0,
+                "delta": { "type": "input_json_delta", "partial_json": "{\"a\":1}" },
+            }),
+        ),
+        anthropic_frame(
+            "content_block_stop",
+            json!({ "type": "content_block_stop", "index": 0 }),
+        ),
+        anthropic_frame(
+            "message_delta",
+            json!({
+                "type": "message_delta",
+                "delta": { "stop_reason": "tool_use", "stop_sequence": null },
+            }),
+        ),
+    ]
+    .concat();
+    let requests = AtomicUsize::new(0);
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .respond_with(move |_: &Request| {
+            let body = if requests.fetch_add(1, Ordering::SeqCst) == 0 {
+                tool_call.clone()
+            } else {
+                anthropic_text_response("done", "end_turn")
+            };
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(body)
+        })
+        .expect(2)
+        .mount(&server)
+        .await;
+    server
+}
+
+#[tokio::test]
+async fn a_tool_continuation_sends_no_empty_text() {
+    // Both continuations append an empty user turn with `send("")`, and a tool-only assistant
+    // turn carries an empty `content` for OpenAI-compatible servers. Anthropic text blocks
+    // have `minLength: 1`, so either one reaching the wire makes every tool round an invalid
+    // request.
+    for auto in [false, true] {
+        let server = tool_round_server().await;
+        let options = anthropic_builder(&server)
+            .tool(
+                tool("add", "Add one")
+                    .param("a", "number")
+                    .build(|_| async { Ok(json!({ "sum": 2 })) }),
+            )
+            .auto_execute_tools(auto)
+            .build()
+            .expect("options build");
+        let mut client = Client::new(options).expect("client builds");
+        client.send("add one").await.expect("first request");
+
+        if auto {
+            let mut output = Vec::new();
+            while let Some(block) = client.receive().await.expect("auto round") {
+                output.push(block);
+            }
+            assert_eq!(common::text_of(&output), "done");
+        } else {
+            let Some(ContentBlock::ToolUse(call)) = client.receive().await.expect("tool call")
+            else {
+                panic!("expected a tool call");
+            };
+            client
+                .add_tool_result(call.id(), json!({ "sum": 2 }))
+                .expect("result recorded");
+            client.send("").await.expect("continuation");
+        }
+
+        let requests = server.received_requests().await.expect("records requests");
+        let continuation: serde_json::Value = requests[1].body_json().expect("body is JSON");
+        assert_eq!(
+            continuation["messages"],
+            json!([
+                { "role": "user", "content": "add one" },
+                {
+                    "role": "assistant",
+                    "content": [{
+                        "type": "tool_use", "id": "toolu_1", "name": "add", "input": { "a": 1 },
+                    }],
+                },
+                {
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result", "tool_use_id": "toolu_1", "content": "{\"sum\":2}",
+                    }],
+                },
+            ]),
+            "auto: {auto}"
+        );
+    }
 }
 
 #[tokio::test]

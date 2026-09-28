@@ -63,7 +63,7 @@ open-agent-sdk-rust/
 ├── benches/
 │   └── performance.rs               # Criterion benchmarks
 ├── tests/                         # Loopback protocol, lifecycle, validation, and infrastructure tests
-│   ├── anthropic_protocol_test.rs           # End-to-end Anthropic protocol path through query()
+│   ├── anthropic_protocol_test.rs           # End-to-end Anthropic protocol path through query() and Client tool continuations
 │   ├── auto_execution_test.rs               # Optional provider smoke; deterministic behavior via mock-server tests
 │   ├── ci_workflow_policy_test.rs           # CI workflow YAML policy assertions (pinned actions, permissions)
 │   ├── config_env_test.rs                   # Environment-dependent provider helper isolation
@@ -464,6 +464,7 @@ cargo test --test mutation_ci_scope_test
 - The builder validates `temperature` through `Temperature::new`, the exported newtype that exists for exactly that range and message. Do not re-inline the check; the two copies this replaced spelled the same bound and the same error string.
 - `parse_data_uri` (Anthropic translation) and `ImageBlock::from_url` must agree on where a `data:` URI's media type ends: at the first `;`, with anything up to `;base64,` being a parameter such as `charset`. They disagreed, so a URI the SDK accepted reached Anthropic with a media type it rejects.
 - The Anthropic tool-result merge does **not** check the message role, and adding that check would be unfalsifiable code: a content array opening with a `tool_result` is only ever built by `push_tool_result`, which always writes `role: "user"`. The mutation gate found the redundant check as a survivor.
+- The Anthropic translation never emits empty text. Messages API text blocks have `minLength: 1`, and a string `content` is shorthand for one text block. Every tool continuation carries empty text in history: the explicit `content: ""` that OpenAI-compatible servers expect beside a tool-only assistant turn's calls, and the empty user turn `send("")` appends. `text_block` drops empty text, `bare_text` never returns it, and `convert_turn` omits a turn left with no content. Do not fix this by changing `send("")` or `history_messages`: history and the OpenAI wire format depend on both, and the API combines consecutive user turns, so the `tool_result` turn already continues the conversation.
 - `RetryConfig::max_delay` is a hard ceiling: jitter is applied after the exponential cap, so the jittered result must be clamped to `max_delay` before it becomes a `Duration`.
 - Commit format: `type(scope): description` (feat, fix, docs, test, refactor, chore)
 - Dependency updates: Dependabot runs weekly (grouped Cargo updates) — resolve security advisories promptly
