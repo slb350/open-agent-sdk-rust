@@ -231,7 +231,7 @@ fn repository_state(git_dir: &Path) -> (Vec<u8>, Vec<u8>, Option<Vec<u8>>, Vec<S
     )
 }
 
-/// A pre-commit hook runs this suite with what git exports to it: the committing repository's `GIT_DIR` and `GIT_INDEX_FILE`, and any `-c` configuration. Its fixtures must still act only on their own repositories.
+/// A pre-commit hook runs this suite with what git exports to it: the committing repository's `GIT_DIR` and `GIT_INDEX_FILE`, and any `-c` configuration. Every other test here, run as the hook would run it, must still act only on its own repository.
 #[test]
 fn fixtures_leave_the_repository_a_hook_runs_them_in_alone() {
     let enclosing = TempDir::new().expect("create the enclosing repository");
@@ -241,8 +241,8 @@ fn fixtures_leave_the_repository_a_hook_runs_them_in_alone() {
 
     let output = Command::new(std::env::current_exe().expect("this test binary"))
         .args([
-            "modified_inline_test_scopes_mutants_to_its_owning_source_file",
-            "--exact",
+            "--skip",
+            "fixtures_leave_the_repository_a_hook_runs_them_in_alone",
             "--test-threads=1",
         ])
         .env("GIT_DIR", &git_dir)
@@ -255,9 +255,10 @@ fn fixtures_leave_the_repository_a_hook_runs_them_in_alone() {
         .output()
         .expect("run a fixture test under a hook's environment");
 
+    let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        String::from_utf8_lossy(&output.stdout).contains("1 passed"),
-        "the child ran its one test cleanly: {output:?}"
+        stdout.contains("test result: ok.") && !stdout.contains("ok. 0 passed"),
+        "every other fixture test ran cleanly: {output:?}"
     );
     assert_eq!(
         repository_state(&git_dir),
