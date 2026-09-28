@@ -63,6 +63,9 @@ The protocol is a property of the endpoint, set with `.protocol(..)` and default
 
 Extended thinking arrives on the existing reasoning channel (`StreamEvent::Reasoning`, opt in
 with `.include_reasoning(true)`), and tool calls as ordinary `ContentBlock::ToolUse` blocks.
+Tool continuations (automatic execution, or `add_tool_result` followed by `send("")`) replay
+in Anthropic's shape. The Messages API schema forbids empty text, so empty text and turns with
+no content are left out of the request; history keeps them.
 
 Third-party Anthropic-compatible endpoints are not uniform, and the SDK invents nothing on
 their behalf: `api.kimi.com/coding/v1` requires `max_tokens` and answers a bare
@@ -1403,7 +1406,7 @@ open-agent-sdk-rust/
 ├── benches/
 │   └── performance.rs               # Criterion benchmarks (token estimation, history ops)
 ├── tests/                         # Loopback protocol, lifecycle, validation, and infrastructure tests
-│   ├── anthropic_protocol_test.rs           # End-to-end Anthropic protocol path through query()
+│   ├── anthropic_protocol_test.rs           # End-to-end Anthropic protocol path through query() and Client tool continuations
 │   ├── auto_execution_test.rs               # Optional provider smoke; deterministic behavior via mock-server tests
 │   ├── ci_workflow_policy_test.rs           # CI workflow YAML policy assertions (pinned actions, permissions)
 │   ├── config_env_test.rs                   # Environment-dependent provider helper isolation
