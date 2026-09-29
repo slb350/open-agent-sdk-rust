@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The publish workflow writes the release notes to the runner's temporary directory instead of the checkout, where `cargo publish --locked` refused them as an uncommitted file. A re-run that finds its version already on crates.io uploads nothing and creates only the GitHub release when every file of the published crate matches a package built from the tag's commit, and fails on any difference. The publish job runs in a `release` environment that deploys only from `v*` tags, which only repository admins can create, as crates.io recommends for trusted publishing.
+
 ## [0.11.4] - 2026-09-29
 
 ### Changed
