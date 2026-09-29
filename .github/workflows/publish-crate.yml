@@ -2,6 +2,7 @@ name: Publish crate
 
 # A release is an annotated vX.Y.Z tag on main. Jobsy pushes it after its review job merges a release pull request; this workflow publishes that exact commit to crates.io through trusted publishing, so no registry token is stored anywhere.
 # A tag whose own run failed is published by dispatching this workflow from main with the tag's name: the run checks and publishes the tag's commit under the workflow as main has it, so the tag never has to move.
+# The job runs in the release environment, which deploys only from main and v* tags, and crates.io's trusted publisher requires that environment, so a copy of this workflow on any other ref cannot publish however it is triggered.
 on:
   push:
     tags:
@@ -21,19 +22,15 @@ jobs:
     name: Publish to crates.io and GitHub
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: release
     permissions:
       contents: write
       id-token: write
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
-      # A dispatch runs the workflow as the dispatched ref has it, so only main's copy may publish.
-      - name: Require a vX.Y.Z tag name, and main for a dispatch
+      - name: Require a vX.Y.Z tag name
         run: |
-          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$GITHUB_REF" != refs/heads/main ]; then
-            echo "dispatch this workflow from main, not $GITHUB_REF" >&2
-            exit 1
-          fi
           if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "$TAG is not a vX.Y.Z tag name" >&2
             exit 1
