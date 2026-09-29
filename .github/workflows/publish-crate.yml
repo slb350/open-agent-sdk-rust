@@ -75,10 +75,39 @@ jobs:
             echo "CHANGELOG.md has no section for $version" >&2
             exit 1
           fi
+      # A run that published but failed before the GitHub release is repaired by running again: a version crates.io already holds from this commit is not uploaded twice, and one it holds from any other commit fails the run.
+      - name: Check whether crates.io already holds this version
+        id: registry
+        env:
+          USER_AGENT: ${{ github.repository }} publish workflow (https://github.com/${{ github.repository }})
+        run: |
+          name=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].name')
+          version="${TAG#v}"
+          status=$(curl -sS -o /dev/null -w '%{http_code}' -A "$USER_AGENT" "https://crates.io/api/v1/crates/$name/$version")
+          case "$status" in
+            404)
+              echo "published=false" >> "$GITHUB_OUTPUT"
+              ;;
+            200)
+              published=$(curl -sSfL -A "$USER_AGENT" "https://static.crates.io/crates/$name/$name-$version.crate" | tar -xzO "$name-$version/.cargo_vcs_info.json" | jq -r .git.sha1)
+              if [ "$published" != "$(git rev-parse HEAD)" ]; then
+                echo "crates.io holds $name $version from $published, not from $TAG's commit" >&2
+                exit 1
+              fi
+              echo "crates.io already holds $name $version from this commit; only the GitHub release is created"
+              echo "published=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "crates.io answered HTTP $status for $name $version" >&2
+              exit 1
+              ;;
+          esac
       - name: Authenticate with crates.io
         id: auth
+        if: steps.registry.outputs.published == 'false'
         uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
       - name: Publish
+        if: steps.registry.outputs.published == 'false'
         run: cargo publish --locked
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
