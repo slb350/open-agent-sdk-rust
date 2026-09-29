@@ -27,8 +27,13 @@ jobs:
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
-      - name: Require a vX.Y.Z tag name
+      # A dispatch runs the workflow as the dispatched ref has it, so only main's copy may publish.
+      - name: Require a vX.Y.Z tag name, and main for a dispatch
         run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "dispatch this workflow from main, not $GITHUB_REF" >&2
+            exit 1
+          fi
           if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "$TAG is not a vX.Y.Z tag name" >&2
             exit 1
