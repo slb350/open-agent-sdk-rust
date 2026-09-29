@@ -23,6 +23,7 @@ fn development_only_files_are_excluded_from_package() {
                     "tests/support/",
                     "tests/ci_workflow_policy_test.rs",
                     "tests/mutation_ci_scope_test.rs",
+                    "tests/mutation_locks_test.rs",
                     "tests/mutation_scripts_test.rs",
                     "tests/ai1-transport.sh",
                     "tests/package_manifest_test.rs"

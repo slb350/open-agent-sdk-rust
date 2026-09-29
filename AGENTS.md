@@ -13,7 +13,7 @@ This AGENTS.md is the tracked, authoritative instruction file for agents working
 
 ## Project Description
 
-A lightweight Rust SDK (v0.11.3 source) for building AI agents with local or cloud LLMs. Speaks two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint with `ApiProtocol`. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
+A lightweight Rust SDK (v0.11.4 source) for building AI agents with local or cloud LLMs. Speaks two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint with `ApiProtocol`. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
 
 ## Repository Structure
 
@@ -488,7 +488,7 @@ Jobsy on homelab-ai-1 runs this repository's scheduled maintenance as a weekly d
 
 A daily Jobsy review job reviews each open `jobsy/` pull request against this file, fixes it on its own branch when it is not solid, and merges it with a merge commit once every check on the reviewed head has passed; Jobsy refuses the merge otherwise. A weekly Jobsy release job decides under the release rules in this file whether the merged work warrants a release, and if so opens a `jobsy/release/` pull request that bumps the version and moves the changelog entries. When that pull request merges, Jobsy pushes the annotated tag `vX.Y.Z` on the merge commit, and `publish-crate.yml` publishes that commit to crates.io through trusted publishing, then creates the GitHub release from that version's changelog section. No Jobsy job pushes main directly or publishes from its own host.
 
-## Security Advisories (resolved in v0.6.5, current v0.11.3)
+## Security Advisories (resolved in v0.6.5, current v0.11.4)
 
 RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 
@@ -498,6 +498,14 @@ RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 - `futures` raised to `0.3.32`
 
 ## Current Version
+
+**v0.11.4**. Tool continuations over `ApiProtocol::Anthropic` no longer send the empty text
+the Messages API schema forbids, in automatic execution and in the manual `add_tool_result` +
+`send("")` pattern; history and the OpenAI wire format are unchanged. The crate archive
+omits the repository-only `mutation_locks_test.rs`, whose support files it already excluded,
+so an unpacked crate's tests compile again. The lockfile carries rustls 0.23.45 for
+RUSTSEC-2026-0285, and every mutation workload now runs on homelab-ai-1. No public API
+changed. See CHANGELOG.md.
 
 **v0.11.3**. Fixes stale client output, failed-stream cleanup, cancellation during automatic
 tool rounds, and manual tool-result call IDs. Image validation and logging handle non-ASCII
