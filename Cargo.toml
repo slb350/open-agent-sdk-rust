@@ -1,6 +1,6 @@
 [package]
 name = "open-agent-sdk"
-version = "0.11.4"
+version = "0.11.5"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Stephen Brandon"]

@@ -13,7 +13,7 @@ This AGENTS.md is the tracked, authoritative instruction file for agents working
 
 ## Project Description
 
-A lightweight Rust SDK (v0.11.4 source) for building AI agents with local or cloud LLMs. Speaks two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint with `ApiProtocol`. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
+A lightweight Rust SDK (v0.11.5 source) for building AI agents with local or cloud LLMs. Speaks two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint with `ApiProtocol`. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
 
 ## Repository Structure
 
@@ -488,7 +488,7 @@ Jobsy on homelab-ai-1 runs this repository's scheduled maintenance as a weekly d
 
 A daily Jobsy review job reviews each open `jobsy/` pull request against this file, fixes it on its own branch when it is not solid, and merges it with a merge commit once every check on the reviewed head has passed; Jobsy refuses the merge otherwise. A weekly Jobsy release job decides under the release rules in this file whether the merged work warrants a release, and if so opens a `jobsy/release/` pull request that bumps the version and moves the changelog entries. When that pull request merges, Jobsy pushes the annotated tag `vX.Y.Z` on the merge commit, and `publish-crate.yml` publishes that commit to crates.io through trusted publishing, then creates the GitHub release from that version's changelog section. The publish job runs in the `release` environment, which deploys only from `v*` tags; a repository ruleset lets only admins create, move or delete a `v*` tag, and the crate's crates.io trusted publisher requires the environment. A run that published but failed before the GitHub release is repaired by re-running it: it uploads nothing when every file of the version crates.io holds matches a package built from the tag's commit, and fails on any difference. No Jobsy job pushes main directly or publishes from its own host.
 
-## Security Advisories (resolved in v0.6.5, current v0.11.4)
+## Security Advisories (resolved in v0.6.5, current v0.11.5)
 
 RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 
@@ -499,7 +499,9 @@ RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 
 ## Current Version
 
-**v0.11.4**. Tool continuations over `ApiProtocol::Anthropic` no longer send the empty text
+**v0.11.5**. Publishes the changes tagged as v0.11.4, which never reached crates.io because its publish run failed. The publish workflow now writes its release notes outside the checkout, runs in the `release` environment, and repairs a re-run whose crate is already on crates.io. No public API changed. See CHANGELOG.md.
+
+**v0.11.4** (tagged but never published; first shipped in v0.11.5). Tool continuations over `ApiProtocol::Anthropic` no longer send the empty text
 the Messages API schema forbids, in automatic execution and in the manual `add_tool_result` +
 `send("")` pattern; history and the OpenAI wire format are unchanged. The crate archive
 omits the repository-only `mutation_locks_test.rs`, whose support files it already excluded,
