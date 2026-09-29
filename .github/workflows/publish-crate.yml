@@ -61,7 +61,7 @@ jobs:
             echo "CHANGELOG.md has no section for $version" >&2
             exit 1
           fi
-      # A run that published but failed before the GitHub release is repaired by re-running it: a version crates.io already holds from this commit is not uploaded twice, and one it holds from any other commit fails the run.
+      # A run that published but failed before the GitHub release is repaired by re-running it: a version crates.io already holds is not uploaded twice when every file of it matches a package built from this commit, and any difference fails the run. The archive's own record of its commit is not evidence, since Cargo does not verify it.
       - name: Check whether crates.io already holds this version
         id: registry
         env:
@@ -75,12 +75,15 @@ jobs:
               echo "published=false" >> "$GITHUB_OUTPUT"
               ;;
             200)
-              published=$(curl -sSfL -A "$USER_AGENT" "https://static.crates.io/crates/$name/$name-$version.crate" | tar -xzO "$name-$version/.cargo_vcs_info.json" | jq -r .git.sha1)
-              if [ "$published" != "$(git rev-parse HEAD)" ]; then
-                echo "crates.io holds $name $version from $published, not from $TAG's commit" >&2
+              cargo package --locked --no-verify
+              mkdir "$RUNNER_TEMP/built" "$RUNNER_TEMP/published"
+              tar -xzf "target/package/$name-$version.crate" -C "$RUNNER_TEMP/built"
+              curl -sSfL -A "$USER_AGENT" "https://static.crates.io/crates/$name/$name-$version.crate" | tar -xz -C "$RUNNER_TEMP/published"
+              if ! diff -r "$RUNNER_TEMP/built" "$RUNNER_TEMP/published"; then
+                echo "the $name $version on crates.io differs from a package of $TAG's commit" >&2
                 exit 1
               fi
-              echo "crates.io already holds $name $version from this commit; only the GitHub release is created"
+              echo "crates.io already holds $name $version exactly as this commit packages it; only the GitHub release is created"
               echo "published=true" >> "$GITHUB_OUTPUT"
               ;;
             *)
