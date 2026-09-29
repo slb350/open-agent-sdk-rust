@@ -43,11 +43,12 @@ jobs:
             echo "tag $GITHUB_REF_NAME does not name package version $version" >&2
             exit 1
           fi
+      # The notes go outside the checkout: `cargo publish --locked` refuses a working tree with an uncommitted file in it.
       - name: Take the release notes from the changelog
         run: |
           version="${GITHUB_REF_NAME#v}"
-          awk -v heading="## [$version]" 'index($0, heading) == 1 {found = 1; next} found && /^## \[/ {exit} found {print}' CHANGELOG.md > release-notes.md
-          if [ ! -s release-notes.md ]; then
+          awk -v heading="## [$version]" 'index($0, heading) == 1 {found = 1; next} found && /^## \[/ {exit} found {print}' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          if [ ! -s "$RUNNER_TEMP/release-notes.md" ]; then
             echo "CHANGELOG.md has no section for $version" >&2
             exit 1
           fi
@@ -61,4 +62,4 @@ jobs:
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           name: Open Agent SDK Rust ${{ github.ref_name }}
-          body_path: release-notes.md
+          body_path: ${{ runner.temp }}/release-notes.md
