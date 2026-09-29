@@ -1,18 +1,11 @@
 name: Publish crate
 
 # A release is an annotated vX.Y.Z tag on main. Jobsy pushes it after its review job merges a release pull request; this workflow publishes that exact commit to crates.io through trusted publishing, so no registry token is stored anywhere.
-# A tag whose own run failed is published by dispatching this workflow from main with the tag's name: the run checks and publishes the tag's commit under the workflow as main has it, so the tag never has to move.
-# The job runs in the release environment, which deploys only from main and v* tags, and crates.io's trusted publisher requires that environment, so a copy of this workflow on any other ref cannot publish however it is triggered.
+# The job runs in the release environment, which deploys only from v* tags, and only repository admins can create, move or delete a v* tag. crates.io's trusted publisher requires that environment, so a copy of this workflow anywhere else cannot publish.
 on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: The existing annotated vX.Y.Z tag to publish
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -27,17 +20,10 @@ jobs:
       contents: write
       id-token: write
     env:
-      TAG: ${{ inputs.tag || github.ref_name }}
+      TAG: ${{ github.ref_name }}
     steps:
-      - name: Require a vX.Y.Z tag name
-        run: |
-          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "$TAG is not a vX.Y.Z tag name" >&2
-            exit 1
-          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ env.TAG }}
           fetch-depth: 0
           persist-credentials: false
       - name: Require an annotated tag on a commit main contains
@@ -75,7 +61,7 @@ jobs:
             echo "CHANGELOG.md has no section for $version" >&2
             exit 1
           fi
-      # A run that published but failed before the GitHub release is repaired by running again: a version crates.io already holds from this commit is not uploaded twice, and one it holds from any other commit fails the run.
+      # A run that published but failed before the GitHub release is repaired by re-running it: a version crates.io already holds from this commit is not uploaded twice, and one it holds from any other commit fails the run.
       - name: Check whether crates.io already holds this version
         id: registry
         env:
