@@ -1416,7 +1416,8 @@ open-agent-sdk-rust/
 │   ├── hooks_history_snapshot_test.rs       # Structured conversation history in hook events
 │   ├── hooks_integration_test.rs            # Real auto-tool and hook outcomes
 │   ├── mutation_ci_scope_test.rs            # Mutation test scope classification (CI diffs)
-│   ├── mutation_scripts_test.rs             # Mutation scripts: ai-1 role, host lock, verdict, scratch (Unix)
+│   ├── mutation_locks_test.rs               # Checkout lock, host lock, scratch cleanup, and staged-run isolation (Unix)
+│   ├── mutation_scripts_test.rs             # Mutation scripts: ai-1 role, verdict, and homelab runner contract (Unix)
 │   ├── ai1-transport.sh                     # ai-1 transport refuses anything that would bypass its sandbox
 │   ├── package_manifest_test.rs             # Crate archive excludes development-only files
 │   ├── redirect_policy_test.rs              # Model requests reject all HTTP redirects
@@ -1431,6 +1432,7 @@ open-agent-sdk-rust/
 │   ├── source_file_size_test.rs             # Architecture guard: Rust source-file 800-line hard limit
 │   ├── tool_call_content_test.rs            # Tool-call content field preserved in HTTP request body
 │   └── common/mod.rs                        # Shared loopback-server and stream helpers (no #[test] functions)
+│   └── common/mutation.rs                   # Shared mutation test harness (Harness, lock helpers, isolated runner)
 │   └── support/process.rs                   # Shared process/filesystem helpers for script tests
 ├── scripts/
 │   ├── mutants-ci-scope.sh          # Complete event diff policy for CI mutation runs
