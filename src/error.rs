@@ -31,7 +31,8 @@ pub enum Error {
     /// that field, never status-like text in the message.
     #[error("API error{}: {message}", .status.map(|code| format!(" {code}")).unwrap_or_default())]
     Api {
-        /// HTTP status code, when the error originated from an HTTP response.
+        /// HTTP status code, when the error originated from an HTTP response or from an
+        /// error the server reported inside a stream with an HTTP status as its `code`.
         status: Option<u16>,
 
         /// Error message or response body reported by the server.
