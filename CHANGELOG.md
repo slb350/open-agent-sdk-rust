@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Maintenance
+
+- Refreshed the Rust-1.85-compatible lockfile entries: `cc` 1.6.0, `libc` 0.2.190,
+  `mio` 1.2.4, `tokio` 1.53.2, `tokio-rustls` 0.26.6, and `yoke-derive` 0.8.4.
+  The 0.8.4 release declares an MSRV of 1.82 (0.8.3 called `str::from_utf8`,
+  unavailable on Rust 1.85) and passes the Rust 1.85 all-target check, so the
+  `yoke-derive` 0.8.2 hold is lifted per the recorded adoption rule. No public API changed.
+
 ## [0.11.5] - 2026-09-29
 
 0.11.4 was tagged but never reached crates.io, because its publish run failed at the step fixed below. This release is the first to publish its changes, listed under 0.11.4: Anthropic tool continuations no longer send the empty text the Messages API rejects, an unpacked crate's tests compile again, and the lockfile carries rustls 0.23.45 for RUSTSEC-2026-0285. No public API changed.
