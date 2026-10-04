@@ -1235,7 +1235,7 @@ use open_agent::{Error, Result};
 | `Http(reqwest::Error)` | Transport failure — connection refused, DNS, TLS, network timeout |
 | `Json(serde_json::Error)` | Serialization or deserialization failure |
 | `Config(String)` | Invalid configuration caught by `AgentOptions::build()` |
-| `Api { status: Option<u16>, message: String }` | Error response from the model server |
+| `Api { status: Option<u16>, message: String }` | Error response from the model server, including one it reports inside a stream |
 | `Stream(String)` | SSE parsing or stream processing failure |
 | `Tool(String)` | Tool execution or registration failure |
 | `InvalidInput(String)` | User-provided input failed validation |
@@ -1259,6 +1259,17 @@ assert_eq!(err.status_code(), None);
 ```
 
 `status_code()` returns `None` for every non-`Api` variant, so it is safe to call on any error.
+
+**Errors inside a stream.** A server that fails after sending `200 OK` can only say so in the
+stream. On OpenAI-protocol endpoints the SDK recognises the three shapes the servers it lists
+document — vLLM's and llama.cpp's `data: {"error": {...}}`, and OpenRouter's chunk whose
+top-level `error` sits beside `finish_reason: "error"` — and yields them as
+`Error::Api` with the server's message (`type: message` when it sends a type). When the
+error's `code` is an HTTP status from 400 to 599, as it is for all three, that becomes
+`status`, so `is_retryable_error` retries a `429` or `503` and not a prompt that is too long.
+A `code` that is not a status, such as OpenAI's `"context_length_exceeded"`, leaves `status`
+as `None`, which is never retried. A `Client` discards the unfinished turn exactly as it does
+for any stream error.
 
 ### Newtype Wrappers
 
@@ -1385,7 +1396,8 @@ open-agent-sdk-rust/
 │   ├── utils.rs           # SSE parsing, stream accumulation, and the shared stream driver
 │   └── utils/             # accumulator.rs + anthropic_accumulator.rs (wire decoding),
 │                          # buffers.rs (the shared drain), coalesce.rs (text joining for
-│                          # history), driver.rs, sse.rs,
+│                          # history), driver.rs, sse.rs, openai_error.rs (errors a server
+│                          # reports inside an OpenAI-protocol stream),
 │                          # test_support.rs (shared streaming test assertions),
 │                          # tests/ (accumulator.rs, sse.rs unit tests)
 ├── examples/
@@ -1427,6 +1439,7 @@ open-agent-sdk-rust/
 │   ├── regression_max_tokens_test.rs        # max_tokens unset omits the field (regression since 0.7.0)
 │   ├── regression_reasoning_channel_test.rs # Reasoning channel separated from content (regression since 0.8.0)
 │   ├── regression_retry_classification_test.rs # HTTP status classification for retry (regression since 0.7.0)
+│   ├── regression_stream_error_test.rs      # In-stream server errors surface as Error::Api (vLLM, llama.cpp, OpenRouter shapes)
 │   ├── regression_stream_flush_test.rs      # Stream flush when server omits finish_reason (regression since 0.7.0)
 │   ├── send_message_test.rs                 # Text/image request-body and failed-send history checks
 │   ├── source_file_size_test.rs             # Architecture guard: Rust source-file 800-line hard limit

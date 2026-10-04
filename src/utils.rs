@@ -29,6 +29,7 @@ mod anthropic_accumulator;
 mod buffers;
 mod coalesce;
 mod driver;
+mod openai_error;
 mod sse;
 
 #[cfg(test)]
