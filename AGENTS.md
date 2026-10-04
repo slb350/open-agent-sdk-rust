@@ -42,7 +42,8 @@ open-agent-sdk-rust/
 │                      # accumulator.rs (StreamAccumulator) and anthropic_accumulator.rs
 │                      # (AnthropicAccumulator), both decoding into buffers.rs
 │                      # (StreamBuffers, the shared drain), driver.rs (EventAccumulator +
-│                      # drive) and sse.rs (both SSE parsers), all real mods;
+│                      # drive), sse.rs (both SSE parsers) and openai_error.rs (errors a
+│                      # server reports inside an OpenAI-protocol stream), all real mods;
 │                      # test_support.rs (shared streaming test assertions);
 │                      # tests/ subdir (accumulator.rs, sse.rs unit tests)
 ├── examples/
@@ -83,6 +84,7 @@ open-agent-sdk-rust/
 │   ├── regression_max_tokens_test.rs        # max_tokens unset omits the field (regression since 0.7.0)
 │   ├── regression_reasoning_channel_test.rs # Reasoning channel separated from content (regression since 0.8.0)
 │   ├── regression_retry_classification_test.rs # HTTP status classification for retry (regression since 0.7.0)
+│   ├── regression_stream_error_test.rs      # In-stream server errors surface as Error::Api (vLLM, llama.cpp, OpenRouter shapes)
 │   ├── regression_stream_flush_test.rs      # Stream flush when server omits finish_reason (regression since 0.7.0)
 │   ├── send_message_test.rs                 # Text/image request-body and failed-send history checks
 │   ├── source_file_size_test.rs             # Architecture guard: Rust source-file 800-line hard limit
@@ -457,6 +459,7 @@ cargo test --test mutation_ci_scope_test
 - The accumulators own only their wire decoding. Everything they do with the results — the text and reasoning buffers, the tool-call map, the first-seen finish reason, and the drain order — lives once in `utils::buffers::StreamBuffers`, which is where four invariants are decided rather than restated per protocol: exactly one `Finish` and it is last, `Unspecified` distinct from `Stop`, reasoning with no path into the text buffer, and ascending tool-call order. The two copies this replaced had already drifted in their tool-argument error text.
 - `StreamBuffers::push_reasoning` owns the `capture_reasoning` check, so no decoder can route reasoning into the text buffer by forgetting it. `tool_call()` opens a call on first mention (OpenAI never announces one) and `open_tool_call()` refuses to (Anthropic always sends `content_block_start` first, so a fragment for an index that never opened has nothing to attach to). Keep both; they are different policies, not an accessor and its convenience wrapper.
 - Each accumulator carries its own `impl EventAccumulator`, so `utils::driver` names no protocol. An accumulator error is yielded in band as an `Err` item and does not close the stream; callers propagate it with `?`.
+- A server that fails after its `200 OK` can only say so in the stream, and `utils::openai_error::decode_chunk` is where the OpenAI path hears it: vLLM's and llama.cpp's whole-payload `{"error": {...}}` and OpenRouter's chunk with a top-level `error` beside `finish_reason: "error"` become `Error::Api`, never a `Stream` parse failure and never a finish the `Client` records as a completed turn. The integer `code` becomes `status` only inside 400..=599 (OpenAI's string codes leave it `None`, which is never retried), and a chunk with an `error` key beside live content that did not finish with `"error"` is delivered, not dropped. The error object is looked for only on a chunk that finishes with `"error"` or does not parse, so the hot path stays one parse. Do not move this into `OpenAIChunk`: its fields are public. `parse_sse_stream` and `parse_anthropic_sse_stream` share `parse_events` and differ only in the payload decoder they pass.
 - Anthropic deltas are routed by **the delta's own tag**, never by the kind of the block they arrive on. `thinking_delta` reaches the reasoning channel and `text_delta` reaches content, which makes the reasoning separation a property of the parser rather than of bookkeeping a missing `content_block_start` could defeat.
 - `anthropic_finish_reason()` maps Anthropic stop reasons; `FinishReason::from_wire` is OpenAI-shaped and files every Anthropic spelling under `Other`, so a caller branching on `Length` would never see a truncation. `model_context_window_exceeded` maps to `Length` (a token ceiling, same caller response); `pause_turn` keeps its own name, because it is resumable and no existing variant means that.
 - A mid-stream Anthropic `error` event has no HTTP status of its own — the response already returned 200 — so the two transient kinds are mapped onto the statuses they would have carried had they arrived earlier (`overloaded_error` → 529, `rate_limit_error` → 429, `api_error` → 500). Retry classification reads `Error::status_code()`, so anything else stays a non-retryable stream error.
