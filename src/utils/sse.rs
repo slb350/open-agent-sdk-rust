@@ -2,8 +2,9 @@
 //!
 //! The framing, the `[DONE]` sentinel and the error classification are identical for both
 //! protocols, so they live once in `parse_events`; the two public entry points differ only in
-//! the payload type they ask it to deserialize.
+//! how they decode one event's payload.
 
+use super::openai_error::decode_chunk;
 use crate::types::{AnthropicEvent, OpenAIChunk};
 use crate::{Error, Result};
 use eventsource_stream::{EventStreamError, Eventsource};
@@ -49,6 +50,9 @@ use std::pin::Pin;
 /// Each stream item can be an error:
 /// - **HTTP errors**: Network issues, connection drops (wrapped as [`Error::Http`])
 /// - **Parse errors**: Invalid JSON in the SSE data field (wrapped as [`Error::Stream`])
+/// - **Server-reported errors**: An `error` object sent in the stream after the `200 OK`
+///   (wrapped as [`Error::Api`], carrying the HTTP status when the server gave one as `code`;
+///   see the `openai_error` module for the shapes recognised)
 /// - **Protocol errors**: Invalid UTF-8 or malformed SSE fields (wrapped as [`Error::Stream`])
 ///
 /// Errors are yielded as stream items rather than panicking the parser. Consumers should handle
@@ -96,7 +100,7 @@ use std::pin::Pin;
 pub fn parse_sse_stream(
     body: reqwest::Response,
 ) -> Pin<Box<dyn Stream<Item = Result<OpenAIChunk>> + Send>> {
-    parse_events(body)
+    parse_events(body, decode_chunk)
 }
 
 /// Parses an SSE response body as a stream of [`AnthropicEvent`]s.
@@ -112,27 +116,35 @@ pub fn parse_sse_stream(
 pub fn parse_anthropic_sse_stream(
     body: reqwest::Response,
 ) -> Pin<Box<dyn Stream<Item = Result<AnthropicEvent>> + Send>> {
-    parse_events(body)
+    parse_events(body, decode_json)
 }
 
-/// Decodes an SSE body into `T`, one item per complete event.
+/// Deserializes one event's payload, reporting what does not parse as [`Error::Stream`].
+pub(super) fn decode_json<T: DeserializeOwned>(data: &str) -> Result<T> {
+    serde_json::from_str(data)
+        .map_err(|error| Error::stream(format!("Failed to parse SSE event data: {error}")))
+}
+
+/// Decodes an SSE body into `T`, one item per complete event, using `decode` for each payload.
 ///
 /// The shared half of both public parsers: the SSE framing, the `[DONE]` sentinel and the
-/// error classification are protocol-independent, and only the payload type differs. Written
-/// once so a fix to the transport handling cannot land in one protocol and miss the other.
-fn parse_events<T>(body: reqwest::Response) -> Pin<Box<dyn Stream<Item = Result<T>> + Send>>
+/// error classification are protocol-independent, and only the payload decoding differs.
+/// Written once so a fix to the transport handling cannot land in one protocol and miss the
+/// other.
+fn parse_events<T>(
+    body: reqwest::Response,
+    decode: fn(&str) -> Result<T>,
+) -> Pin<Box<dyn Stream<Item = Result<T>> + Send>>
 where
-    T: DeserializeOwned + Send + 'static,
+    T: Send + 'static,
 {
     let stream = body
         .bytes_stream()
         .eventsource()
-        .filter_map(|event_result| async move {
+        .filter_map(move |event_result| async move {
             match event_result {
                 Ok(event) if event.data == "[DONE]" => None,
-                Ok(event) => Some(serde_json::from_str(&event.data).map_err(|error| {
-                    Error::stream(format!("Failed to parse SSE event data: {error}"))
-                })),
+                Ok(event) => Some(decode(&event.data)),
                 Err(EventStreamError::Transport(error)) => Some(Err(Error::Http(error))),
                 Err(error) => Some(Err(Error::stream(format!(
                     "Failed to parse SSE event: {error}"

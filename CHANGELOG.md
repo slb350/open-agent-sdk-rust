@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- An error a server reports inside an OpenAI-protocol stream now reaches the caller as
+  `Error::Api` carrying the server's own message, instead of a `Stream` parse failure or a
+  clean finish. vLLM and llama.cpp send a whole-payload `{"error": {...}}` event after their
+  `200 OK`, which was reported as `Failed to parse SSE event data: missing field` with the
+  server's message discarded and, because `Error::Stream` is retryable, was retried even when
+  the request itself was at fault (a prompt over the context window, say). OpenRouter sends a
+  chunk with a top-level `error` beside `finish_reason: "error"`, which was delivered as an
+  ordinary `Finish(Other("error"))`, so `Client` recorded the failed turn as a completed one.
+  The message reads `type: message`, as for Anthropic. An integer `code` between 400 and 599
+  becomes the error's status, so `429` and `503` are retried and `400` is not; any other
+  `code`, such as OpenAI's `"context_length_exceeded"`, leaves the status unset, which is never
+  retried. A chunk with an `error` key beside live content that did not finish with `"error"`
+  is still delivered as content. No public API changed.
+
 ### Maintenance
 
 - Refreshed the Rust-1.85-compatible lockfile entries: `cc` 1.6.0, `libc` 0.2.190,
