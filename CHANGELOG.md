@@ -29,7 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `mio` 1.2.4, `tokio` 1.53.2, `tokio-rustls` 0.26.6, and `yoke-derive` 0.8.4.
   The 0.8.4 release declares an MSRV of 1.82 (0.8.3 called `str::from_utf8`,
   unavailable on Rust 1.85) and passes the Rust 1.85 all-target check, so the
-  `yoke-derive` 0.8.2 hold is lifted per the recorded adoption rule. No public API changed.
+  `yoke-derive` 0.8.2 hold is lifted per the recorded adoption rule. 0.8.4 builds on the
+  `syn` 3 and `synstructure` 0.14 already in the lockfile, so the now-unreferenced
+  `synstructure` 0.13.2 is dropped. No public API changed.
 
 ## [0.11.5] - 2026-09-29
 
