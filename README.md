@@ -1288,10 +1288,10 @@ use open_agent::retry::{RetryConfig, retry_with_backoff, retry_with_backoff_cond
 
 // Configure retry behavior (builder pattern)
 let config = RetryConfig::default()          // 3 attempts, exponential backoff
-    .max_attempts(5)
-    .initial_delay_ms(100)
-    .max_delay_ms(5000)
-    .backoff_multiplier(2.0);
+    .with_max_attempts(5)
+    .with_initial_delay(Duration::from_millis(100))
+    .with_max_delay(Duration::from_millis(5000))
+    .with_backoff_multiplier(2.0);
 
 // Retry any async operation
 let result = retry_with_backoff(config.clone(), || async {
@@ -1445,7 +1445,7 @@ open-agent-sdk-rust/
 │   ├── source_file_size_test.rs             # Architecture guard: Rust source-file 800-line hard limit
 │   ├── tool_call_content_test.rs            # Tool-call content field preserved in HTTP request body
 │   └── common/mod.rs                        # Shared loopback-server and stream helpers (no #[test] functions)
-│   └── common/mutation.rs                   # Shared mutation test harness (Harness, lock helpers, isolated runner)
+│   └── support/mutation.rs                  # Shared mutation test harness (Harness, lock helpers, isolated runner)
 │   └── support/process.rs                   # Shared process/filesystem helpers for script tests
 ├── scripts/
 │   ├── mutants-ci-scope.sh          # Complete event diff policy for CI mutation runs
@@ -1569,6 +1569,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.11.5 - Anthropic tool continuations no longer send the empty text the Messages API rejects, in automatic and manual tool rounds alike (0.11.4 carried this fix but was never published). Public signatures, defaults and the OpenAI wire format remain unchanged.
+**Status**: v0.11.5 is the current published crates.io release (Anthropic tool continuations no longer send the empty text the Messages API rejects; 0.11.4 carried this fix but was never published). Unreleased on main: in-stream server errors now surface as `Error::Api` rather than a stream parse failure, covering vLLM/llama.cpp whole-payload errors and OpenRouter `finish_reason: "error"` chunks; lockfile refreshed. No public API changed. See CHANGELOG.md.
 
 Star this repo if you're building AI agents with local models in Rust!
