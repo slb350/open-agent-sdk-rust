@@ -503,7 +503,7 @@ RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 
 ## Current Version
 
-**Unreleased (on main)**: In-stream server errors now surface as `Error::Api` rather than a stream parse failure — covers vLLM and llama.cpp whole-payload errors and OpenRouter `finish_reason: "error"` chunks. Lockfile refreshed: cc 1.6.0, libc 0.2.190, mio 1.2.4, tokio 1.53.2, tokio-rustls 0.26.6, yoke-derive 0.8.4. No public API changed. See CHANGELOG.md [Unreleased].
+**Unreleased (on main)**: In-stream server errors now surface as `Error::Api` rather than a stream parse failure — covers vLLM and llama.cpp whole-payload errors and OpenRouter `finish_reason: "error"` chunks. Lockfile refreshed: cc 1.7.0, either 1.19.0, h2 0.4.20, hyper 1.12.0, jiff 0.2.38, jiff-static 0.2.38, libc 0.2.190, mio 1.2.4, serde_json 1.0.152, smallvec 1.16.3, syn 3.0.7, tokio 1.53.2, tokio-rustls 0.26.6, tokio-util 0.7.20, want 0.3.2, yoke-derive 0.8.4, zerocopy 0.8.62, zerocopy-derive 0.8.62, zeroize 1.9.1. No public API changed. See CHANGELOG.md [Unreleased].
 
 **v0.11.5**. Publishes the changes tagged as v0.11.4, which never reached crates.io because its publish run failed. The publish workflow now writes its release notes outside the checkout, runs in the `release` environment, and repairs a re-run whose crate is already on crates.io. No public API changed. See CHANGELOG.md.
 
