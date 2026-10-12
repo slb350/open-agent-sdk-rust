@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Maintenance
 
+- The workflow-policy test parses YAML with `serde_norway` instead of `serde_yaml_ng`. `serde_yaml_ng` depends on `unsafe-libyaml`, which RUSTSEC-2024-0449 now reports as unmaintained, and `cargo audit --deny warnings` failed on it. `serde_norway` uses the maintained `unsafe-libyaml-norway` fork and keeps the same `Value` API. Dev-dependency only; no public API changed.
+
 - Refreshed the pinned GitHub Actions: `dtolnay/rust-toolchain` (release-server checksum retries and safe handling of action inputs), `taiki-e/install-action` v2.87.26 and `actions/upload-artifact` v7.0.2. The workflow-policy test asserts the new SHAs. No public API changed.
 
 - Refreshed the Rust-1.85-compatible lockfile entries: `cc` 1.6.0, `libc` 0.2.190,
