@@ -4,9 +4,9 @@ const CI: &str = include_str!("../.github/workflows/ci.yml");
 const AUDIT: &str = include_str!("../.github/workflows/scheduled-audit.yml");
 const DEPENDABOT: &str = include_str!("../.github/dependabot.yml");
 const MUTATION_INSTALL_ACTION: &str =
-    "taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29";
+    "taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad";
 const UPLOAD_ARTIFACT_ACTION: &str =
-    "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
+    "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9";
 /// About three times the slowest measured full sweep; see the mutation job in ci.yml.
 const MUTATION_TIMEOUT_MINUTES: u64 = 90;
 /// Every mutation workload runs on homelab-ai-1 as this repository's role.
@@ -226,7 +226,7 @@ fn mutation_sweep_uses_complete_event_scope_and_an_explicit_backstop() {
         .unwrap();
     assert_eq!(installer["uses"], MUTATION_INSTALL_ACTION);
     // The exact installer pin/comment is a documented project requirement.
-    let expected_installer_line = format!("- uses: {MUTATION_INSTALL_ACTION} # v2.87.21");
+    let expected_installer_line = format!("- uses: {MUTATION_INSTALL_ACTION} # v2.87.26");
     assert!(
         CI.lines()
             .any(|line| line.trim() == expected_installer_line.as_str())

@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Maintenance
 
+- Refreshed the pinned GitHub Actions: `dtolnay/rust-toolchain` (release-server checksum retries and safe handling of action inputs), `taiki-e/install-action` v2.87.26 and `actions/upload-artifact` v7.0.2. The workflow-policy test asserts the new SHAs. No public API changed.
+
 - Refreshed the Rust-1.85-compatible lockfile entries: `cc` 1.6.0, `libc` 0.2.190,
   `mio` 1.2.4, `tokio` 1.53.2, `tokio-rustls` 0.26.6, and `yoke-derive` 0.8.4.
   The 0.8.4 release declares an MSRV of 1.82 (0.8.3 called `str::from_utf8`,
