@@ -1,4 +1,4 @@
-use serde_yaml_ng::Value;
+use serde_norway::Value;
 
 const CI: &str = include_str!("../.github/workflows/ci.yml");
 const AUDIT: &str = include_str!("../.github/workflows/scheduled-audit.yml");
@@ -19,7 +19,7 @@ const MUTATION_RUNNER: [&str; 5] = [
 ];
 
 fn workflow(source: &str) -> Value {
-    serde_yaml_ng::from_str(source).expect("workflow must be valid YAML")
+    serde_norway::from_str(source).expect("workflow must be valid YAML")
 }
 
 fn steps(job: &Value) -> &[Value] {
