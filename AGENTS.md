@@ -478,13 +478,13 @@ cargo test --test mutation_ci_scope_test
 - For compatible lockfile refreshes, verify the complete updated lockfile with `cargo +1.85 check --all-features --all-targets --workspace --locked`. If a refresh moves `yoke-derive` to a release that fails that check, pin it back to the newest release that passes with `cargo update -p yoke-derive --precise <version>`.
 - Base64 safety: use base64 0.23 without its default `simd-unsafe` feature unless a measured need justifies enabling it
 - GitHub Actions: pin every third-party action to an immutable full commit SHA with a version comment; Dependabot maintains the pins
-- Mutation installer: `taiki-e/install-action` is pinned at v2.87.21. The workflow-policy test asserts the exact SHA and version comment, so update the workflow and assertion together.
+- Mutation installer: `taiki-e/install-action` is pinned at v2.87.26. The workflow-policy test asserts the exact SHA and version comment, so update the workflow and assertion together.
 - Actionlint reads `.github/actionlint.yaml` for the mutation runner's custom `homelab-ai-1` and `open-agent-sdk-rust-mutants` labels. Keep those labels aligned with the CI workflow and the registered runner.
 - Workflow permissions: default to `contents: read` and grant additional permissions only to the job that requires them
 - GitHub is the canonical CI and release host. Linux and macOS jobs both run on GitHub Actions runners; no external runner host is involved. Do not add CI configuration that routes test or coverage jobs to non-GitHub runners.
 - Audit workflows: install and verify stable Rust before the audit step, then run `cargo audit --deny warnings` directly (not the `actions-rust-lang/audit@` action) so vulnerabilities, yanked crates, unmaintained crates, and unsoundness warnings all fail CI
 - PR benchmarks: compare Criterion results directly against the base commit with a shared target directory; do not restore the obsolete `boa-dev/criterion-compare-action`
-- Coverage reports: use the exact cargo-tarpaulin 0.37.3 LLVM engine in unprivileged containers, but do not import its upstream lockfile while that lock contains vulnerable anyhow 1.0.102; retain the XML and mutation-repair evidence with the latest compatible immutable-SHA-pinned `actions/upload-artifact` release (currently v7.0.1) and fail CI when the coverage report is missing
+- Coverage reports: use the exact cargo-tarpaulin 0.37.3 LLVM engine in unprivileged containers, but do not import its upstream lockfile while that lock contains vulnerable anyhow 1.0.102; retain the XML and mutation-repair evidence with the latest compatible immutable-SHA-pinned `actions/upload-artifact` release (currently v7.0.2) and fail CI when the coverage report is missing
 
 ## Scheduled Maintenance
 
