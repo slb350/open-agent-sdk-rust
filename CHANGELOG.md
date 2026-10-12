@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.6] - 2026-10-12
+
+A server error reported inside an OpenAI-protocol stream now reaches the caller as `Error::Api`. No public API changed.
+
 ### Fixed
 
 - An error a server reports inside an OpenAI-protocol stream now reaches the caller as
