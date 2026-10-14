@@ -1552,6 +1552,7 @@ to a survivor, so a run with one of each would otherwise look like a timeout.
 - wiremock =0.6.4 (dev-only: 0.6.5 uses syntax unavailable on the Rust 1.85 MSRV)
 - cargo-mutants 27.1.0 (dev-only: mutation testing gate)
 - rand (retry jitter)
+- serde_norway 0.9 (dev-only: YAML parsing; replaces serde_yaml_ng, resolves RUSTSEC-2024-0449)
 
 ## License
 

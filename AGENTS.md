@@ -45,7 +45,9 @@ open-agent-sdk-rust/
 │                      # drive), sse.rs (both SSE parsers) and openai_error.rs (errors a
 │                      # server reports inside an OpenAI-protocol stream), all real mods;
 │                      # test_support.rs (shared streaming test assertions);
-│                      # tests/ subdir (accumulator.rs, sse.rs unit tests)
+│                      # tests/ subdir (accumulator.rs, sse.rs unit tests);
+│                      # per-module test subdirectories: anthropic_accumulator/tests.rs,
+│                      # buffers/tests.rs, coalesce/tests.rs, openai_error/tests.rs
 ├── examples/
 │   ├── simple_query.rs              # Minimal streaming query
 │   ├── anthropic_query.rs           # Anthropic messages endpoint via ApiProtocol
@@ -92,6 +94,7 @@ open-agent-sdk-rust/
 │   └── common/mod.rs                        # Shared loopback-server and stream helpers (no #[test] functions)
 │   └── support/mutation.rs                  # Shared mutation test harness (Harness, lock helpers, isolated runner)
 │   └── support/process.rs                   # Shared process/filesystem helpers for script tests
+│   └── ai1-transport.sh                     # Exercises fail-closed parsing of ai1-transport without SSH, rsync, or I/O
 ├── scripts/
 │   ├── mutants-ci-scope.sh          # Classifies mutation work for complete CI diffs
 │   ├── mutants-common.sh            # The one definition of the results directory
@@ -129,6 +132,7 @@ open-agent-sdk-rust/
 | **Base64** | base64 0.23 (no `simd-unsafe` feature) |
 | **Benchmarks** | criterion |
 | **HTTP mocking (dev)** | wiremock =0.6.4 (0.6.5 breaks MSRV) |
+| **YAML (dev)** | serde_norway 0.9 (replaces serde_yaml_ng; resolves RUSTSEC-2024-0449) |
 | **Virtual clock (dev)** | tokio `test-util` |
 | **Mutation testing** | cargo-mutants 27.1.0 |
 | **Automation** | Dependabot (grouped weekly Cargo and Actions updates; wiremock 0.6.5 ignored for MSRV) |
@@ -492,7 +496,11 @@ Jobsy on homelab-ai-1 runs this repository's scheduled maintenance as a weekly d
 
 A daily Jobsy review job reviews each open `jobsy/` pull request against this file, fixes it on its own branch when it is not solid, and merges it with a merge commit once every check on the reviewed head has passed; Jobsy refuses the merge otherwise. A weekly Jobsy release job decides under the release rules in this file whether the merged work warrants a release, and if so opens a `jobsy/release/` pull request that bumps the version and moves the changelog entries. When that pull request merges, Jobsy pushes the annotated tag `vX.Y.Z` on the merge commit, and `publish-crate.yml` publishes that commit to crates.io through trusted publishing, then creates the GitHub release from that version's changelog section. The publish job runs in the `release` environment, which deploys only from `v*` tags; a repository ruleset lets only admins create, move or delete a `v*` tag, and the crate's crates.io trusted publisher requires the environment. A run that published but failed before the GitHub release is repaired by re-running it: it uploads nothing when every file of the version crates.io holds matches a package built from the tag's commit, and fails on any difference. No Jobsy job pushes main directly or publishes from its own host.
 
-## Security Advisories (resolved in v0.6.5, current v0.11.5)
+## Security Advisories (resolved in v0.6.5, current v0.11.6)
+
+RUSTSEC-2024-0449 resolved (v0.6.5):
+
+- `serde_yaml_ng` replaced with `serde_norway = "0.9"` (dev-dependency only; advisory: memory-safety issue in serde_yaml_ng)
 
 RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 
