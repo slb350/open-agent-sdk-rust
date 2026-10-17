@@ -9,12 +9,12 @@ const UPLOAD_ARTIFACT_ACTION: &str =
     "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9";
 /// About three times the slowest measured full sweep; see the mutation job in ci.yml.
 const MUTATION_TIMEOUT_MINUTES: u64 = 90;
-/// Every mutation workload runs on homelab-ai-1 as this repository's role.
+/// Every mutation workload runs on homelab-1 as this repository's role.
 const MUTATION_RUNNER: [&str; 5] = [
     "self-hosted",
     "linux",
     "x64",
-    "homelab-ai-1",
+    "homelab-1",
     "open-agent-sdk-rust-mutants",
 ];
 

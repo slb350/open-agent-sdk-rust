@@ -3,7 +3,7 @@
 # Run the mutation sweep on a bigger machine over SSH, then report its verdict
 # here.
 #
-# Mutation testing is the most CPU-hungry gate in this repo: every mutant is a full build plus a full test run, and the hook fires on a laptop the developer is still using. Measured in drep on 12 mutants from src/docs/fence.rs, a local M5 Max at -j 4 took 1m54 with the machine pinned. The offload runs as this repository's CI role on ai-1 and costs this machine nothing.
+# Mutation testing is the most CPU-hungry gate in this repo: every mutant is a full build plus a full test run, and the hook fires on a laptop the developer is still using. Measured in drep on 12 mutants from src/docs/fence.rs, a local M5 Max at -j 4 took 1m54 with the machine pinned. The offload runs as this repository's CI role on homelab-1 and costs this machine nothing.
 #
 # More jobs is not automatically better. Each job builds in its own copy of the tree, which cargo-mutants 27.1.0 makes without target/ unless copy_target is set, so every job cold-builds the dependencies before its first mutant. On the former 32-thread host, the same scope measured 38s at -j 4, 54s at -j 8, and 72s at -j 16. Keep the measured worker baseline until a complete sweep gives a measured reason to change it.
 #
@@ -36,7 +36,7 @@ cd "$(git rev-parse --show-toplevel)"
 # shellcheck source=scripts/mutants-common.sh
 . scripts/mutants-common.sh
 
-# The ai-1 CI role this repository's mutation runs as, here and in its hosted sweeps. The role's unit also supplies the host lock and the job count.
+# The homelab-1 CI role this repository's mutation runs as, here and in its hosted sweeps. The role's unit also supplies the host lock and the job count.
 AI1_CI_ROLE=open-agent-sdk-rust-mutants
 REMOTE_DIR="$(remote_checkout_dir "$AI1_CI_ROLE")"
 JOBS="${MUTANTS_JOBS:-}"
@@ -69,7 +69,7 @@ fi
 # against a run measured in minutes.
 # shellcheck source=scripts/mutants-ai1-transport.sh
 if ! . scripts/mutants-ai1-transport.sh; then
-  echo "warning: ai-1 transport unavailable; running mutation locally" >&2
+  echo "warning: CI transport unavailable; running mutation locally" >&2
   run_local "$@"
 fi
 

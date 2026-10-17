@@ -1,5 +1,10 @@
 # Open Agent SDK (Rust)
 
+October 16 CI placement: Steve selected homelab-1 for all existing ai-1 self-hosted Linux CI roles
+and their mutation offloads. The homelab repository's `docs/37-homelab-1-ci-return.md` owns cutover
+status and recovery. The transport's historical `AI1_*` names and
+`mutants-ai1-transport.sh` filename remain compatibility interfaces.
+
 This AGENTS.md is the tracked, authoritative instruction file for agents working in this repository. A local `CLAUDE.md` stays gitignored; it imports this file with `@AGENTS.md` and may add private notes.
 
 ## Repository Authority
@@ -99,7 +104,7 @@ open-agent-sdk-rust/
 │   ├── mutants-ci-scope.sh          # Classifies mutation work for complete CI diffs
 │   ├── mutants-common.sh            # The one definition of the results directory
 │   ├── mutants-run.sh               # Owns the verdict (missed.txt); called by the hook and CI
-│   ├── mutants-remote.sh            # runs on homelab-ai-1 as this repo's role, mirrors results back, falls back loudly
+│   ├── mutants-remote.sh            # runs on homelab-1 as this repo's role, mirrors results back, falls back loudly
 │   ├── mutants-ai1-transport.sh     # every ai-1 command and rsync goes through offload.py's sandbox
 │   └── mutants-staged.sh            # Staged-diff scope, through mutants-remote.sh
 ├── .githooks/
@@ -159,7 +164,7 @@ cargo run --example vision_example
 # Run benchmarks
 cargo bench
 
-# Mutation sweep (runs on homelab-ai-1; falls back locally with a warning)
+# Mutation sweep (runs on homelab-1; falls back locally with a warning)
 ./scripts/mutants-remote.sh              # full sweep
 ./scripts/mutants-staged.sh              # staged diff only, what the hook runs
 DREP_MUTANTS_REMOTE=0 ./scripts/mutants-run.sh   # force it onto this machine
@@ -452,7 +457,7 @@ cargo test --test mutation_ci_scope_test
 - Model-request HTTP clients never follow redirects, including same-origin redirects. `base_url` names the exact destination: a `30x` stays on the configured endpoint and enters the existing API-status error path, so caller headers and protocol credentials cannot be replayed to a response-selected target. Keep timeout and redirect policy centralized in `model_http_client_builder` while preserving each public path's existing client-build error mapping.
 - Mutation testing is mandatory: the local pre-commit hook runs a staged Rust diff sweep. Ordinary CI classifies the complete event diff with `scripts/mutants-ci-scope.sh`: changed inline tests scope to their owning source files; integration tests, fixtures, snapshots, deletions and ambiguous ownership trigger a full sweep; production-only changes skip mutation. Manual dispatch and the fifteenth-day monthly schedule always run the full sweep. Failed runs retain bounded diagnostics for Jobsy's `open-agent-sdk-rust-mutation-repair` job, which repairs the survivors through a draft pull request the following day. Fix survivors through discriminating tests or deletion of unobservable code, never exclusions.
 - **The verdict is `missed.txt`, not the exit code.** `scripts/mutants-run.sh` owns that rule and both the hook and CI call it, so the two cannot disagree. cargo-mutants reports exit 3 (Timeout) in preference to exit 2 (FoundProblems), so a run with one hanging mutant and one genuine survivor also exits 3; a timeout is a detection and passes, a survivor fails.
-- **Every mutation workload runs on homelab-ai-1 as the `open-agent-sdk-rust-mutants` role, never on this machine.** The five scripts are drep's (`~/dev/drep/scripts/`) with only the `AI1_CI_ROLE` line changed; keep them in step with drep. CI sweeps run on the role's runner (`runs-on: [self-hosted, linux, x64, homelab-ai-1, open-agent-sdk-rust-mutants]`) and never for pull requests from forks. The hook reaches ai-1 through `scripts/mutants-remote.sh`, whose session holds the role's host lock (named by the role unit, shared with CI) from source sync through result mirroring, and `scripts/mutants-ai1-transport.sh`, which sends every command and rsync through ai-1's sandboxed `offload.py` and refuses any other host. The staged run tests a snapshot of the index and fails if the index changed during the run. An unreachable ai-1 falls back to a local run of that snapshot **with a warning on stderr**, never a silent skip. The hook refuses a working tree that differs from the index, or has untracked inputs, before fmt, clippy and the tests. Knobs: `DREP_MUTANTS_HOST_LOCK_WAIT_SECONDS`, `DREP_MUTANTS_TMPDIR`, `DREP_MUTANTS_REMOTE=0` to force local, `MUTANTS_JOBS`, `MUTANTS_LOCAL_JOBS`.
+- **Every mutation workload runs on homelab-1 as the `open-agent-sdk-rust-mutants` role, never on this machine.** The five scripts are drep's (`~/dev/drep/scripts/`) with only the `AI1_CI_ROLE` line changed; keep them in step with drep. CI sweeps run on the role's runner (`runs-on: [self-hosted, linux, x64, homelab-1, open-agent-sdk-rust-mutants]`) and never for pull requests from forks. The hook reaches homelab-1 through `scripts/mutants-remote.sh`, whose session holds the role's host lock (named by the role unit, shared with CI) from source sync through result mirroring, and `scripts/mutants-ai1-transport.sh`, which sends every command and rsync through homelab-1's sandboxed `offload.py` and refuses any other host. The staged run tests a snapshot of the index and fails if the index changed during the run. An unreachable homelab-1 falls back to a local run of that snapshot **with a warning on stderr**, never a silent skip. The hook refuses a working tree that differs from the index, or has untracked inputs, before fmt, clippy and the tests. Knobs: `DREP_MUTANTS_HOST_LOCK_WAIT_SECONDS`, `DREP_MUTANTS_TMPDIR`, `DREP_MUTANTS_REMOTE=0` to force local, `MUTANTS_JOBS`, `MUTANTS_LOCAL_JOBS`.
 - More jobs can be slower, and `-j 4` on a 32-thread box is not a typo: concurrent source copies, compilation and linking made measured runs I/O-bound at higher job counts. cargo-mutants excludes the checkout's top-level `target/` by default; do not claim a shared target cache warms its per-mutant copies. Measure before raising `MUTANTS_JOBS`.
 - **Scratch copies live beside the checkout, never in `/tmp`.** `mutants-run.sh` exports `TMPDIR=<checkout>.mutants-tmp` (override with `DREP_MUTANTS_TMPDIR`), sweeps stale `cargo-mutants-*.tmp` copies on entry and removes its own on exit. cargo-mutants deletes its per-job tree copies only on a clean exit, so copies stranded by a cancelled or timed-out run must cost disk, not RAM.
 - `cargo-mutants` walks `mod` declarations but does not expand `include!`, so code in an `include!` fragment is invisible to the mutation gate. New modules holding executable logic must be declared with `mod` and re-exported (see `src/utils.rs` and `src/types.rs`), not added as fragments. The pre-existing `client/`, `hooks/`, `retry/`, `tools/`, and most `types/` fragments remain uncovered by the sweep, and cannot be converted without weakening encapsulation: they reach into module-private fields of types their siblings define (`Client` in `client/state.rs`, `AgentOptions` in `types/agent_options.rs`), which sibling modules could only reach if those fields were widened to `pub(crate)`. Converting them is a real refactor with a real cost, not a mechanical move.
@@ -483,7 +488,7 @@ cargo test --test mutation_ci_scope_test
 - Base64 safety: use base64 0.23 without its default `simd-unsafe` feature unless a measured need justifies enabling it
 - GitHub Actions: pin every third-party action to an immutable full commit SHA with a version comment; Dependabot maintains the pins
 - Mutation installer: `taiki-e/install-action` is pinned at v2.87.26. The workflow-policy test asserts the exact SHA and version comment, so update the workflow and assertion together.
-- Actionlint reads `.github/actionlint.yaml` for the mutation runner's custom `homelab-ai-1` and `open-agent-sdk-rust-mutants` labels. Keep those labels aligned with the CI workflow and the registered runner.
+- Actionlint reads `.github/actionlint.yaml` for the mutation runner's custom `homelab-1` and `open-agent-sdk-rust-mutants` labels. Keep those labels aligned with the CI workflow and the registered runner.
 - Workflow permissions: default to `contents: read` and grant additional permissions only to the job that requires them
 - GitHub is the canonical CI and release host. Linux and macOS jobs both run on GitHub Actions runners; no external runner host is involved. Do not add CI configuration that routes test or coverage jobs to non-GitHub runners.
 - Audit workflows: install and verify stable Rust before the audit step, then run `cargo audit --deny warnings` directly (not the `actions-rust-lang/audit@` action) so vulnerabilities, yanked crates, unmaintained crates, and unsoundness warnings all fail CI
