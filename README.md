@@ -1452,7 +1452,7 @@ open-agent-sdk-rust/
 │   ├── mutants-ai1-transport.sh     # Sends every ai-1 command and rsync through the role's sandbox
 │   ├── mutants-common.sh            # The one definition of the results directory and lock wait
 │   ├── mutants-run.sh               # Owns the verdict (missed.txt); called by the hook and CI
-│   ├── mutants-remote.sh            # Runs the sweep on homelab-ai-1, falls back loudly
+│   ├── mutants-remote.sh            # Runs the sweep on homelab-1, falls back loudly
 │   └── mutants-staged.sh            # Staged-diff scope, through mutants-remote.sh
 ├── .githooks/
 │   └── pre-commit                   # fmt, clippy, tests, and a --in-diff cargo-mutants sweep
@@ -1524,7 +1524,7 @@ fast policy check. Manual dispatch and the monthly run on the fifteenth always s
 the tree. Failed runs retain bounded evidence for the following day's shared
 `Monthly Mutation Repair` automation, which repairs survivors through a PR and merges
 only after its checks pass.
-Every sweep, from CI or from the local hook, runs on homelab-ai-1 as this repository's `open-agent-sdk-rust-mutants` role, and CI never runs one for a pull request from a fork. The hook's mutation step refuses to run while the working tree differs from the index or has untracked files.
+Every sweep, from CI or from the local hook, runs on homelab-1 as this repository's `open-agent-sdk-rust-mutants` role, and CI never runs one for a pull request from a fork. The hook's mutation step refuses to run while the working tree differs from the index or has untracked files.
 Enable the staged local gate with:
 
 ```bash

@@ -24,19 +24,19 @@ expect_refusal ai1_ssh -t true
 expect_refusal ai1_ssh -o
 expect_refusal ai1_ssh
 output=$(ai1_ssh -o BatchMode=yes true)
-[[ $output == "<ssh><-o><BatchMode=yes><steve@192.168.68.88><$offload true>" ]] || fail
+[[ $output == "<ssh><-o><BatchMode=yes><steve@192.168.68.73><$offload true>" ]] || fail
 for refused in "-e ssh" --rsh=other --rsync-path=sh --exclude; do
   expect_refusal ai1_push -a "$refused" source/ remote/
 done
 expect_refusal ai1_push -a source/
 expect_refusal ai1_pull -a remote/ local/ extra/
 output=$(ai1_push -a --exclude=target source/ remote/dir/)
-[[ $output == "<rsync><--rsync-path=$offload rsync><-a><--exclude=target><./source/><steve@192.168.68.88:remote/dir/>" ]] || fail
+[[ $output == "<rsync><--rsync-path=$offload rsync><-a><--exclude=target><./source/><steve@192.168.68.73:remote/dir/>" ]] || fail
 # A local path holding a colon stays local, relative or absolute.
 output=$(ai1_push -aR a:b/f /tmp/c:d/f remote/)
-[[ $output == "<rsync><--rsync-path=$offload rsync><-aR><./a:b/f></tmp/c:d/f><steve@192.168.68.88:remote/>" ]] || fail
+[[ $output == "<rsync><--rsync-path=$offload rsync><-aR><./a:b/f></tmp/c:d/f><steve@192.168.68.73:remote/>" ]] || fail
 output=$(ai1_pull -a remote/out/ out/)
-[[ $output == "<rsync><--rsync-path=$offload rsync><-a><steve@192.168.68.88:remote/out/><./out/>" ]] || fail
+[[ $output == "<rsync><--rsync-path=$offload rsync><-a><steve@192.168.68.73:remote/out/><./out/>" ]] || fail
 # Decode only this fixed test payload through a mocked sudo; never contact SSH.
 command() {
   local last

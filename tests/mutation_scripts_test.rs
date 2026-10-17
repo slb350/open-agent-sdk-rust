@@ -26,7 +26,7 @@ fn remote_mutation_defaults_to_this_repositorys_ai1_role() {
     }
     assert!(
         without_comments("scripts/mutants-ai1-transport.sh")
-            .contains("AI1_HOST=steve@192.168.68.88"),
+            .contains("AI1_HOST=steve@192.168.68.73"),
         "the transport must own ai-1 as the only host"
     );
     for retired in ["strix", "homelab-1.", "homelab-2", "legion"] {
