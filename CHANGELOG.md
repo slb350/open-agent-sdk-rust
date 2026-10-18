@@ -17,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   OpenAI-protocol path. Callers matching `Error::Stream` for these events must match
   `Error::Api` instead.
 
+### Maintenance
+
+- Refreshed the Rust-1.85-compatible lockfile entries: `cc` 1.8.0, `defmt` 1.2.0,
+  `defmt-macros` 1.2.0, `defmt-parser` 1.1.0, `equivalent` 1.0.3, `libc` 0.2.191,
+  `schannel` 0.1.30, `serde_json` 1.0.154, `syn` 3.0.9, `tokio` 1.53.3, `unicode-ident` 1.0.27,
+  `zerocopy` 0.8.63, and `zerocopy-derive` 0.8.63. Each passes the Rust 1.85 all-target check
+  with the updated lockfile (`--locked`); `cargo audit` and `osv-scanner` found no
+  vulnerability, warning, or OSV finding before or after. No public API changed.
+
 ## [0.11.6] - 2026-10-12
 
 A server error reported inside an OpenAI-protocol stream now reaches the caller as `Error::Api`. No public API changed.
