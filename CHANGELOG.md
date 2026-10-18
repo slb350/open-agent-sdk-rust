@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A mid-stream Anthropic `error` event of a kind other than `overloaded_error`,
+  `rate_limit_error` or `api_error` (for example `invalid_request_error`) is now reported as
+  `Error::Api` without a status. It was an `Error::Stream`, which `is_retryable_error` treats
+  as transient, so `retry_with_backoff_conditional` re-sent a request the server had rejected
+  for a fault in the request itself. The message is unchanged, and it now matches the
+  OpenAI-protocol path. Callers matching `Error::Stream` for these events must match
+  `Error::Api` instead.
+
 ## [0.11.6] - 2026-10-12
 
 A server error reported inside an OpenAI-protocol stream now reaches the caller as `Error::Api`. No public API changed.
