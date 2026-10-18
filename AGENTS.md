@@ -514,7 +514,13 @@ RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 - `log` raised to `0.4.29`
 - `futures` raised to `0.3.32`
 
+rustls raised to 0.23.46 (post-v0.11.6, unreleased on main):
+
+- Lockfile pin updated to resolve RustSec advisories identified during CI migration qualification (commit a1dac90, 2026-10-17). Transitive dependency through reqwest's TLS stack; `Cargo.toml` direct dependencies unchanged.
+
 ## Current Version
+
+**Unreleased (main, post-v0.11.6)**. Lockfile updated: rustls bumped to 0.23.46 to resolve RustSec advisories found during CI migration qualification. Mutation CI routing returned to homelab-1 (`ci.yml` updated; operational note at top of this file). No public API changed.
 
 **v0.11.6**. In-stream server errors now surface as `Error::Api` rather than a stream parse failure — covers vLLM and llama.cpp whole-payload errors and OpenRouter `finish_reason: "error"` chunks. Lockfile refreshed: cc 1.7.0, either 1.19.0, h2 0.4.20, hyper 1.12.0, jiff 0.2.38, jiff-static 0.2.38, libc 0.2.190, mio 1.2.4, serde_json 1.0.152, smallvec 1.16.3, syn 3.0.7, tokio 1.53.2, tokio-rustls 0.26.6, tokio-util 0.7.20, want 0.3.2, yoke-derive 0.8.4, zerocopy 0.8.62, zerocopy-derive 0.8.62, zeroize 1.9.1. No public API changed. See CHANGELOG.md [0.11.6].
 
