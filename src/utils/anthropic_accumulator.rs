@@ -143,7 +143,9 @@ impl Default for AnthropicAccumulator {
 /// no HTTP status of its own because the response already returned 200. Mapping the two
 /// error kinds that are genuinely transient onto the statuses they would have carried had
 /// they arrived before the stream opened is what lets `retry_with_backoff_conditional` treat
-/// them as retryable; anything else stays a stream error, which is not retried.
+/// them as retryable. Anything else is an [`Error::Api`] without a status, which is never
+/// retried: [`Error::Stream`] is the retryable class, reserved for a transport that broke,
+/// and asking again cannot fix a request the server rejected.
 fn stream_error(error: &crate::types::AnthropicErrorBody) -> Error {
     let (described, status) = match error.error_type.as_deref() {
         Some(kind) => {
@@ -160,7 +162,7 @@ fn stream_error(error: &crate::types::AnthropicErrorBody) -> Error {
 
     match status {
         Some(status) => Error::api_status(status, described),
-        None => Error::stream(described),
+        None => Error::api(described),
     }
 }
 

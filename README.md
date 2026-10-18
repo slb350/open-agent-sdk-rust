@@ -1316,7 +1316,9 @@ immediately rather than burning the full attempt budget.
 A mid-stream Anthropic `error` event arrives on a response that already returned 200, so it
 carries no status of its own. The SDK maps the two transient kinds onto the statuses they
 would have had earlier — `overloaded_error` to 529 and `rate_limit_error` to 429, with
-`api_error` to 500 — which is what lets `retry_with_backoff` see them as retryable.
+`api_error` to 500 — which is what lets `retry_with_backoff` see them as retryable. Any
+other kind, such as `invalid_request_error`, becomes an `Error::Api` without a status and is
+never retried.
 
 ```rust
 use open_agent::Error;

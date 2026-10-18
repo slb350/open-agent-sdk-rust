@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A mid-stream Anthropic `error` event of a kind other than `overloaded_error`,
+  `rate_limit_error` or `api_error` (for example `invalid_request_error`) is now reported as
+  `Error::Api` without a status. It was an `Error::Stream`, which `is_retryable_error` treats
+  as transient, so `retry_with_backoff_conditional` re-sent a request the server had rejected
+  for a fault in the request itself. The message is unchanged, and it now matches the
+  OpenAI-protocol path. Callers matching `Error::Stream` for these events must match
+  `Error::Api` instead.
+
 ### Maintenance
 
 - Refreshed the Rust-1.85-compatible lockfile entries: `cc` 1.8.0, `defmt` 1.2.0,

@@ -492,6 +492,58 @@ fn an_unclassifiable_error_is_not_given_a_retryable_status() {
 }
 
 #[test]
+fn an_unclassifiable_error_is_never_retried() {
+    for error_type in [
+        Some("invalid_request_error"),
+        Some("authentication_error"),
+        None,
+    ] {
+        let error = run(
+            vec![AnthropicEvent::Error {
+                error: AnthropicErrorBody {
+                    error_type: error_type.map(str::to_string),
+                    message: "bad model".to_string(),
+                },
+            }],
+            false,
+        )
+        .expect_err("an error event fails the stream");
+
+        assert!(
+            matches!(error, Error::Api { status: None, .. }),
+            "a server-reported error is an API error without a status ({error_type:?}): {error:?}"
+        );
+        assert!(
+            !crate::retry::is_retryable_error(&error),
+            "asking again cannot fix a request the server rejected ({error_type:?}): {error}"
+        );
+    }
+}
+
+#[test]
+fn the_transient_kinds_are_retried() {
+    for (kind, status) in [
+        ("overloaded_error", 529),
+        ("rate_limit_error", 429),
+        ("api_error", 500),
+    ] {
+        let error = run(
+            vec![AnthropicEvent::Error {
+                error: AnthropicErrorBody {
+                    error_type: Some(kind.to_string()),
+                    message: "try later".to_string(),
+                },
+            }],
+            false,
+        )
+        .expect_err("an error event fails the stream");
+
+        assert_eq!(error.status_code(), Some(status), "{kind}");
+        assert!(crate::retry::is_retryable_error(&error), "{kind}: {error}");
+    }
+}
+
+#[test]
 fn an_error_message_names_its_kind() {
     let error = run(
         vec![AnthropicEvent::Error {
