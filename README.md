@@ -1570,6 +1570,8 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
+**Unreleased (main, post-v0.11.6)**: Lockfile updated — rustls bumped to 0.23.46 to resolve RustSec advisories identified during CI migration qualification (transitive dependency through reqwest's TLS stack; `Cargo.toml` direct dependencies unchanged). Mutation CI routing returned to homelab-1 (`ci.yml` updated). No public API changed.
+
 **Status**: v0.11.6 is the current published crates.io release (in-stream server errors now surface as `Error::Api` rather than a stream parse failure, covering vLLM/llama.cpp whole-payload errors and OpenRouter `finish_reason: "error"` chunks; lockfile and GitHub Actions pins refreshed). No public API changed. See CHANGELOG.md.
 
 Star this repo if you're building AI agents with local models in Rust!
