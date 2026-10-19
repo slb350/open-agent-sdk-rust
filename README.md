@@ -15,7 +15,7 @@
 - **Local or hosted** - run on your own hardware at no API cost and with no data leaving the machine, or point it at a vendor
 - **Control** - pick your model (Qwen, Llama, Mistral, Claude, etc.)
 
-[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.11.6)](https://crates.io/crates/open-agent-sdk)
+[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.11.7)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -82,7 +82,7 @@ explicitly when an endpoint asks for them.
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.11.6"
+open-agent-sdk = "0.11.7"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -1572,8 +1572,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Unreleased (main, post-v0.11.6)**: Lockfile updated — rustls bumped to 0.23.46 to resolve RustSec advisories identified during CI migration qualification (transitive dependency through reqwest's TLS stack; `Cargo.toml` direct dependencies unchanged). Mutation CI routing returned to homelab-1 (`ci.yml` updated). No public API changed.
-
-**Status**: v0.11.6 is the current published crates.io release (in-stream server errors now surface as `Error::Api` rather than a stream parse failure, covering vLLM/llama.cpp whole-payload errors and OpenRouter `finish_reason: "error"` chunks; lockfile and GitHub Actions pins refreshed). No public API changed. See CHANGELOG.md.
+**Status**: v0.11.7 is the current published crates.io release (an unclassified mid-stream Anthropic `error` event now reaches the caller as a non-retryable `Error::Api` without a status instead of a retryable `Error::Stream`; lockfile refreshed, carrying rustls 0.23.46 for RustSec advisories found during CI migration qualification). No public API changed. See CHANGELOG.md.
 
 Star this repo if you're building AI agents with local models in Rust!

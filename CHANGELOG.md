@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.7] - 2026-10-19
+
+An unclassified mid-stream Anthropic `error` event now reaches the caller as a non-retryable `Error::Api` instead of a retryable `Error::Stream`. The lockfile carries rustls 0.23.46 for RustSec advisories found during CI migration qualification. No public API changed.
+
 ### Fixed
 
 - A mid-stream Anthropic `error` event of a kind other than `overloaded_error`,
