@@ -516,7 +516,7 @@ RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 
 rustls raised to 0.23.46 (released in v0.11.7):
 
-- Lockfile pin updated to resolve RustSec advisories identified during CI migration qualification (commit a1dac90, 2026-10-17). Transitive dependency through reqwest's TLS stack; `Cargo.toml` direct dependencies unchanged.
+- Lockfile pin updated to resolve RUSTSEC-2026-0346, RUSTSEC-2026-0347, RUSTSEC-2026-0348 and RUSTSEC-2026-0349, identified during CI migration qualification (commit a1dac90, 2026-10-17). Transitive dependency through reqwest's TLS stack; `Cargo.toml` direct dependencies unchanged.
 
 ## Current Version
 
