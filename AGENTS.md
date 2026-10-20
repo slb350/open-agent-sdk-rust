@@ -18,7 +18,7 @@ This AGENTS.md is the tracked, authoritative instruction file for agents working
 
 ## Project Description
 
-A lightweight Rust SDK (v0.11.6 published — see CHANGELOG.md) for building AI agents with local or cloud LLMs. Speaks two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint with `ApiProtocol`. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
+A lightweight Rust SDK (v0.11.7 published — see CHANGELOG.md) for building AI agents with local or cloud LLMs. Speaks two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint with `ApiProtocol`. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
 
 ## Repository Structure
 
@@ -501,7 +501,7 @@ Jobsy on homelab-ai-1 runs this repository's scheduled maintenance as a weekly d
 
 A daily Jobsy review job reviews each open `jobsy/` pull request against this file, fixes it on its own branch when it is not solid, and merges it with a merge commit once every check on the reviewed head has passed; Jobsy refuses the merge otherwise. A weekly Jobsy release job decides under the release rules in this file whether the merged work warrants a release, and if so opens a `jobsy/release/` pull request that bumps the version and moves the changelog entries. When that pull request merges, Jobsy pushes the annotated tag `vX.Y.Z` on the merge commit, and `publish-crate.yml` publishes that commit to crates.io through trusted publishing, then creates the GitHub release from that version's changelog section. The publish job runs in the `release` environment, which deploys only from `v*` tags; a repository ruleset lets only admins create, move or delete a `v*` tag, and the crate's crates.io trusted publisher requires the environment. A run that published but failed before the GitHub release is repaired by re-running it: it uploads nothing when every file of the version crates.io holds matches a package built from the tag's commit, and fails on any difference. No Jobsy job pushes main directly or publishes from its own host.
 
-## Security Advisories (resolved in v0.6.5, current v0.11.6)
+## Security Advisories (resolved in v0.6.5, current v0.11.7)
 
 RUSTSEC-2024-0449 resolved (v0.6.5):
 
@@ -514,13 +514,13 @@ RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 - `log` raised to `0.4.29`
 - `futures` raised to `0.3.32`
 
-rustls raised to 0.23.46 (post-v0.11.6, unreleased on main):
+rustls raised to 0.23.46 (released in v0.11.7):
 
-- Lockfile pin updated to resolve RustSec advisories identified during CI migration qualification (commit a1dac90, 2026-10-17). Transitive dependency through reqwest's TLS stack; `Cargo.toml` direct dependencies unchanged.
+- Lockfile pin updated to resolve RUSTSEC-2026-0346, RUSTSEC-2026-0347, RUSTSEC-2026-0348 and RUSTSEC-2026-0349, identified during CI migration qualification (commit a1dac90, 2026-10-17). Transitive dependency through reqwest's TLS stack; `Cargo.toml` direct dependencies unchanged.
 
 ## Current Version
 
-**Unreleased (main, post-v0.11.6)**. Lockfile updated: rustls bumped to 0.23.46 to resolve RustSec advisories found during CI migration qualification. Mutation CI routing returned to homelab-1 (`ci.yml` updated; operational note at top of this file). No public API changed.
+**v0.11.7**. A mid-stream Anthropic `error` event of a kind other than the three transient ones is no longer retried: it reaches the caller as `Error::Api` without a status, where it was a retryable `Error::Stream`. The lockfile carries rustls 0.23.46 to resolve RustSec advisories found during CI migration qualification and thirteen refreshed Rust-1.85-compatible entries. Mutation CI routing returned to homelab-1. No public API changed. See CHANGELOG.md [0.11.7].
 
 **v0.11.6**. In-stream server errors now surface as `Error::Api` rather than a stream parse failure — covers vLLM and llama.cpp whole-payload errors and OpenRouter `finish_reason: "error"` chunks. Lockfile refreshed: cc 1.7.0, either 1.19.0, h2 0.4.20, hyper 1.12.0, jiff 0.2.38, jiff-static 0.2.38, libc 0.2.190, mio 1.2.4, serde_json 1.0.152, smallvec 1.16.3, syn 3.0.7, tokio 1.53.2, tokio-rustls 0.26.6, tokio-util 0.7.20, want 0.3.2, yoke-derive 0.8.4, zerocopy 0.8.62, zerocopy-derive 0.8.62, zeroize 1.9.1. No public API changed. See CHANGELOG.md [0.11.6].
 

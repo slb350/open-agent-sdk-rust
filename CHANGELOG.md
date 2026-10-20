@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.7] - 2026-10-20
+
+An unclassified mid-stream Anthropic `error` event now reaches the caller as a non-retryable `Error::Api` instead of a retryable `Error::Stream`. The lockfile carries rustls 0.23.46 for RustSec advisories found during CI migration qualification. No public API changed.
+
 ### Fixed
 
 - A mid-stream Anthropic `error` event of a kind other than `overloaded_error`,
@@ -16,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for a fault in the request itself. The message is unchanged, and it now matches the
   OpenAI-protocol path. Callers matching `Error::Stream` for these events must match
   `Error::Api` instead.
+
+### Security
+
+- Updated locked `rustls` from 0.23.45 to 0.23.46, resolving RUSTSEC-2026-0346,
+  RUSTSEC-2026-0347, RUSTSEC-2026-0348 and RUSTSEC-2026-0349. The SDK's default build uses
+  reqwest's native TLS and does not compile `rustls`; the lockfile entry is updated so
+  `cargo audit` reports no advisory against it.
 
 ### Maintenance
 
