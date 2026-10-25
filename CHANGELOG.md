@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Updated locked `rustls-webpki` from 0.103.15 to 0.103.16, resolving RUSTSEC-2026-0382
+  (CVE-2026-111943, published 2026-10-20). Affected versions may accept certificate paths
+  containing distrusted emSign intermediate public keys whose private keys are now well known;
+  0.103.16 rejects paths containing those SPKIs. `rustls-webpki` reaches `Cargo.lock` only
+  through `reqwest`'s optional `rustls-tls` feature: the SDK's declared features build
+  reqwest's native TLS and compile neither `rustls` nor `rustls-webpki`, and `rustls` 0.23.46
+  requires `^0.103.14`, so a fresh resolve takes the patched release rather than 0.103.15.
+  `Cargo.toml` direct dependencies are unchanged. The two sibling advisories that share that
+  CVE — RUSTSEC-2026-0381 (`webpki-roots`) and RUSTSEC-2026-0383 (`webpki-root-certs`) — name
+  packages absent from this lockfile. `cargo audit` and `osv-scanner` report no vulnerability,
+  warning, or OSV finding after the update.
+
+### Maintenance
+
+- Refreshed the Rust-1.85-compatible lockfile entries: `cc` 1.10.0, `find-msvc-tools` 0.1.15,
+  `rustls-webpki` 0.103.16, `smallvec` 1.16.4, `tinystr` 0.8.5, `tokio` 1.54.1, `yoke` 0.8.4,
+  `zerovec` 0.11.9, and `zerovec-derive` 0.11.7. `yoke` moves from 0.8.3 to 0.8.4, matching the
+  `yoke-derive` 0.8.4 pin AGENTS.md records. Each passes the Rust 1.85 all-target check with the
+  updated lockfile (`--locked`). No public API changed.
+
 ## [0.11.7] - 2026-10-20
 
 An unclassified mid-stream Anthropic `error` event now reaches the caller as a non-retryable `Error::Api` instead of a retryable `Error::Stream`. The lockfile carries rustls 0.23.46 for RustSec advisories found during CI migration qualification. No public API changed.
