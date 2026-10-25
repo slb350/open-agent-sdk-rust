@@ -484,6 +484,7 @@ cargo test --test mutation_ci_scope_test
 - Reqwest compatibility: keep reqwest on 0.12.x while `Error::Http` publicly wraps `reqwest::Error`; Dependabot ignores only semver-major reqwest updates until a release that reworks that public boundary. v0.7.0 is not that release — it carries the `max_tokens` and `Error::Api` breaks instead.
 - Wiremock compatibility: keep the dev-dependency pinned to 0.6.4 on Rust 1.85. Dependabot ignores exactly 0.6.5 because its let-chains do not compile on the MSRV; later releases remain eligible and must pass the all-target MSRV job before adoption.
 - yoke-derive compatibility: the lockfile carries 0.8.4, which declares `rust-version` 1.82, passes the locked Rust 1.85 all-target check, and shares `syn` 3 and `synstructure` 0.14 with `zerofrom-derive`. Dependabot ignores exactly 0.8.3 because it calls `str::from_utf8`, which is unavailable on the MSRV; never resolve to 0.8.3, and do not restore the former 0.8.2 hold. Later releases remain eligible and must pass the all-target MSRV job before adoption.
+- Lockfile MSRV holds: the lock resolves `criterion` 0.7.0 (0.8.x requires Rust 1.86), `idna_adapter` 1.2.1 (1.2.2 requires Rust 1.86), and `encoding_rs` 0.8.35 with the `icu_*` 2.1.x chain (0.8.42 and 2.4.0 require Rust 1.88). These are MSRV holds, not failures: do not raise `rust-version` or force them with `cargo update --precise` above the newest Rust-1.85-compatible release. Later releases remain eligible and must pass the all-target MSRV job before adoption.
 - For compatible lockfile refreshes, verify the complete updated lockfile with `cargo +1.85 check --all-features --all-targets --workspace --locked`. If a refresh moves `yoke-derive` to a release that fails that check, pin it back to the newest release that passes with `cargo update -p yoke-derive --precise <version>`.
 - Base64 safety: use base64 0.23 without its default `simd-unsafe` feature unless a measured need justifies enabling it
 - GitHub Actions: pin every third-party action to an immutable full commit SHA with a version comment; Dependabot maintains the pins
@@ -517,6 +518,10 @@ RUSTSEC-2026-0190 and RUSTSEC-2026-0204 resolved:
 rustls raised to 0.23.46 (released in v0.11.7):
 
 - Lockfile pin updated to resolve RUSTSEC-2026-0346, RUSTSEC-2026-0347, RUSTSEC-2026-0348 and RUSTSEC-2026-0349, identified during CI migration qualification (commit a1dac90, 2026-10-17). Transitive dependency through reqwest's TLS stack; `Cargo.toml` direct dependencies unchanged.
+
+rustls-webpki raised to 0.103.16 (unreleased as of v0.11.7):
+
+- Lockfile pin updated to resolve RUSTSEC-2026-0382 / CVE-2026-111943 (2026-10-20): certificate verification may accept distrusted emSign intermediates. Transitive dependency through reqwest's optional `rustls-tls` feature only — this crate's declared features build reqwest's native TLS and compile neither `rustls` nor `rustls-webpki`, and rustls 0.23.46 requires `^0.103.14`, so a fresh resolve cannot select the vulnerable release. `Cargo.toml` direct dependencies unchanged; do not add an unused direct `rustls-webpki` floor, which would put `ring` into every downstream build. The sibling advisories sharing that CVE concern `webpki-roots` (RUSTSEC-2026-0381) and `webpki-root-certs` (RUSTSEC-2026-0383), neither of which is in this lockfile.
 
 ## Current Version
 
