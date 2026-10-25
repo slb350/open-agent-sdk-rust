@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A stream from an OpenAI-compatible server that omits `id`, `object`, `created` or `model`
+  from its chunks is no longer rejected with `Failed to parse SSE event data: missing field`.
+  The SDK never reads those fields, only `choices`, yet a missing one lost the whole response
+  as a retryable stream error. NVIDIA's TensorRT-Edge-LLM experimental server and Bifrost
+  v1.6.9 each omit some of them. A missing field now deserializes to its empty value. No
+  public API changed.
+
 ## [0.11.7] - 2026-10-20
 
 An unclassified mid-stream Anthropic `error` event now reaches the caller as a non-retryable `Error::Api` instead of a retryable `Error::Stream`. The lockfile carries rustls 0.23.46 for RustSec advisories found during CI migration qualification. No public API changed.

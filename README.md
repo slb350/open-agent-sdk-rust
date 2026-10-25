@@ -1435,6 +1435,7 @@ open-agent-sdk-rust/
 │   ├── ai1-transport.sh                     # ai-1 transport refuses anything that would bypass its sandbox
 │   ├── package_manifest_test.rs             # Crate archive excludes development-only files
 │   ├── redirect_policy_test.rs              # Model requests reject all HTTP redirects
+│   ├── regression_chunk_metadata_test.rs    # Chunks missing unused id/object/created/model fields still stream
 │   ├── regression_client_lifecycle_test.rs  # Repeated/abandoned requests, interruption, history reset
 │   ├── regression_finish_reason_test.rs     # finish_reason surfaced to callers (regression since 0.8.0)
 │   ├── regression_incremental_streaming_test.rs # Token-by-token text delivery (regression since 0.10.0)

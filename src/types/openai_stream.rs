@@ -8,6 +8,11 @@ use serde::Deserialize;
 ///
 /// Contains response metadata and incremental choices. `[DONE]` is an SSE sentinel,
 /// not an instance of this type.
+///
+/// Only `choices` is required. The four metadata fields are never read by the SDK, and some
+/// OpenAI-compatible servers omit them, so a missing one deserializes to its empty value
+/// rather than failing the whole stream. `choices` stays required: a payload without it is
+/// not a chunk, and `openai_error` relies on that to recognise a server-reported error.
 #[derive(Debug, Clone, Deserialize)]
 pub struct OpenAIChunk {
     /// Unique identifier for this completion.
@@ -15,24 +20,28 @@ pub struct OpenAIChunk {
     /// All chunks in a single streaming response share the same ID.
     /// Not actively used by the SDK but preserved for debugging.
     #[allow(dead_code)]
+    #[serde(default)]
     pub id: String,
 
     /// Object type (always "chat.completion.chunk" for streaming).
     ///
     /// Not actively used by the SDK but preserved for debugging.
     #[allow(dead_code)]
+    #[serde(default)]
     pub object: String,
 
     /// Unix timestamp of when this chunk was created.
     ///
     /// Not actively used by the SDK but preserved for debugging.
     #[allow(dead_code)]
+    #[serde(default)]
     pub created: i64,
 
     /// Model that generated this chunk.
     ///
     /// Not actively used by the SDK but preserved for debugging.
     #[allow(dead_code)]
+    #[serde(default)]
     pub model: String,
 
     /// Array of completion choices (usually contains one element).
