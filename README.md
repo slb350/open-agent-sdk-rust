@@ -1573,6 +1573,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.11.7 is the current published crates.io release (an unclassified mid-stream Anthropic `error` event now reaches the caller as a non-retryable `Error::Api` without a status instead of a retryable `Error::Stream`; lockfile refreshed, carrying rustls 0.23.46 for RustSec advisories found during CI migration qualification). No public API changed. See CHANGELOG.md.
+**Status**: v0.11.7 is the current published crates.io release. `main` carries two unreleased fixes: stream chunks that omit `id`, `object`, `created`, or `model` no longer cause a parse failure (affects NVIDIA TensorRT-Edge-LLM and Bifrost v1.6.9), and `rustls-webpki` is pinned to 0.103.16 for RUSTSEC-2026-0382 / CVE-2026-111943. No public API changed. See CHANGELOG.md.
 
 Star this repo if you're building AI agents with local models in Rust!
