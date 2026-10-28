@@ -15,7 +15,7 @@
 - **Local or hosted** - run on your own hardware at no API cost and with no data leaving the machine, or point it at a vendor
 - **Control** - pick your model (Qwen, Llama, Mistral, Claude, etc.)
 
-[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.11.7)](https://crates.io/crates/open-agent-sdk)
+[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.11.8)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -82,7 +82,7 @@ explicitly when an endpoint asks for them.
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.11.7"
+open-agent-sdk = "0.11.8"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -1573,6 +1573,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.11.7 is the current published crates.io release. `main` carries two unreleased fixes: stream chunks that omit `id`, `object`, `created`, or `model` no longer cause a parse failure (affects NVIDIA TensorRT-Edge-LLM and Bifrost v1.6.9), and `rustls-webpki` is pinned to 0.103.16 for RUSTSEC-2026-0382 / CVE-2026-111943. No public API changed. See CHANGELOG.md.
+**Status**: v0.11.8 is the current published crates.io release (stream chunks that omit `id`, `object`, `created`, or `model` no longer cause a parse failure — affects NVIDIA TensorRT-Edge-LLM and Bifrost v1.6.9; `rustls-webpki` pinned to 0.103.16 for RUSTSEC-2026-0382 / CVE-2026-111943). No public API changed. See CHANGELOG.md.
 
 Star this repo if you're building AI agents with local models in Rust!

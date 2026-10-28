@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.8] - 2026-10-28
+
+Streams from OpenAI-compatible servers that omit the unused chunk metadata fields `id`, `object`, `created` and `model` are delivered instead of failing the whole stream with `missing field`, and the lockfile carries `rustls-webpki` 0.103.16 to resolve RUSTSEC-2026-0382. No public API changed.
+
 ### Fixed
 
 - A stream from an OpenAI-compatible server that omits `id`, `object`, `created` or `model`

@@ -18,7 +18,7 @@ This AGENTS.md is the tracked, authoritative instruction file for agents working
 
 ## Project Description
 
-A lightweight Rust SDK (v0.11.7 published — see CHANGELOG.md) for building AI agents with local or cloud LLMs. Speaks two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint with `ApiProtocol`. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
+A lightweight Rust SDK (v0.11.8 published — see CHANGELOG.md) for building AI agents with local or cloud LLMs. Speaks two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint with `ApiProtocol`. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
 
 ## Repository Structure
 
@@ -504,7 +504,7 @@ Jobsy on homelab-ai-1 runs this repository's scheduled maintenance as a weekly d
 
 A daily Jobsy review job reviews each open `jobsy/` pull request against this file, fixes it on its own branch when it is not solid, and merges it with a merge commit once every check on the reviewed head has passed; Jobsy refuses the merge otherwise. A weekly Jobsy release job decides under the release rules in this file whether the merged work warrants a release, and if so opens a `jobsy/release/` pull request that bumps the version and moves the changelog entries. When that pull request merges, Jobsy pushes the annotated tag `vX.Y.Z` on the merge commit, and `publish-crate.yml` publishes that commit to crates.io through trusted publishing, then creates the GitHub release from that version's changelog section. The publish job runs in the `release` environment, which deploys only from `v*` tags; a repository ruleset lets only admins create, move or delete a `v*` tag, and the crate's crates.io trusted publisher requires the environment. A run that published but failed before the GitHub release is repaired by re-running it: it uploads nothing when every file of the version crates.io holds matches a package built from the tag's commit, and fails on any difference. No Jobsy job pushes main directly or publishes from its own host.
 
-## Security Advisories (resolved in v0.6.5, current v0.11.7)
+## Security Advisories (resolved in v0.6.5, current v0.11.8)
 
 RUSTSEC-2024-0449 resolved (v0.6.5):
 
@@ -521,11 +521,13 @@ rustls raised to 0.23.46 (released in v0.11.7):
 
 - Lockfile pin updated to resolve RUSTSEC-2026-0346, RUSTSEC-2026-0347, RUSTSEC-2026-0348 and RUSTSEC-2026-0349, identified during CI migration qualification (commit a1dac90, 2026-10-17). Transitive dependency through reqwest's TLS stack; `Cargo.toml` direct dependencies unchanged.
 
-rustls-webpki raised to 0.103.16 (unreleased as of v0.11.7):
+rustls-webpki raised to 0.103.16 (released in v0.11.8):
 
 - Lockfile pin updated to resolve RUSTSEC-2026-0382 / CVE-2026-111943 (2026-10-20): certificate verification may accept distrusted emSign intermediates. Transitive dependency through reqwest's optional `rustls-tls` feature only — this crate's declared features build reqwest's native TLS and compile neither `rustls` nor `rustls-webpki`, and rustls 0.23.46 requires `^0.103.14`, so a fresh resolve cannot select the vulnerable release. `Cargo.toml` direct dependencies unchanged; do not add an unused direct `rustls-webpki` floor, which would put `ring` into every downstream build. The sibling advisories sharing that CVE concern `webpki-roots` (RUSTSEC-2026-0381) and `webpki-root-certs` (RUSTSEC-2026-0383), neither of which is in this lockfile.
 
 ## Current Version
+
+**v0.11.8**. A chunk from an OpenAI-compatible server that omits `id`, `object`, `created` or `model` — fields the SDK never reads — no longer fails the whole stream with `missing field`; only `choices` is required. NVIDIA's TensorRT-Edge-LLM experimental server and Bifrost v1.6.9 omit them. The lockfile carries rustls-webpki 0.103.16 to resolve RUSTSEC-2026-0382, plus refreshed Rust-1.85-compatible entries. No public API changed. See CHANGELOG.md [0.11.8].
 
 **v0.11.7**. A mid-stream Anthropic `error` event of a kind other than the three transient ones is no longer retried: it reaches the caller as `Error::Api` without a status, where it was a retryable `Error::Stream`. The lockfile carries rustls 0.23.46 to resolve RustSec advisories found during CI migration qualification and thirteen refreshed Rust-1.85-compatible entries. Mutation CI routing returned to homelab-1. No public API changed. See CHANGELOG.md [0.11.7].
 
