@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A tool call streamed without an `index` no longer fails the whole stream with a `missing
+  field` parse error (a retryable `Error::Stream`). Google's Gemini OpenAI-compatibility endpoint
+  sends each call whole (`id`, `name` and complete `arguments`) in one delta with no index
+  (<https://github.com/n8n-io/n8n/issues/39339>), and the error lost the model's call. A delta
+  without an index (or with `null`) that carries an `id` now opens a new call, kept apart from earlier ones and emitted in arrival order, and one
+  without an `id` continues the most recent such call. Indexed streams are unchanged. For
+  callers that build or inspect `OpenAIToolCallDelta`, `index` stays a `u32`: an absent index
+  is `OpenAIToolCallDelta::UNINDEXED` (`u32::MAX`), which `has_index()` reports. No existing
+  signature changed.
+
 ## [0.11.8] - 2026-10-28
 
 Streams from OpenAI-compatible servers that omit the unused chunk metadata fields `id`, `object`, `created` and `model` are delivered instead of failing the whole stream with `missing field`, and the lockfile carries `rustls-webpki` 0.103.16 to resolve RUSTSEC-2026-0382. No public API changed.

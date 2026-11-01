@@ -48,6 +48,10 @@ pub struct StreamBuffers {
     /// than hashed, so draining yields parallel calls in the order the model opened them.
     tool_calls: BTreeMap<u32, PartialToolCall>,
 
+    /// Slot of the most recent call opened by [`StreamBuffers::unindexed_tool_call`], which an
+    /// id-less fragment from a server that sends no indexes continues.
+    last_unindexed: Option<u32>,
+
     /// The first stop reason the server reported, replayed by [`StreamBuffers::finalize`].
     finish_reason: Option<FinishReason>,
 }
@@ -58,6 +62,7 @@ impl StreamBuffers {
         Self {
             capture_reasoning: false,
             tool_calls: BTreeMap::new(),
+            last_unindexed: None,
             finish_reason: None,
         }
     }
@@ -95,6 +100,27 @@ impl StreamBuffers {
     /// to mention an index is what opens it.
     pub fn tool_call(&mut self, index: u32) -> &mut PartialToolCall {
         self.tool_calls.entry(index).or_default()
+    }
+
+    /// The tool call for a delta whose server sent no index.
+    ///
+    /// Google's Gemini endpoint streams every call whole with an `id` and no index, so there is
+    /// nothing to route by. `names_call` says the delta opens a call of its own (it carries an
+    /// `id`), and that gets the slot after the highest in use, which keeps arrival order and
+    /// keeps parallel calls apart; a delta that does not name a call continues the most recent
+    /// unindexed one, still under assembly, or opens one when there is none.
+    pub fn unindexed_tool_call(&mut self, names_call: bool) -> &mut PartialToolCall {
+        let continued = self
+            .last_unindexed
+            .filter(|slot| !names_call && self.tool_calls.contains_key(slot));
+        let slot = continued.unwrap_or_else(|| {
+            self.tool_calls
+                .keys()
+                .next_back()
+                .map_or(0, |highest| highest + 1)
+        });
+        self.last_unindexed = Some(slot);
+        self.tool_call(slot)
     }
 
     /// The tool call at `index`, or `None` when nothing opened one.
