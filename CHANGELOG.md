@@ -20,6 +20,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is `OpenAIToolCallDelta::UNINDEXED` (`u32::MAX`), which `has_index()` reports. No existing
   signature changed.
 
+### Maintenance
+
+- Refreshed the Rust-1.85-compatible lockfile entries: `js-sys` 0.3.107, `log` 0.4.35,
+  `openssl-probe` 0.2.2, `rustix` 1.1.6, `utf8_iter` 1.1.0, `wasm-bindgen` 0.2.130,
+  `wasm-bindgen-futures` 0.4.80, `wasm-bindgen-macro` 0.2.130, `wasm-bindgen-macro-support`
+  0.2.130, `wasm-bindgen-shared` 0.2.130, and `web-sys` 0.3.107. `utf8_iter` 1.1.0 reformulates
+  the crate around a pluggable handler trait and takes its code-unit types from `utf_types`
+  1.0.0, so the lock gains that one package; it is published from `github.com/hsivonen/utf_types`
+  by the same author as `utf8_iter`, is `Apache-2.0 OR MIT`, and declares `rust-version` 1.83.
+  `utf8_iter` and `utf_types` enter the lock through `idna`, `url` and `reqwest`; `log` and
+  `openssl-probe` through reqwest's native-TLS path (`log` is also a direct dependency floor of
+  0.4.29, which already admits 0.4.35); `rustix` is dev-only through `tempfile`; and the
+  `wasm-bindgen` family resolves only for `wasm32` targets. No advisory touches any of them:
+  `cargo audit` and `osv-scanner` report no vulnerability, warning, or OSV finding before or
+  after the update, and no `Cargo.toml` requirement changed. The MSRV holds AGENTS.md records
+  (`criterion` 0.7.0, `idna_adapter` 1.2.1, `encoding_rs` 0.8.35 with the `icu_*` 2.1.x chain,
+  `reqwest` 0.12.28, `wiremock` 0.6.4) remain in place and were not forced. The updated lockfile
+  passes `cargo +1.85 check --all-features --all-targets --workspace --locked`. No public API
+  changed.
+
 ## [0.11.8] - 2026-10-28
 
 Streams from OpenAI-compatible servers that omit the unused chunk metadata fields `id`, `object`, `created` and `model` are delivered instead of failing the whole stream with `missing field`, and the lockfile carries `rustls-webpki` 0.103.16 to resolve RUSTSEC-2026-0382. No public API changed.
