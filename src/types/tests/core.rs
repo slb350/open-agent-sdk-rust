@@ -270,6 +270,21 @@
     }
 
     #[test]
+    fn tool_call_delta_index_is_real_only_when_the_server_sent_one() {
+        use crate::types::OpenAIToolCallDelta;
+
+        let indexed: OpenAIToolCallDelta = serde_json::from_str(r#"{"index": 3}"#).unwrap();
+        assert_eq!(indexed.index, 3);
+        assert!(indexed.has_index());
+
+        for json in [r#"{"id": "call_1"}"#, r#"{"index": null}"#] {
+            let delta: OpenAIToolCallDelta = serde_json::from_str(json).unwrap();
+            assert_eq!(delta.index, OpenAIToolCallDelta::UNINDEXED, "{json}");
+            assert!(!delta.has_index(), "{json}");
+        }
+    }
+
+    #[test]
     fn test_content_block_serialization() {
         let text_block = ContentBlock::Text(TextBlock::new("Hello"));
         let json = serde_json::to_string(&text_block).unwrap();

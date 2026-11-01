@@ -140,7 +140,12 @@ impl StreamAccumulator {
                     // Get or create the partial tool call for this index. The index is
                     // provided by the API and identifies which tool call this delta belongs
                     // to (important when multiple tools are called).
-                    let entry = self.buffers.tool_call(tool_call.index);
+                    let entry = if tool_call.has_index() {
+                        self.buffers.tool_call(tool_call.index)
+                    } else {
+                        // Gemini sends no index, so an `id` is the only sign of a new call.
+                        self.buffers.unindexed_tool_call(tool_call.id.is_some())
+                    };
 
                     // Update the ID if present. Usually only in the first delta for this tool.
                     if let Some(id) = tool_call.id {
