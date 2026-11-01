@@ -2,7 +2,7 @@
 //!
 //! This is a real module so mutation testing can inspect `reasoning_delta`.
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 /// One JSON event from an OpenAI chat-completions SSE response.
 ///
@@ -141,6 +141,11 @@ pub struct OpenAIToolCallDelta {
     /// When multiple tools are called, each has an index (0, 1, 2, ...).
     /// The SDK uses this to route delta updates to the correct tool call
     /// in its accumulation buffer.
+    ///
+    /// A server that omits the index (Google's Gemini endpoint streams each call whole,
+    /// without one) or sends `null` yields [`OpenAIToolCallDelta::UNINDEXED`] instead; see
+    /// [`OpenAIToolCallDelta::has_index`].
+    #[serde(default = "unindexed", deserialize_with = "index_or_unindexed")]
     pub index: u32,
 
     /// Tool call ID (only in first delta for this tool call).
@@ -167,6 +172,34 @@ pub struct OpenAIToolCallDelta {
     /// function call specification.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub function: Option<OpenAIFunctionDelta>,
+}
+
+impl OpenAIToolCallDelta {
+    /// The [`index`](OpenAIToolCallDelta::index) of a delta whose server sent none.
+    ///
+    /// No server numbers a call `u32::MAX`, so the value cannot collide with a real index,
+    /// and keeping `index` a plain `u32` leaves the public type unchanged.
+    pub const UNINDEXED: u32 = u32::MAX;
+
+    /// Whether the server routed this delta by an index.
+    ///
+    /// An unindexed delta cannot be matched to an earlier call by number. The SDK treats one
+    /// that carries an `id` as a new call and one that does not as the continuation of the
+    /// most recent unindexed call.
+    pub fn has_index(&self) -> bool {
+        self.index != Self::UNINDEXED
+    }
+}
+
+fn unindexed() -> u32 {
+    OpenAIToolCallDelta::UNINDEXED
+}
+
+fn index_or_unindexed<'de, D>(deserializer: D) -> Result<u32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Option::<u32>::deserialize(deserializer)?.unwrap_or(OpenAIToolCallDelta::UNINDEXED))
 }
 
 /// Function name and JSON-argument fragments for a streamed tool call.

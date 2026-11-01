@@ -186,3 +186,82 @@ fn a_fragment_for_a_block_that_never_opened_has_nowhere_to_go() {
     buffers.tool_call(0);
     assert!(buffers.open_tool_call(0).is_some());
 }
+
+fn fill(call: &mut PartialToolCall, id: &str, name: &str, arguments: &str) {
+    call.id = Some(id.to_string());
+    call.name = Some(name.to_string());
+    call.arguments.push_str(arguments);
+}
+
+fn names(events: &[StreamEvent]) -> Vec<String> {
+    events
+        .iter()
+        .filter_map(StreamEvent::as_block)
+        .filter_map(|block| match block {
+            ContentBlock::ToolUse(call) => Some(format!("{}:{}", call.name(), call.input())),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn unindexed_calls_that_name_themselves_each_open_a_slot_after_the_highest() {
+    let mut buffers = StreamBuffers::new();
+    fill(buffers.unindexed_tool_call(true), "a", "first", "{}");
+    fill(buffers.unindexed_tool_call(true), "b", "second", "{}");
+    // An indexed call that arrives later sorts by its own number, not by arrival.
+    fill(buffers.tool_call(7), "c", "indexed", "{}");
+    fill(buffers.unindexed_tool_call(true), "d", "fourth", "{}");
+
+    let events = buffers.flush().expect("flush");
+
+    assert_eq!(
+        names(&events),
+        ["first:{}", "second:{}", "indexed:{}", "fourth:{}"]
+    );
+}
+
+#[test]
+fn an_unindexed_fragment_that_names_no_call_continues_the_latest_one() {
+    let mut buffers = StreamBuffers::new();
+    fill(buffers.unindexed_tool_call(true), "a", "first", "{}");
+    fill(buffers.unindexed_tool_call(true), "b", "second", "{\"y\":");
+    buffers.unindexed_tool_call(false).arguments.push_str("2}");
+
+    let events = buffers.flush().expect("flush");
+
+    assert_eq!(names(&events), ["first:{}", "second:{\"y\":2}"]);
+}
+
+#[test]
+fn an_unindexed_fragment_after_the_drain_opens_a_fresh_call() {
+    let mut buffers = StreamBuffers::new();
+    fill(buffers.unindexed_tool_call(true), "a", "first", "{}");
+    assert_eq!(names(&buffers.flush().expect("flush")), ["first:{}"]);
+
+    // The drained call is gone, so an id-less fragment has nothing to continue.
+    let call = buffers.unindexed_tool_call(false);
+    assert!(call.id.is_none() && call.name.is_none() && call.arguments.is_empty());
+}
+
+#[test]
+fn an_unindexed_fragment_with_no_open_call_opens_one() {
+    let mut buffers = StreamBuffers::new();
+    let call = buffers.unindexed_tool_call(false);
+    call.arguments.push_str("{}");
+    assert_eq!(call.arguments, "{}");
+}
+
+#[test]
+fn an_unindexed_call_after_the_highest_possible_slot_does_not_overflow() {
+    // The server picks indexes, so the slot after the highest can be past `u32::MAX`.
+    let mut buffers = StreamBuffers::new();
+    fill(buffers.tool_call(u32::MAX - 1), "a", "indexed", "{}");
+    fill(buffers.unindexed_tool_call(true), "b", "last", "");
+    let call = buffers.unindexed_tool_call(true);
+    call.arguments.push_str("{}");
+
+    let events = buffers.flush().expect("flush");
+
+    assert_eq!(names(&events), ["indexed:{}", "last:{}"]);
+}
