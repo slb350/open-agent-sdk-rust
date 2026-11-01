@@ -108,7 +108,9 @@ impl StreamBuffers {
     /// nothing to route by. `names_call` says the delta opens a call of its own (it carries an
     /// `id`), and that gets the slot after the highest in use, which keeps arrival order and
     /// keeps parallel calls apart; a delta that does not name a call continues the most recent
-    /// unindexed one, still under assembly, or opens one when there is none.
+    /// unindexed one, still under assembly, or opens one when there is none. The server picks
+    /// indexes, so the slot after the highest saturates at `u32::MAX` rather than overflowing:
+    /// a call past the last slot shares it, never panics.
     pub fn unindexed_tool_call(&mut self, names_call: bool) -> &mut PartialToolCall {
         let continued = self
             .last_unindexed
@@ -117,7 +119,7 @@ impl StreamBuffers {
             self.tool_calls
                 .keys()
                 .next_back()
-                .map_or(0, |highest| highest + 1)
+                .map_or(0, |highest| highest.saturating_add(1))
         });
         self.last_unindexed = Some(slot);
         self.tool_call(slot)

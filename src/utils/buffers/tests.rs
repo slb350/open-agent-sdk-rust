@@ -251,3 +251,17 @@ fn an_unindexed_fragment_with_no_open_call_opens_one() {
     call.arguments.push_str("{}");
     assert_eq!(call.arguments, "{}");
 }
+
+#[test]
+fn an_unindexed_call_after_the_highest_possible_slot_does_not_overflow() {
+    // The server picks indexes, so the slot after the highest can be past `u32::MAX`.
+    let mut buffers = StreamBuffers::new();
+    fill(buffers.tool_call(u32::MAX - 1), "a", "indexed", "{}");
+    fill(buffers.unindexed_tool_call(true), "b", "last", "");
+    let call = buffers.unindexed_tool_call(true);
+    call.arguments.push_str("{}");
+
+    let events = buffers.flush().expect("flush");
+
+    assert_eq!(names(&events), ["indexed:{}", "last:{}"]);
+}
