@@ -1573,6 +1573,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.11.8 is the current published crates.io release (stream chunks that omit `id`, `object`, `created`, or `model` no longer cause a parse failure — affects NVIDIA TensorRT-Edge-LLM and Bifrost v1.6.9; `rustls-webpki` pinned to 0.103.16 for RUSTSEC-2026-0382 / CVE-2026-111943). No public API changed. See CHANGELOG.md.
+**Status**: v0.11.8 is the current published crates.io release. Unreleased on main: tool-call deltas without an `index` (Google Gemini OpenAI-compat endpoint) no longer fail the stream — a missing or `null` index is routed via `OpenAIToolCallDelta::UNINDEXED` (`u32::MAX`); Rust-1.85-compatible lockfile entries refreshed (`js-sys`, `log`, `openssl-probe`, `rustix`, `utf8_iter` 1.1.0 + `utf_types` 1.0.0, `wasm-bindgen*`, `web-sys`). No public API changed. See CHANGELOG.md [Unreleased].
 
 Star this repo if you're building AI agents with local models in Rust!
