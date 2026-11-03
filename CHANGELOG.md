@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.9] - 2026-11-03
+
+A tool-call delta streamed without an `index` (or with `null`) is delivered instead of failing the whole stream with `missing field`, so Google's Gemini OpenAI-compatibility endpoint works — it streams each call whole with no index — and the lockfile refreshes twelve Rust-1.85-compatible entries. No public API changed.
+
 ### Fixed
 
 - A tool call streamed without an `index` no longer fails the whole stream with a `missing

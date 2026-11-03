@@ -15,7 +15,7 @@
 - **Local or hosted** - run on your own hardware at no API cost and with no data leaving the machine, or point it at a vendor
 - **Control** - pick your model (Qwen, Llama, Mistral, Claude, etc.)
 
-[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.11.8)](https://crates.io/crates/open-agent-sdk)
+[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.11.9)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -82,7 +82,7 @@ explicitly when an endpoint asks for them.
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.11.8"
+open-agent-sdk = "0.11.9"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -1573,6 +1573,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.11.8 is the current published crates.io release. Unreleased on main: tool-call deltas without an `index` (Google Gemini OpenAI-compat endpoint) no longer fail the stream — a missing or `null` index is routed via `OpenAIToolCallDelta::UNINDEXED` (`u32::MAX`); Rust-1.85-compatible lockfile entries refreshed (`js-sys`, `log`, `openssl-probe`, `rustix`, `utf8_iter` 1.1.0 + `utf_types` 1.0.0, `wasm-bindgen*`, `web-sys`). No public API changed. See CHANGELOG.md [Unreleased].
+**Status**: v0.11.9 is the current published crates.io release (tool-call deltas without an `index` — Google's Gemini OpenAI-compatibility endpoint, which streams calls whole — no longer fail the stream with `missing field`; a missing or `null` index is routed via `OpenAIToolCallDelta::UNINDEXED` (`u32::MAX`), keeping parallel calls separate; Rust-1.85-compatible lockfile entries refreshed). No public API changed. See CHANGELOG.md.
 
 Star this repo if you're building AI agents with local models in Rust!
