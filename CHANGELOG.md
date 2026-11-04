@@ -7,9 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.11.9] - 2026-11-03
+## [0.11.9] - 2026-11-04
 
-A tool-call delta streamed without an `index` (or with `null`) is delivered instead of failing the whole stream with `missing field`, so Google's Gemini OpenAI-compatibility endpoint works — it streams each call whole with no index — and the lockfile refreshes twelve Rust-1.85-compatible entries. No public API changed.
+A tool-call delta streamed without an `index` (or with `null`) is delivered instead of failing the whole stream with `missing field`, so Google's Gemini OpenAI-compatibility endpoint works — it streams each call whole with no index — and the lockfile refreshes eleven Rust-1.85-compatible entries and gains `utf_types` 1.0.0. No public API changed.
 
 ### Fixed
 
@@ -19,10 +19,8 @@ A tool-call delta streamed without an `index` (or with `null`) is delivered inst
   (<https://github.com/n8n-io/n8n/issues/39339>), and the error lost the model's call. A delta
   without an index (or with `null`) that carries an `id` now opens a new call, kept apart from
   earlier ones and emitted in arrival order, and one without an `id` continues the most recent
-  such call. Indexed streams are unchanged. For
-  callers that build or inspect `OpenAIToolCallDelta`, `index` stays a `u32`: an absent index
-  is `OpenAIToolCallDelta::UNINDEXED` (`u32::MAX`), which `has_index()` reports. No existing
-  signature changed.
+  such call. Indexed streams are unchanged. The delta type is internal to the crate, so no
+  public API changed.
 
 ### Maintenance
 
