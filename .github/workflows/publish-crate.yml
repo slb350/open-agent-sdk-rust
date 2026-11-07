@@ -42,7 +42,7 @@ jobs:
             echo "tag $TAG points at $commit, which main does not contain" >&2
             exit 1
           fi
-      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
       - name: Require the tag to name the package version
@@ -94,7 +94,7 @@ jobs:
       - name: Authenticate with crates.io
         id: auth
         if: steps.registry.outputs.published == 'false'
-        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
       - name: Publish
         if: steps.registry.outputs.published == 'false'
         run: cargo publish --locked
