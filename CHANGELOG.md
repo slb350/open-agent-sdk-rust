@@ -43,26 +43,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     when the output buffer is shorter than the recovered data, and a use-after-free in
     `X509StoreContextRef::verify_cert` and `current_cert` called after `init` returned — and
     makes `ToOwned`/`Clone` panic instead of double-freeing if a reference count cannot be
-    incremented (<https://github.com/sfackler/rust-openssl/blob/master/openssl/CHANGELOG.md>).
+    incremented, and `DsaRef::p`, `q` and `g` panic instead of constructing a reference to a
+    null `BigNumRef` when the parameter is unset (<https://github.com/sfackler/rust-openssl/blob/master/openssl/CHANGELOG.md>).
     `openssl-sys` 0.9.118 accompanies it. No RustSec or OSV advisory covers these, so the bump
     is preventive rather than a fix for a listed advisory.
   - `mime` 0.3.18 replaces a recursion with a loop to prevent a stack overflow and corrects
     MIME equality of unicode parameters (v0.3.17...v0.3.18:
     <https://github.com/hyperium/mime/compare/v0.3.17...v0.3.18>).
-  - `smallvec` 1.16.5 is a CI-only change (release notes:
+  - `smallvec` 1.16.5 changes CI and reflows comments; no code changed (release notes:
     <https://github.com/servo/rust-smallvec/releases/tag/v1.16.5>).
   - `cc` 1.11.1 fixes `wasm32-none-component` target parsing on top of `cc` 1.11.0
     (<https://github.com/rust-lang/cc-rs/blob/main/CHANGELOG.md>).
 
   `cargo audit` and `osv-scanner` report no vulnerability, warning or OSV finding before or
   after the update, so no `Cargo.toml` requirement changed. None of the six is a direct
-  dependency: `openssl` (through reqwest's default native-TLS path), `mime` (through `reqwest`)
-  and `smallvec` (through `hyper`) are production transitive entries, `cc` and `openssl-sys`
-  are build-dependencies of that same TLS path, and `jiff` is dev-only through `env_logger`. In
-  particular no direct `openssl` floor was added: `openssl` is compiled only where a caller's
-  feature selection keeps reqwest's native TLS, and a direct requirement would force OpenSSL
-  on builds that never ask for it — the reasoning AGENTS.md already records for
-  `rustls-webpki`. The MSRV holds AGENTS.md records (`criterion` 0.7.0, `idna_adapter` 1.2.1,
+  dependency: `openssl` and `openssl-sys` (through reqwest's default native-TLS path), `mime`
+  (through `reqwest`) and `smallvec` (through `hyper`) are production transitive entries, `cc`
+  is a build-dependency of `openssl-sys`, and `jiff` is dev-only through `env_logger`. In
+  particular no direct `openssl` floor was added: `native-tls` uses OpenSSL only on targets
+  that are neither Windows nor Apple, and uses SChannel and Security.framework there, so a
+  direct requirement would force OpenSSL onto Windows and macOS builds that never link it — the
+  reasoning AGENTS.md already records for `rustls-webpki`. The MSRV holds AGENTS.md records (`criterion` 0.7.0, `idna_adapter` 1.2.1,
   `encoding_rs` 0.8.35 with the `icu_*` 2.1.x chain, `reqwest` 0.12.28, `wiremock` 0.6.4)
   remain in place and were not forced. The updated lockfile passes
   `cargo +1.85 check --all-features --all-targets --workspace --locked`. No public API changed.
