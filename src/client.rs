@@ -84,7 +84,7 @@ async fn stream_request(
     request: &OpenAIRequest,
 ) -> Result<EventStream> {
     let protocol = options.protocol();
-    let url = format!("{}{}", options.base_url(), protocol.path());
+    let url = request::endpoint_url(options.base_url(), protocol);
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 

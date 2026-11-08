@@ -82,6 +82,9 @@ impl AgentOptionsBuilder {
     /// Sets the required base URL, beginning with `http://` or `https://`.
     ///
     /// The selected [`protocol`](Self::protocol) adds `/chat/completions` or `/messages`.
+    /// Trailing slashes are dropped when the request URL is built, so `http://host/v1/` and
+    /// `http://host/v1` reach the same endpoint; [`AgentOptions::base_url`] reports the value
+    /// as given.
     /// Unlike [`BaseUrl::new`], the builder does not trim before checking the scheme.
     pub fn base_url(mut self, url: impl Into<String>) -> Self {
         self.base_url = Some(url.into());
