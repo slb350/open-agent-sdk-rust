@@ -143,7 +143,9 @@ where
         .eventsource()
         .filter_map(move |event_result| async move {
             match event_result {
-                Ok(event) if event.data == "[DONE]" => None,
+                // `[DONE]` is a sentinel, and an event with no payload (an empty `data:` field,
+                // which the SSE framing allows) is a keep-alive. Neither is JSON.
+                Ok(event) if event.data == "[DONE]" || event.data.trim().is_empty() => None,
                 Ok(event) => Some(decode(&event.data)),
                 Err(EventStreamError::Transport(error)) => Some(Err(Error::Http(error))),
                 Err(error) => Some(Err(Error::stream(format!(

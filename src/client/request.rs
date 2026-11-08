@@ -1,8 +1,18 @@
 //! Shared request assembly; protocol translation happens in `stream_request`.
 use crate::types::{
-    AgentOptions, ContentBlock, Message, MessageRole, OpenAIContent, OpenAIContentPart,
-    OpenAIFunction, OpenAIMessage, OpenAIRequest, OpenAIToolCall,
+    AgentOptions, ApiProtocol, ContentBlock, Message, MessageRole, OpenAIContent,
+    OpenAIContentPart, OpenAIFunction, OpenAIMessage, OpenAIRequest, OpenAIToolCall,
 };
+
+/// The URL a request is posted to: `base_url` followed by the protocol's path.
+///
+/// `base_url` is documented without a trailing slash, but an endpoint written as
+/// `http://localhost:11434/v1/` is an easy slip and would otherwise become `/v1//chat/completions`,
+/// which strict servers answer with 404. Trailing slashes are dropped here, at the one place the
+/// path is appended; the configured value itself is never rewritten.
+pub(super) fn endpoint_url(base_url: &str, protocol: ApiProtocol) -> String {
+    format!("{}{}", base_url.trim_end_matches('/'), protocol.path())
+}
 
 pub(super) fn build_request(options: &AgentOptions, messages: Vec<OpenAIMessage>) -> OpenAIRequest {
     OpenAIRequest {

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A `base_url` with a trailing slash (`http://localhost:11434/v1/`) no longer posts to
+  `/v1//chat/completions`, which strict servers answer with 404. Trailing slashes are dropped
+  when the request URL is built, for both protocols and for `query()` and `Client`;
+  `AgentOptions::base_url()` still returns the value as configured.
+- An SSE event with an empty or whitespace-only `data` field no longer fails the stream with
+  `Failed to parse SSE event data: EOF while parsing a value` (a retryable `Error::Stream`).
+  Such an event carries no JSON, so both the OpenAI and Anthropic parsers skip it like a comment
+  keep-alive. Non-empty text that is not JSON still surfaces as an error.
+
+### Documentation
+
+- `AgentOptions` now describes `timeout` as a total per-request deadline that includes the
+  streamed response body, matching `AgentOptionsBuilder::timeout` and reqwest's behavior; it
+  previously read as a wait for the first response.
+
 ## [0.11.9] - 2026-11-04
 
 A tool-call delta streamed without an `index` (or with `null`) is delivered instead of failing the whole stream with `missing field`, so Google's Gemini OpenAI-compatibility endpoint works — it streams each call whole with no index — and the lockfile refreshes eleven Rust-1.85-compatible entries and gains `utf_types` 1.0.0. No public API changed.

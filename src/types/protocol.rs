@@ -37,8 +37,8 @@ pub enum ApiProtocol {
 impl ApiProtocol {
     /// The path appended to `base_url` to reach the completion endpoint.
     ///
-    /// Includes the leading slash, because `base_url` is documented as carrying no trailing
-    /// one.
+    /// Includes the leading slash, because the request URL is built from `base_url` with its
+    /// trailing slashes removed.
     pub fn path(&self) -> &'static str {
         match self {
             Self::OpenAiChat => "/chat/completions",
