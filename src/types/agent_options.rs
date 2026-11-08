@@ -61,9 +61,11 @@ pub struct AgentOptions {
 
     /// HTTP request timeout in seconds.
     ///
-    /// Maximum time to wait for the API to respond. Applies per API call,
-    /// not to the entire conversation. Increase for slower models or when
-    /// expecting long responses.
+    /// A total deadline for each HTTP request, from connecting until its response
+    /// body, the whole stream included, has finished. It applies per API call, not to
+    /// the entire conversation or an automatic tool loop. Increase it for slower
+    /// models or when expecting long responses: a stream still running when it
+    /// elapses ends with a transport error.
     timeout: u64,
 
     /// Tools available for the agent to use during conversations.

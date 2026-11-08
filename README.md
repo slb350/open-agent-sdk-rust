@@ -1015,7 +1015,7 @@ AgentOptions::builder()
     .max_turns(u32)                      // Legacy stored value; does not limit execution
     .temperature(f32)                    // Sampling temperature (unset: omitted, server decides)
     .protocol(ApiProtocol)               // Wire protocol (default: ApiProtocol::OpenAiChat)
-    .timeout(u64)                        // Request timeout in seconds (default: 60)
+    .timeout(u64)                        // Per-request deadline in seconds, stream included (default: 60)
     .api_key(str)                        // API key (default: "not-needed")
     .header(name, value)                 // Add or replace a model-request header
     .include_reasoning(bool)             // Surface reasoning as StreamEvent::Reasoning (default: false)
@@ -1427,6 +1427,7 @@ open-agent-sdk-rust/
 │   ├── context_estimation_test.rs           # Exact tool-content arithmetic, threshold and truncation boundaries
 │   ├── custom_headers_test.rs               # Custom caller HTTP header application and override semantics
 │   ├── debug_logging_test.rs                # Image payload truncation and UTF-8 safety in logging
+│   ├── endpoint_tolerance_test.rs           # Trailing-slash base_url and payload-less SSE events tolerated
 │   ├── hooks_history_snapshot_test.rs       # Structured conversation history in hook events
 │   ├── hooks_integration_test.rs            # Real auto-tool and hook outcomes
 │   ├── mutation_ci_scope_test.rs            # Mutation test scope classification (CI diffs)
