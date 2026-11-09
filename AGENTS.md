@@ -531,6 +531,8 @@ rustls-webpki raised to 0.103.16 (released in v0.11.8):
 
 ## Current Version
 
+**[Unreleased — main]**. Two tolerances added after v0.11.9: a `base_url` with a trailing slash no longer produces a doubled-slash request path (`//chat/completions`) — trailing slashes are stripped when constructing the request URL while `AgentOptions::base_url()` preserves the configured value; an SSE event whose `data` field is empty or whitespace is treated as a keep-alive and skipped by `parse_events` before either accumulator sees it, while a non-empty value that is not valid JSON still fails as `Error::Stream`. Lockfile refreshed for Rust 1.85 compatibility: cc 1.11.1, jiff 0.2.40 + jiff-core 1.0.3 + jiff-static 0.2.40, mime 0.3.18, openssl 0.10.82, openssl-sys 0.9.118, smallvec 1.16.5; net: −4 packages (defmt and dependents dropped). No public API changed.
+
 **v0.11.8**. A chunk from an OpenAI-compatible server that omits `id`, `object`, `created` or `model` — fields the SDK never reads — no longer fails the whole stream with `missing field`; only `choices` is required. NVIDIA's TensorRT-Edge-LLM experimental server and Bifrost v1.6.9 omit them. The lockfile carries rustls-webpki 0.103.16 to resolve RUSTSEC-2026-0382, plus refreshed Rust-1.85-compatible entries. No public API changed. See CHANGELOG.md [0.11.8].
 
 **v0.11.9**. A tool-call delta streamed without an `index` field (or with `null`) no longer fails the whole stream with a `missing field` parse error. Google's Gemini OpenAI-compatibility endpoint sends each tool call whole — `id`, `name`, and complete `arguments` — in one delta with no `index`. A delta without an index that carries an `id` opens a new call, kept apart from earlier indexed calls and emitted in arrival order; one without an `id` continues the most recent unindexed call. Internally an absent index is `OpenAIToolCallDelta::UNINDEXED` (`u32::MAX`), reported by `has_index()`; the delta type is not exported. Indexed streams are unchanged. Lockfile refreshed for Rust 1.85 compatibility: `js-sys` 0.3.107, `log` 0.4.35, `openssl-probe` 0.2.2, `rustix` 1.1.6, `utf8_iter` 1.1.0 (now depends on `utf_types` 1.0.0), `wasm-bindgen` 0.2.130, `wasm-bindgen-futures` 0.4.80, `wasm-bindgen-macro` 0.2.130, `wasm-bindgen-macro-support` 0.2.130, `wasm-bindgen-shared` 0.2.130, `web-sys` 0.3.107. No public API changed. See CHANGELOG.md [0.11.9].
@@ -587,7 +589,7 @@ unset, because a growing number of models reject the parameter outright. See CHA
 no room for `finish_reason`, which is not content — so this could not ship as a 0.7.x patch.
 `ContentStream` was renamed `EventStream`. `ContentBlock` itself is unchanged: no new variant,
 no wire-shape change, so downstream exhaustive matches and its `serde` representation still
-work. `Client::receive()` is unaffected and records the reason on the client instead.
+work.
 
 New in v0.8.0: `FinishReason` surfaced on every stream (with `Unspecified` kept distinct from
 `Stop`), `Client::finish_reason()`, explicit reasoning-channel parsing and separation with
