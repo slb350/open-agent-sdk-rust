@@ -1576,4 +1576,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 **Status**: v0.11.9 is the current published crates.io release (tool-call deltas without an `index` — Google's Gemini OpenAI-compatibility endpoint, which streams calls whole — no longer fail the stream with `missing field`; a missing or `null` index is routed via `OpenAIToolCallDelta::UNINDEXED` (`u32::MAX`), keeping parallel calls separate; Rust-1.85-compatible lockfile entries refreshed). No public API changed. See CHANGELOG.md.
 
+Unreleased on main (post-v0.11.9): `base_url` trailing-slash tolerance — the request URL strips trailing slashes while `AgentOptions::base_url()` preserves the configured value; SSE keep-alive skipping — `data` fields that are empty or whitespace are now skipped by `parse_events` rather than failing the stream as a parse error. Lockfile refreshed: cc 1.11.1, jiff 0.2.40 + jiff-core 1.0.3 + jiff-static 0.2.40, mime 0.3.18, openssl 0.10.82, openssl-sys 0.9.118, smallvec 1.16.5 (net: −4 packages).
+
 Star this repo if you're building AI agents with local models in Rust!
