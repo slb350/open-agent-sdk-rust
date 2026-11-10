@@ -15,7 +15,7 @@
 - **Local or hosted** - run on your own hardware at no API cost and with no data leaving the machine, or point it at a vendor
 - **Control** - pick your model (Qwen, Llama, Mistral, Claude, etc.)
 
-[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.11.9)](https://crates.io/crates/open-agent-sdk)
+[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.11.10)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -82,7 +82,7 @@ explicitly when an endpoint asks for them.
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.11.9"
+open-agent-sdk = "0.11.10"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -1574,8 +1574,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.11.9 is the current published crates.io release (tool-call deltas without an `index` — Google's Gemini OpenAI-compatibility endpoint, which streams calls whole — no longer fail the stream with `missing field`; a missing or `null` index is routed via `OpenAIToolCallDelta::UNINDEXED` (`u32::MAX`), keeping parallel calls separate; Rust-1.85-compatible lockfile entries refreshed). No public API changed. See CHANGELOG.md.
-
-Unreleased on main (post-v0.11.9): `base_url` trailing-slash tolerance — the request URL strips trailing slashes while `AgentOptions::base_url()` preserves the configured value; SSE keep-alive skipping — `data` fields that are empty or whitespace are now skipped by `parse_events` rather than failing the stream as a parse error. Lockfile refreshed: cc 1.11.1, jiff 0.2.40 + jiff-core 1.0.3 + jiff-static 0.2.40, mime 0.3.18, openssl 0.10.82, openssl-sys 0.9.118, smallvec 1.16.5 (net: −4 packages).
+**Status**: v0.11.10 is the current published crates.io release (a `base_url` with a trailing slash no longer posts to a doubled-slash path that strict servers answer with 404, and an SSE event with an empty or whitespace-only `data` field is skipped as a keep-alive instead of failing the stream as a parse error; Rust-1.85-compatible lockfile entries refreshed). No public API changed. See CHANGELOG.md.
 
 Star this repo if you're building AI agents with local models in Rust!
