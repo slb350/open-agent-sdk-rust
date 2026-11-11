@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.10] - 2026-11-11
+
+Two wire-protocol tolerances land: a `base_url` with a trailing slash no longer posts to a doubled-slash path (`//chat/completions`) that strict servers answer with 404, and an SSE event with an empty or whitespace-only `data` field is skipped as a keep-alive instead of failing the stream as a parse error. The `AgentOptions::timeout` documentation now matches reqwest's total-deadline behavior, and the lockfile refreshes eight Rust-1.85-compatible entries while dropping four (`defmt` and its dependents). No public API changed.
+
 ### Fixed
 
 - A `base_url` with a trailing slash (`http://localhost:11434/v1/`) no longer posts to

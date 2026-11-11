@@ -18,7 +18,7 @@ This AGENTS.md is the tracked, authoritative instruction file for agents working
 
 ## Project Description
 
-A lightweight Rust SDK (v0.11.9 published — see CHANGELOG.md) for building AI agents with local or cloud LLMs. Speaks two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint with `ApiProtocol`. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
+A lightweight Rust SDK (v0.11.10 published — see CHANGELOG.md) for building AI agents with local or cloud LLMs. Speaks two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint with `ApiProtocol`. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
 
 ## Repository Structure
 
@@ -508,7 +508,7 @@ Jobsy on homelab-ai-1 runs this repository's scheduled maintenance as a weekly d
 
 A daily Jobsy review job reviews each open `jobsy/` pull request against this file, fixes it on its own branch when it is not solid, and merges it with a merge commit once every check on the reviewed head has passed; Jobsy refuses the merge otherwise. A weekly Jobsy release job decides under the release rules in this file whether the merged work warrants a release, and if so opens a `jobsy/release/` pull request that bumps the version and moves the changelog entries. When that pull request merges, Jobsy pushes the annotated tag `vX.Y.Z` on the merge commit, and `publish-crate.yml` publishes that commit to crates.io through trusted publishing, then creates the GitHub release from that version's changelog section. The publish job runs in the `release` environment, which deploys only from `v*` tags; a repository ruleset lets only admins create, move or delete a `v*` tag, and the crate's crates.io trusted publisher requires the environment. A run that published but failed before the GitHub release is repaired by re-running it: it uploads nothing when every file of the version crates.io holds matches a package built from the tag's commit, and fails on any difference. No Jobsy job pushes main directly or publishes from its own host.
 
-## Security Advisories (resolved in v0.6.5, current v0.11.9)
+## Security Advisories (resolved in v0.6.5, current v0.11.10)
 
 RUSTSEC-2024-0449 resolved (v0.6.5):
 
@@ -531,7 +531,7 @@ rustls-webpki raised to 0.103.16 (released in v0.11.8):
 
 ## Current Version
 
-**[Unreleased — main]**. Two tolerances added after v0.11.9: a `base_url` with a trailing slash no longer produces a doubled-slash request path (`//chat/completions`) — trailing slashes are stripped when constructing the request URL while `AgentOptions::base_url()` preserves the configured value; an SSE event whose `data` field is empty or whitespace is treated as a keep-alive and skipped by `parse_events` before either accumulator sees it, while a non-empty value that is not valid JSON still fails as `Error::Stream`. Lockfile refreshed for Rust 1.85 compatibility: cc 1.11.1, jiff 0.2.40 + jiff-core 1.0.3 + jiff-static 0.2.40, mime 0.3.18, openssl 0.10.82, openssl-sys 0.9.118, smallvec 1.16.5; net: −4 packages (defmt and dependents dropped). No public API changed.
+**v0.11.10**. Two tolerances added after v0.11.9: a `base_url` with a trailing slash no longer produces a doubled-slash request path (`//chat/completions`) — trailing slashes are stripped when constructing the request URL while `AgentOptions::base_url()` preserves the configured value; an SSE event whose `data` field is empty or whitespace is treated as a keep-alive and skipped by `parse_events` before either accumulator sees it, while a non-empty value that is not valid JSON still fails as `Error::Stream`. Lockfile refreshed for Rust 1.85 compatibility: cc 1.11.1, jiff 0.2.40 + jiff-core 0.1.3 + jiff-static 0.2.40, mime 0.3.18, openssl 0.10.82, openssl-sys 0.9.118, smallvec 1.16.5; net: −4 packages (defmt and dependents dropped). No public API changed. See CHANGELOG.md [0.11.10].
 
 **v0.11.8**. A chunk from an OpenAI-compatible server that omits `id`, `object`, `created` or `model` — fields the SDK never reads — no longer fails the whole stream with `missing field`; only `choices` is required. NVIDIA's TensorRT-Edge-LLM experimental server and Bifrost v1.6.9 omit them. The lockfile carries rustls-webpki 0.103.16 to resolve RUSTSEC-2026-0382, plus refreshed Rust-1.85-compatible entries. No public API changed. See CHANGELOG.md [0.11.8].
 
