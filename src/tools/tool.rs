@@ -24,6 +24,9 @@ impl Tool {
     /// Accepted schema forms:
     ///
     /// - A full object containing `type` and `properties` is passed through unchanged.
+    /// - So is `{"type": "object"}` with only object-schema keywords beside it (`required`,
+    ///   `additionalProperties`, `description`, and the like), which declares a tool without
+    ///   parameters; an empty `properties` is added to it.
     /// - A property map such as `{"query": "string"}` makes each property required.
     /// - Extended properties may include `optional`, `required`, and `default`.
     ///   Explicit `required: true` wins; otherwise `optional: true`, `required: false`,
