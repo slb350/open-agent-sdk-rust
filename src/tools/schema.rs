@@ -4,8 +4,14 @@ fn convert_schema_to_openai(schema: Value) -> Value {
         let obj = schema
             .as_object()
             .expect("BUG: is_object() returned true but as_object() returned None");
-        if obj.contains_key("type") && obj.contains_key("properties") {
-            return schema;
+        if schema_form::is_full_object_schema(obj) {
+            let mut full = schema;
+            if let Some(map) = full.as_object_mut() {
+                // A complete schema with no `properties` still describes an object without
+                // parameters; spell that out the way the non-object fallback does.
+                map.entry("properties").or_insert_with(|| serde_json::json!({}));
+            }
+            return full;
         }
 
         let mut properties = serde_json::Map::new();

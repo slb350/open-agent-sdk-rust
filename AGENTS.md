@@ -36,7 +36,8 @@ open-agent-sdk-rust/
 │   ├── retry.rs       # RetryConfig, retry_with_backoff, retry_with_backoff_conditional, is_retryable_error
 │   ├── retry/         # Retry unit tests
 │   ├── tools.rs       # Public tool module orchestration
-│   ├── tools/         # Tool, schema, builder, handler, factory, and tests
+│   ├── tools/         # Tool, schema, builder, handler, factory, and tests; schema_form.rs is a real
+│   │                  # mod (full-schema vs property-map classification)
 │   ├── types.rs       # Public core-type module orchestration
 │   ├── types/         # Options, messages, images, wire types (openai.rs + openai_stream.rs,
 │   │                  # anthropic.rs + anthropic_stream.rs), protocol.rs (ApiProtocol),

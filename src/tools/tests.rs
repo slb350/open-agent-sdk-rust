@@ -89,3 +89,58 @@
         assert!(format["function"]["parameters"].is_object());
         assert!(format["function"]["parameters"]["properties"]["key"].is_object());
     }
+
+    #[test]
+    fn full_schema_without_properties_is_not_read_as_a_property_map() {
+        // A tool that takes no arguments is commonly declared as a bare object schema. It must
+        // not be mistaken for a property map with one required parameter named `type`.
+        let result = convert_schema_to_openai(json!({"type": "object"}));
+        assert_eq!(result["type"], "object");
+        assert_eq!(result["properties"], json!({}));
+        assert!(result.get("required").is_none_or(|r| r == &json!([])));
+
+        let strict = json!({"type": "object", "additionalProperties": false});
+        let result = convert_schema_to_openai(strict);
+        assert_eq!(result["type"], "object");
+        assert_eq!(result["properties"], json!({}));
+        assert_eq!(result["additionalProperties"], json!(false));
+        assert!(result.get("required").is_none_or(|r| r == &json!([])));
+    }
+
+    #[test]
+    fn full_schema_keywords_survive_without_properties() {
+        let schema = json!({
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Lookup",
+            "description": "Takes either field",
+            "type": "object",
+            "required": ["a"],
+            "anyOf": [{"required": ["a"]}, {"required": ["b"]}]
+        });
+        let result = convert_schema_to_openai(schema.clone());
+        let mut expected = schema;
+        expected["properties"] = json!({});
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn a_property_named_type_in_a_property_map_stays_a_property() {
+        let result = convert_schema_to_openai(json!({"type": "string", "query": "string"}));
+        assert_eq!(result["properties"]["type"]["type"], "string");
+        assert_eq!(result["properties"]["query"]["type"], "string");
+        assert_eq!(result["required"], json!(["query", "type"]));
+
+        // Mixed with a non-keyword sibling, `"type": "object"` is still a parameter.
+        let result = convert_schema_to_openai(json!({"type": "object", "query": "string"}));
+        assert_eq!(result["properties"]["type"]["type"], "object");
+        assert_eq!(result["properties"]["query"]["type"], "string");
+    }
+
+    #[test]
+    fn builder_schema_of_a_bare_object_exposes_no_parameters() {
+        let no_args = tool("ping", "No arguments")
+            .schema(json!({"type": "object"}))
+            .build(|_| async { Ok(json!({})) });
+        let parameters = no_args.to_openai_format()["function"]["parameters"].clone();
+        assert_eq!(parameters, json!({"type": "object", "properties": {}}));
+    }
