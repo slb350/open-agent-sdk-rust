@@ -15,6 +15,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is now kept as written, with an empty `properties` added. A property map that names a
   parameter `type` (`{"type": "string", "query": "string"}`) is unchanged.
 
+### Maintenance
+
+- Refreshed the twelve Rust-1.85-compatible lockfile entries `cargo update` can move: `bumpalo`
+  3.20.4, `cc` 1.11.2, `errno` 0.3.15, `itoa` 1.0.19, `jiff` 0.2.45 (with `jiff-core` 0.1.7 and
+  `jiff-static` 0.2.45), `mio` 1.2.5, `rand` 0.10.4, `rustls-pki-types` 1.16.0, `rustls-webpki`
+  0.103.17, and `syn` 3.0.10. No package enters or leaves the lock, which stays at 228 entries.
+  Upstream notes for each change:
+
+  - `rand` 0.10.4 is the only direct dependency that moved. It documents the `StdRng`/`ThreadRng`
+    duplication concern and validates deserialized `UniformDuration` state so a bad stream cannot
+    cause a panic or a near-infinite loop
+    (<https://github.com/rust-random/rand/releases/tag/0.10.4>). This crate uses `rand` for retry
+    jitter only and deserializes no distribution state, and it already required `rand = "0.10"`,
+    so no `Cargo.toml` requirement changed.
+  - `rustls-webpki` 0.103.17 backports three new accessors — `VerifiedPath::issuer_spki()`,
+    `spki_for_anchor()` and `EndEntityCert::sct_log_timestamps()` — and its release notes list
+    additions only (<https://github.com/rustls/webpki/releases/tag/v%2F0.103.17>). It descends
+    from 0.103.16, whose notes read "Distrust a small set of intermediate certificate subject
+    public keys due to specific security concerns around their operation", so RUSTSEC-2026-0382
+    stays resolved. As AGENTS.md records, `rustls-webpki` is a lockfile-only
+    entry here: `cargo tree -i rustls-webpki` prints nothing, because this crate's declared
+    features build reqwest's native TLS and compile neither `rustls` nor `rustls-webpki`.
+  - `rustls-pki-types` 1.16.0, which reaches this crate through `reqwest`, tightens and
+    canonicalises `DnsName`: names whose final label is a hex number (`0x7f000001`) are rejected,
+    a trailing dot is stripped, `DnsName::into_owned()` is added, and validation is faster
+    (<https://github.com/rustls/pki-types/releases/tag/v%2F1.16.0>). It is not a security release,
+    and the SDK constructs no `DnsName` value; the TLS backend for the shipped native-TLS path is
+    chosen by reqwest.
+  - `jiff` 0.2.41 through 0.2.45 (with `jiff-core` and `jiff-static` moving with it) fix a time
+    zone transition lookup for pre-epoch timestamps with a non-zero nanosecond component (#678),
+    panics in `Span::checked_add` and `Span::total` (#683, #685), `Timestamp` subtraction
+    assignment and boundary conditions (#695, #696, #703), zero span multiplication (#701) and
+    ISO week numbers at a year's last week (#702), and upgrade the bundled IANA database to tzdb
+    `2026f` (#697) (<https://github.com/BurntSushi/jiff/blob/master/CHANGELOG.md>). `jiff` is
+    dev-only, reached through `env_logger`.
+  - `mio` 1.2.5 adds wasm32-unknown-emscripten support, rewrites Windows `NamedPipe` I/O, and
+    fixes `Waker` events not being marked readable on NetBSD, OpenBSD and DragonFly
+    (<https://github.com/tokio-rs/mio/blob/master/CHANGELOG.md>).
+  - `cc` 1.11.2 keeps GCC from merging identical variables under AddressSanitizer and regenerates
+    target info (<https://github.com/rust-lang/cc-rs/releases/tag/cc-v1.11.2>). `cc` is a
+    build-dependency of `openssl-sys` on that same native-TLS path.
+  - `errno` 0.3.15 adds QNX 8, mlibc and NuttX support and fixes linking on Fuchsia
+    (<https://github.com/lambda-fairy/rust-errno/releases/tag/v0.3.15>); `itoa` 1.0.19 fixes a
+    no-panic link failure for non-constant `u32`/`u64`/`u128` values
+    (<https://github.com/dtolnay/itoa/releases/tag/1.0.19>); `syn` 3.0.10 skips rescanning
+    operands whose scan already failed
+    (<https://github.com/dtolnay/syn/releases/tag/3.0.10>); and `bumpalo` 3.20.4 avoids idempotent
+    writes to an empty chunk footer's pointer field
+    (<https://github.com/fitzgen/bumpalo/compare/v3.20.3...v3.20.4>). `bumpalo` is reached only on
+    wasm targets through `wasm-bindgen`, so it is not compiled for this crate's native builds.
+
+  `cargo audit` and `osv-scanner` report no vulnerability, warning or OSV finding before or after
+  the update, so no `Cargo.toml` requirement changed and nothing was ignored or allowlisted. The
+  MSRV holds AGENTS.md records (`criterion` 0.7.0, `idna_adapter` 1.2.1, `encoding_rs` 0.8.35 with
+  the `icu_*` 2.1.x chain, `reqwest` 0.12.28, `wiremock` 0.6.4) remain in place and were not
+  forced. The updated lockfile passes
+  `cargo +1.85 check --all-features --all-targets --workspace --locked`. No public API changed.
+
 ## [0.11.10] - 2026-11-11
 
 Two wire-protocol tolerances land: a `base_url` with a trailing slash no longer posts to a doubled-slash path (`//chat/completions`) that strict servers answer with 404, and an SSE event with an empty or whitespace-only `data` field is skipped as a keep-alive instead of failing the stream as a parse error. The `AgentOptions::timeout` documentation now matches reqwest's total-deadline behavior, and the lockfile refreshes eight Rust-1.85-compatible entries while dropping four (`defmt` and its dependents). No public API changed.
