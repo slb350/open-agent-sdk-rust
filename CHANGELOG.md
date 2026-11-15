@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A tool declared with a complete object schema that has no `properties`, such as
+  `{"type": "object"}` for a tool without arguments, no longer gets read as a shorthand property
+  map. It was sent to the model as a tool with one required parameter named `type`. Such a schema
+  is now kept as written, with an empty `properties` added. A property map that names a
+  parameter `type` (`{"type": "string", "query": "string"}`) is unchanged.
+
 ### Maintenance
 
 - Refreshed the twelve Rust-1.85-compatible lockfile entries `cargo update` can move: `bumpalo`

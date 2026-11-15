@@ -9,6 +9,8 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
+mod schema_form;
+
 include!("tools/handler.rs");
 include!("tools/tool.rs");
 include!("tools/schema.rs");
