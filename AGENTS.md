@@ -18,7 +18,7 @@ This AGENTS.md is the tracked, authoritative instruction file for agents working
 
 ## Project Description
 
-A lightweight Rust SDK (v0.11.10 published — see CHANGELOG.md) for building AI agents with local or cloud LLMs. Speaks two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint with `ApiProtocol`. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
+A lightweight Rust SDK (v0.11.11 published — see CHANGELOG.md) for building AI agents with local or cloud LLMs. Speaks two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint with `ApiProtocol`. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
 
 ## Repository Structure
 
@@ -509,7 +509,7 @@ Jobsy on homelab-ai-1 runs this repository's scheduled maintenance as a weekly d
 
 A daily Jobsy review job reviews each open `jobsy/` pull request against this file, fixes it on its own branch when it is not solid, and merges it with a merge commit once every check on the reviewed head has passed; Jobsy refuses the merge otherwise. A weekly Jobsy release job decides under the release rules in this file whether the merged work warrants a release, and if so opens a `jobsy/release/` pull request that bumps the version and moves the changelog entries. When that pull request merges, Jobsy pushes the annotated tag `vX.Y.Z` on the merge commit, and `publish-crate.yml` publishes that commit to crates.io through trusted publishing, then creates the GitHub release from that version's changelog section. The publish job runs in the `release` environment, which deploys only from `v*` tags; a repository ruleset lets only admins create, move or delete a `v*` tag, and the crate's crates.io trusted publisher requires the environment. A run that published but failed before the GitHub release is repaired by re-running it: it uploads nothing when every file of the version crates.io holds matches a package built from the tag's commit, and fails on any difference. No Jobsy job pushes main directly or publishes from its own host.
 
-## Security Advisories (resolved in v0.6.5, current v0.11.10)
+## Security Advisories (resolved in v0.6.5, current v0.11.11)
 
 RUSTSEC-2024-0449 resolved (v0.6.5):
 
@@ -531,6 +531,8 @@ rustls-webpki raised to 0.103.16 (released in v0.11.8):
 - Lockfile pin updated to resolve RUSTSEC-2026-0382 / CVE-2026-111943 (2026-10-20): certificate verification may accept distrusted emSign intermediates. Transitive dependency through reqwest's optional `rustls-tls` feature only — this crate's declared features build reqwest's native TLS and compile neither `rustls` nor `rustls-webpki`, and rustls 0.23.46 requires `^0.103.14`, so a fresh resolve cannot select the vulnerable release. `Cargo.toml` direct dependencies unchanged; do not add an unused direct `rustls-webpki` floor, which would put `ring` into every downstream build. The sibling advisories sharing that CVE concern `webpki-roots` (RUSTSEC-2026-0381) and `webpki-root-certs` (RUSTSEC-2026-0383), neither of which is in this lockfile.
 
 ## Current Version
+
+**v0.11.11**. A tool declared with a complete object schema that has no `properties` — the usual `{"type": "object"}` spelling of a tool without arguments — is no longer read as a shorthand property map and sent to the model as a tool with one required parameter named `type`; such a schema is kept as written, with an empty `properties` added, while a property map that names a parameter `type` is unchanged. Lockfile refreshed for Rust 1.85 compatibility: bumpalo 3.20.4, cc 1.11.2, errno 0.3.15, itoa 1.0.19, jiff 0.2.45 + jiff-core 0.1.7 + jiff-static 0.2.45, mio 1.2.5, rand 0.10.4, rustls-pki-types 1.16.0, rustls-webpki 0.103.17, syn 3.0.10. No public API changed. See CHANGELOG.md [0.11.11].
 
 **v0.11.10**. Two tolerances added after v0.11.9: a `base_url` with a trailing slash no longer produces a doubled-slash request path (`//chat/completions`) — trailing slashes are stripped when constructing the request URL while `AgentOptions::base_url()` preserves the configured value; an SSE event whose `data` field is empty or whitespace is treated as a keep-alive and skipped by `parse_events` before either accumulator sees it, while a non-empty value that is not valid JSON still fails as `Error::Stream`. Lockfile refreshed for Rust 1.85 compatibility: cc 1.11.1, jiff 0.2.40 + jiff-core 0.1.3 + jiff-static 0.2.40, mime 0.3.18, openssl 0.10.82, openssl-sys 0.9.118, smallvec 1.16.5; net: −4 packages (defmt and dependents dropped). No public API changed. See CHANGELOG.md [0.11.10].
 

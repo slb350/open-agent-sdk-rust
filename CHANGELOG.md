@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.11] - 2026-11-17
+
+A tool declared with a complete object schema that has no `properties` — the usual `{"type": "object"}` spelling of a tool without arguments — no longer reaches the model as a tool with one required parameter named `type`, and the lockfile refreshes twelve Rust-1.85-compatible entries. No public API changed.
+
 ### Fixed
 
 - A tool declared with a complete object schema that has no `properties`, such as
