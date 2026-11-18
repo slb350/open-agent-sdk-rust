@@ -1576,4 +1576,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 **Status**: v0.11.10 is the current published crates.io release (a `base_url` with a trailing slash no longer posts to a doubled-slash path that strict servers answer with 404, and an SSE event with an empty or whitespace-only `data` field is skipped as a keep-alive instead of failing the stream as a parse error; Rust-1.85-compatible lockfile entries refreshed). No public API changed. See CHANGELOG.md.
 
+Unreleased on main (post-v0.11.10): tool schema correctness — a bare object schema (`{"type": "object"}`, for a tool that takes no arguments) is kept as written instead of being classified as a shorthand property map, which was sending the model a tool with one required parameter named `type`; `properties: {}` is added so the schema is valid. Lockfile refreshed: bumpalo 3.20.4, cc 1.11.2, errno 0.3.15, itoa 1.0.19, jiff 0.2.45 + jiff-core 0.1.7 + jiff-static 0.2.45, mio 1.2.5, rand 0.10.4, rustls-pki-types 1.16.0, rustls-webpki 0.103.17, syn 3.0.10 (228 entries, no package enters or leaves the lock).
+
 Star this repo if you're building AI agents with local models in Rust!
