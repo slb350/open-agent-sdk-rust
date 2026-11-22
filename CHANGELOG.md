@@ -15,6 +15,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is now kept as written, with an empty `properties` added. A property map that names a
   parameter `type` (`{"type": "string", "query": "string"}`) is unchanged.
 
+### Security
+
+- `url` 2.5.9 resolves RUSTSEC-2026-0592 / GHSA-hrj5-67jp-wqp9 (dated 2026-11-20), "Stack overflow
+  in `Url::origin()` on nested `blob:` URLs", and `Cargo.toml` now requires `url = "2.5.9"` so no
+  downstream resolve can take an unpatched release. In 2.5.8 and earlier `Url::origin()` handled a
+  `blob:` URL by parsing its path as another URL and calling itself on the result whatever the
+  inner scheme, `blob` included, so each `blob:` prefix cost one stack frame with no limit on
+  nesting depth. `Url::parse()` accepts 10,000 `blob:` prefixes before `https://example.com/`
+  (50,020 bytes), and calling `Url::origin()` on it overflowed the default 2 MiB stack of a
+  spawned thread; a stack overflow aborts the whole process and `catch_unwind()` does not catch
+  it, and `url::quirks::origin()` calls `Url::origin()` too. 2.5.9 follows the URL Standard: the
+  inner URL's origin is taken only when its scheme is `http`, `https` or `file`, an opaque origin
+  otherwise, and the function never calls itself
+  (<https://rustsec.org/advisories/RUSTSEC-2026-0592.html>,
+  <https://github.com/servo/rust-url/pull/1186>). `url` is a production dependency here through
+  `reqwest`'s non-optional `url = "2.4"` requirement (`cargo tree -i url` lists `reqwest`,
+  `tower-http` via `reqwest`, and `wiremock` under dev-dependencies), so moving `Cargo.lock` alone
+  would have left downstream free to resolve 2.5.8; the direct requirement closes that, and
+  `cargo update -p url --precise 2.5.8` now fails. The SDK calls no `url` API of its own — the
+  requirement is a supply-chain floor on a crate every build already compiles, not an API
+  dependency, and it adds no package to any resolve. It is deliberately not the `rustls-webpki`
+  case AGENTS.md records: that crate is compiled by neither of this crate's feature builds, so a
+  floor there would have put an unused crate and `ring` into every downstream build.
+
 ### Maintenance
 
 - Refreshed the twelve Rust-1.85-compatible lockfile entries `cargo update` can move: `bumpalo`
@@ -71,6 +95,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   MSRV holds AGENTS.md records (`criterion` 0.7.0, `idna_adapter` 1.2.1, `encoding_rs` 0.8.35 with
   the `icu_*` 2.1.x chain, `reqwest` 0.12.28, `wiremock` 0.6.4) remain in place and were not
   forced. The updated lockfile passes
+  `cargo +1.85 check --all-features --all-targets --workspace --locked`. No public API changed.
+- Refreshed the twenty-one Rust-1.85-compatible lockfile entries `cargo update` can move: `bytes`
+  1.12.2, `cc` 1.11.3, `clap` 4.6.9, `clap_lex` 1.1.2, `env_filter` 2.1.0, `env_logger` 0.11.12,
+  `form_urlencoded` 1.2.3, `hashbrown` 0.17.2, `jiff` 1.0.2 (with `jiff-core` 1.0.1 and
+  `jiff-static` 1.0.2), `pin-project-lite` 0.2.18, `regex` 1.13.2, `regex-automata` 0.4.19,
+  `regex-syntax` 0.8.12, `smallvec` 1.16.6, `url` 2.5.9, `walkdir` 2.5.1, `zerocopy` 0.8.64,
+  `zerocopy-derive` 0.8.64, and `zeroize` 1.9.2. No package enters or leaves the lock, which stays
+  at 228 entries. Upstream notes for the changes worth calling out:
+
+  - `url` 2.5.9 and `form_urlencoded` 1.2.3 are one upstream release, which also fixes quadratic
+    `..` segment parsing after a long authority (rust-url#1187), a `Serializer::for_suffix` panic
+    (#1172), backslashes accepted in the port state of non-special URLs (#1161) and
+    percent-encoding of `^` in a path (#1140), and updates `IdnaTestV2.txt` to Unicode 18 (#1169)
+    (<https://github.com/servo/rust-url/compare/v2.5.8...v2.5.9>). Both are production entries:
+    `url` through `reqwest` (and now this crate), `form_urlencoded` through `url` and through
+    `serde_urlencoded`.
+  - `jiff` crosses from 0.2.45 to 1.0.2 because `env_logger` 0.11.12's published manifest requires
+    `jiff = "1.0.1"` for its optional `humantime` feature, so `cargo update` must cross the major;
+    this crate declares no `jiff` dependency of its own. `jiff` 1.0.0 (2026-11-15) is upstream's
+    stability commitment and lists "Bump MSRV to Rust 1.85", this crate's own MSRV; 1.0.1 fixes
+    `%Z` in `Timestamp::strftime` and an out-of-range timestamp parse (#713, #714), and 1.0.2
+    fixes a `ZonedDateTime::strptime` panic near boundaries (#718) and fold handling in offset
+    conflict resolution (#720)
+    (<https://github.com/BurntSushi/jiff/blob/master/CHANGELOG.md>). `jiff-static` now builds on
+    the lockfile's `syn` 3 instead of `syn` 2. `jiff` is dev-only, reached through `env_logger`,
+    whose 0.11.12 entry reads "Updated MSRV to 1.85"
+    (<https://github.com/rust-cli/env_logger/blob/main/CHANGELOG.md>) — again equal to this crate's
+    MSRV, with `env_filter` 2.1.0 moving with it.
+  - `bytes` 1.12.2 fixes sign extension in `try_get_int`/`try_get_int_le` (tokio-rs/bytes#839),
+    releases a shared reference when truncating a `Bytes` to zero length (#842) and preserves
+    buffer order in `Chain::chunks_vectored` (#872)
+    (<https://github.com/tokio-rs/bytes/releases/tag/v1.12.2>); it reaches this crate through `h2`
+    and `tokio`. `zeroize` 1.9.2 optimizes slice and byte zeroization (RustCrypto/utils#1602,
+    #1603, #1604, #1607) through `rustls-pki-types`
+    (<https://github.com/RustCrypto/utils/blob/master/zeroize/CHANGELOG.md>); `pin-project-lite`
+    0.2.18 fixes a `Drop` implementation check for an always-unsized type
+    (<https://github.com/taiki-e/pin-project-lite/releases/tag/v0.2.18>), reached through
+    `eventsource-stream`, `futures-util` and `tokio`.
+  - The rest are dev-only or build-path entries. `regex` 1.13.2 fixes a `BoundedBacktracker`
+    panic when the haystack exceeds its capacity (rust-lang/regex#1388) and corrects match offsets
+    for alternations whose branches share a prefix (#1400); its notes list the paired
+    `regex-syntax` changes (#1394, #1395)
+    (<https://github.com/rust-lang/regex/blob/master/CHANGELOG.md>). `regex` is a dev-dependency,
+    and `criterion`, `env_filter` and `wiremock` take it with `regex-automata` 0.4.19 and
+    `regex-syntax` 0.8.12. `walkdir` 2.5.1 detects
+    symlink loops above the root of a walk (BurntSushi/walkdir#220,
+    <https://github.com/BurntSushi/walkdir/compare/2.5.0...2.5.1>) and `clap` 4.6.9 with
+    `clap_lex` 1.1.2 avoids an `unused_result` warning from the derive
+    (<https://github.com/clap-rs/clap/releases/tag/v4.6.9>); both are reached only through
+    `criterion`.
+    `zerocopy` 0.8.64 with `zerocopy-derive` is documentation, CI and proof work plus
+    `FromZeros::new_box_zeroed_in` (google/zerocopy#3919,
+    <https://github.com/google/zerocopy/releases/tag/v0.8.64>) through `half` and `ciborium`;
+    `cc` 1.11.3 only documents the arguments an MSVC archiver receives and its Unix `Debug`
+    output (<https://github.com/rust-lang/cc-rs/releases/tag/cc-v1.11.3>), as `openssl-sys`'s
+    build-dependency; `hashbrown` 0.17.2 (`indexmap` ← `h2`) fixes an allocator leak when dropping
+    an empty table (rust-lang/hashbrown#751), keeps `ProbeSeq::move_next` on wrapping arithmetic to
+    avoid overflow (#736) and switches to `std::hash::RandomState` (#747)
+    (<https://github.com/rust-lang/hashbrown/releases/tag/v0.17.2>); and `smallvec` 1.16.6
+    (`hyper`) lists repository-metadata and release-workflow changes only
+    (<https://github.com/smallvec/smallvec/releases/tag/v1.16.6>).
+
+  `cargo audit` and `osv-scanner` each reported the one RUSTSEC-2026-0592 finding against `url`
+  2.5.8 before the update and report no vulnerability, warning or OSV finding after it, and
+  nothing is ignored or allowlisted. The MSRV holds AGENTS.md records (`criterion` 0.7.0,
+  `idna_adapter` 1.2.1, `encoding_rs` 0.8.35 with the `icu_*` 2.1.x chain, `reqwest` 0.12.28,
+  `wiremock` 0.6.4) remain in place and were not forced. The updated lockfile passes
   `cargo +1.85 check --all-features --all-targets --workspace --locked`. No public API changed.
 
 ## [0.11.10] - 2026-11-11
