@@ -726,6 +726,9 @@ also include the completed tool call and its unmodified result.
 
 **UserPromptSubmit** - Fires before sending prompt to API
 
+- Runs for prompts passed to `Client::send`. The empty turn an automatic tool loop appends to
+  continue itself is not a submission and does not reach the hook
+
 - **Block prompts**: Return `Some(HookDecision::block(reason))`
 - **Modify prompts**: Return `Some(HookDecision::modify_prompt(text, reason))`
 - **Allow**: Return `Some(HookDecision::continue_())`
@@ -1576,6 +1579,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 **Status**: v0.11.10 is the current published crates.io release (a `base_url` with a trailing slash no longer posts to a doubled-slash path that strict servers answer with 404, and an SSE event with an empty or whitespace-only `data` field is skipped as a keep-alive instead of failing the stream as a parse error; Rust-1.85-compatible lockfile entries refreshed). No public API changed. See CHANGELOG.md.
 
-Unreleased on main (post-v0.11.10): tool schema correctness — a bare object schema (`{"type": "object"}`, for a tool that takes no arguments) is kept as written instead of being classified as a shorthand property map, which was sending the model a tool with one required parameter named `type`; `properties: {}` is added so the schema is valid. Lockfile refreshed: bumpalo 3.20.4, cc 1.11.2, errno 0.3.15, itoa 1.0.19, jiff 0.2.45 + jiff-core 0.1.7 + jiff-static 0.2.45, mio 1.2.5, rand 0.10.4, rustls-pki-types 1.16.0, rustls-webpki 0.103.17, syn 3.0.10 (228 entries, no package enters or leaves the lock).
+Unreleased on main (post-v0.11.10): the automatic tool loop's continuation no longer runs `UserPromptSubmit` hooks (it is not a caller submission); tool schema correctness — a bare object schema (`{"type": "object"}`, for a tool that takes no arguments) is kept as written instead of being classified as a shorthand property map, which was sending the model a tool with one required parameter named `type`; `properties: {}` is added so the schema is valid. Security: `Cargo.toml` now requires `url = "2.5.9"`, so no resolve of this crate can take the `url` releases affected by RUSTSEC-2026-0592 (stack overflow in `Url::origin()` on nested `blob:` URLs). Lockfile refreshed twice; it now carries bytes 1.12.2, bumpalo 3.20.4, cc 1.11.3, clap 4.6.9, env_logger 0.11.12, errno 0.3.15, hashbrown 0.17.2, itoa 1.0.19, jiff 1.0.2 (dev-only, through env_logger), mio 1.2.5, rand 0.10.4, regex 1.13.2, rustls-pki-types 1.16.0, rustls-webpki 0.103.17, smallvec 1.16.6, syn 3.0.10, url 2.5.9 and zeroize 1.9.2 among other Rust-1.85-compatible entries (228 entries, no package enters or leaves the lock). See CHANGELOG.md [Unreleased].
 
 Star this repo if you're building AI agents with local models in Rust!

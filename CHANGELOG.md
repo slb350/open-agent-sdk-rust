@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- An automatic tool loop no longer runs `UserPromptSubmit` hooks on its own continuation. Each
+  tool round continued with an internal `send("")`, so a hook saw a prompt the caller never
+  submitted: one that blocked empty prompts failed the loop after its tools had already run, one
+  that rewrote prompts changed the continuation's user turn, and audit hooks logged a phantom
+  empty prompt per round. The continuation now appends its empty user turn directly. A caller's
+  own `send("")` still goes through the hooks. The continuation also leaves the interrupt flag
+  alone instead of clearing it, so a cancellation arriving between the last check and the
+  continuation request is no longer lost.
 - A tool declared with a complete object schema that has no `properties`, such as
   `{"type": "object"}` for a tool without arguments, no longer gets read as a shorthand property
   map. It was sent to the model as a tool with one required parameter named `type`. Such a schema

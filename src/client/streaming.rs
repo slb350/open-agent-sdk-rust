@@ -222,9 +222,9 @@ impl Client {
             if self.interrupted.load(Ordering::SeqCst) {
                 return Ok(Vec::new());
             }
-            // Internal sends reset per-stream observations; reasoning spans all tool rounds.
+            // The continuation resets per-stream observations; reasoning spans all tool rounds.
             let carried_reasoning = std::mem::take(&mut self.last_reasoning);
-            self.send("").await?;
+            self.continue_after_tools().await?;
             self.last_reasoning = carried_reasoning;
         }
     }

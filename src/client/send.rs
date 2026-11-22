@@ -32,4 +32,13 @@ impl Client {
 
         self.start_request().await
     }
+
+    // The empty user turn that continues an automatic tool loop. The caller never submitted it,
+    // so UserPromptSubmit hooks must not see, block or rewrite it; `send("")` is still the
+    // caller's own spelling of a manual continuation and goes through the hooks.
+    async fn continue_after_tools(&mut self) -> Result<()> {
+        self.discard_pending_output();
+        self.history.push(Message::user(String::new()));
+        self.start_request().await
+    }
 }
