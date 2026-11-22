@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.11] - 2026-11-22
+
+This patch release fixes automatic tool continuations and bare object tool schemas, and
+requires the patched `url` 2.5.9 for downstream dependency resolution.
+
 ### Fixed
 
 - An automatic tool loop no longer runs `UserPromptSubmit` hooks on its own continuation. Each
