@@ -507,9 +507,53 @@ cargo test --test mutation_ci_scope_test
 
 ## Scheduled Maintenance
 
-Jobsy on homelab-ai-1 runs this repository's scheduled maintenance as a weekly dependency-security job and a weekly improvement job. Each works in a fresh checkout of main and opens a draft pull request from a `jobsy/` branch. Mutation testing runs in CI on the pull request, scoped by `scripts/mutants-ci-scope.sh`.
+### Jobsy
 
-A daily Jobsy review job reviews each open `jobsy/` pull request against this file, fixes it on its own branch when it is not solid, and merges it with a merge commit once every check on the reviewed head has passed; Jobsy refuses the merge otherwise. A weekly Jobsy release job decides under the release rules in this file whether the merged work warrants a release, and if so opens a `jobsy/release/` pull request that bumps the version and moves the changelog entries. When that pull request merges, Jobsy pushes the annotated tag `vX.Y.Z` on the merge commit, and `publish-crate.yml` publishes that commit to crates.io through trusted publishing, then creates the GitHub release from that version's changelog section. The publish job runs in the `release` environment, which deploys only from `v*` tags; a repository ruleset lets only admins create, move or delete a `v*` tag, and the crate's crates.io trusted publisher requires the environment. A run that published but failed before the GitHub release is repaired by re-running it: it uploads nothing when every file of the version crates.io holds matches a package built from the tag's commit, and fails on any difference. No Jobsy job pushes main directly or publishes from its own host.
+Jobsy on homelab-ai-1 runs a weekly dependency-security job and a weekly improvement job. Each
+works in a fresh checkout of main and opens a draft pull request from a `jobsy/` branch. Mutation
+testing runs in CI on the pull request, scoped by `scripts/mutants-ci-scope.sh`.
+
+The daily Jobsy review job reviews open `jobsy/` pull requests, repairs them on their own branches
+when needed, and merges with a merge commit after every check on the reviewed head passes. The
+weekly Jobsy release job opens a `jobsy/release/` pull request when merged work warrants a new
+version. Jobsy owns its active maintenance, mutation repair, review, and release work.
+
+### Weekly Codex maintenance
+
+The local Codex automation **Open Agent SDK Rust Weekly Maintenance & Release**
+(`open-agent-sdk-rust-weekly-maintenance-release`) runs Saturdays at 8:00 p.m. Pacific, after
+the weekly Dependabot runs. Steve granted standing approval on November 22, 2026, for the
+following actions in `slb350/open-agent-sdk-rust`.
+
+- Fast-forward a clean local `main` from GitHub and triage the open pull requests. Use an
+  isolated checkout for repairs and preserve any user changes.
+- Push necessary fixes to eligible, writable maintenance PR branches, prioritizing Dependabot
+  updates. Apply the repository's review, hook, and test requirements.
+- Merge needed PRs with a merge commit and an expected-head guard after applicable checks pass
+  on the reviewed head and current merge result. Accept skips only when CI policy calls for them.
+- Close clearly stale PRs when current evidence shows they are superseded, duplicated, or have
+  no remaining applicable work.
+- Prepare and merge warranted release PRs, push the annotated release tag, and verify
+  publication to crates.io and GitHub.
+
+Codex may inspect `jobsy/` PRs for blockers or supersession and leaves active PRs with their
+owning Jobsy job. Before opening a release PR or pushing a tag, check open release PRs, existing
+tags, and publish runs. If Jobsy already has an active release candidate or publish attempt,
+defer to it. Report the disposition of PRs, check results, release status, and any blockers.
+
+### Crate publishing
+
+Release for user-facing fixes, downstream security fixes, or backward-compatible features.
+GitHub is the only remote. Changes land on main through reviewed PRs. After the release PR
+passes CI and merges, its owner pushes an annotated `vX.Y.Z` tag at the verified merge commit.
+`publish-crate.yml` publishes that commit to crates.io through trusted publishing and creates the
+GitHub release from the version's changelog section. Verify both the crate and the GitHub release.
+
+The `release` environment accepts only `v*` tags, and the repository ruleset restricts tag creation,
+movement, and deletion to admins. The crates.io trusted publisher requires this environment.
+Recover a partial publication by re-running the workflow on the same tag. If crates.io already
+has the version, the workflow compares every packaged file with the tag's package before skipping
+the upload and creating the GitHub release. A difference fails the run.
 
 ## Security Advisories (resolved in v0.6.5, current v0.11.11)
 
