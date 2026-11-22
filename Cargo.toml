@@ -43,6 +43,12 @@ tokio = { version = "1.50", features = ["time"] }
 # HTTP client
 reqwest = { version = "0.12.28", features = ["json", "stream"] }
 
+# Security floor, not an API dependency: reqwest requires `url = "2.4"`, which admits
+# url <= 2.5.8, and url is compiled in every build of this crate through it. Floor at the
+# RUSTSEC-2026-0592 patched release so no downstream resolve can take a vulnerable version.
+# Do not remove as "unused": the SDK calls no `url` API of its own.
+url = "2.5.9"
+
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
