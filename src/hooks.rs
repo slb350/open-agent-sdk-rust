@@ -3,7 +3,9 @@
 //! Handlers run in registration order until one returns `Some(HookDecision)`.
 //! Return `None` to let later handlers run, including audit handlers.
 //!
-//! `UserPromptSubmit` runs in [`Client::send`](crate::Client::send). Pre- and
+//! `UserPromptSubmit` runs in [`Client::send`](crate::Client::send) for prompts the caller submits;
+//! the empty turn an automatic tool loop appends to continue itself is not a submission and does
+//! not reach it. Pre- and
 //! post-tool hooks run only during automatic tool execution. Each event owns a
 //! structured conversation-history snapshot; post-tool history includes the
 //! unmodified result. Handle fallible work inside a hook and choose a decision;

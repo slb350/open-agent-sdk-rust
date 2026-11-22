@@ -188,3 +188,118 @@ async fn manual_receive_leaves_tool_execution_to_the_caller_and_skips_tool_hooks
         .unwrap();
     assert_eq!(result, json!({"result": 42}));
 }
+
+#[tokio::test]
+async fn auto_continuation_is_not_a_user_prompt_submission() {
+    let server = MockServer::start().await;
+    let requests = AtomicUsize::new(0);
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(move |_: &Request| {
+            let response = if requests.fetch_add(1, Ordering::SeqCst) == 0 {
+                tool_chunk("call-1", "double", r#"{"value":21}"#) + DONE
+            } else {
+                text_chunk("done", Some("stop")) + DONE
+            };
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(response)
+        })
+        .expect(2)
+        .mount(&server)
+        .await;
+
+    // The hook records each prompt it sees and rewrites it, so a continuation that reaches it
+    // is visible both in the record and in the request the server receives.
+    let submitted = Arc::new(Mutex::new(Vec::new()));
+    let captured = Arc::clone(&submitted);
+    let hooks = Hooks::new().add_user_prompt_submit(move |event| {
+        let captured = Arc::clone(&captured);
+        async move {
+            captured.lock().unwrap().push(event.prompt.clone());
+            Some(HookDecision::modify_prompt(
+                format!("{} [audited]", event.prompt),
+                "audit",
+            ))
+        }
+    });
+    let options = AgentOptions::builder()
+        .model("m")
+        .base_url(format!("{}/v1", server.uri()))
+        .tool(tool("double", "Double a value").build(|input| async move {
+            Ok(json!({"result": input["value"].as_i64().unwrap() * 2}))
+        }))
+        .hooks(hooks)
+        .auto_execute_tools(true)
+        .build()
+        .unwrap();
+    let mut client = Client::new(options).unwrap();
+    client.send("double 21").await.unwrap();
+    let mut output = Vec::new();
+    while let Some(block) = client.receive().await.unwrap() {
+        output.push(block);
+    }
+
+    assert_eq!(common::text_of(&output), "done");
+    assert_eq!(*submitted.lock().unwrap(), vec!["double 21".to_string()]);
+    let requests = server.received_requests().await.unwrap();
+    let continuation: Value = requests[1].body_json().unwrap();
+    let user_turns: Vec<_> = continuation["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|message| message["role"] == "user")
+        .map(|message| message["content"].as_str().unwrap())
+        .collect();
+    assert_eq!(user_turns, ["double 21 [audited]", ""]);
+}
+
+#[tokio::test]
+async fn auto_continuation_proceeds_when_a_hook_blocks_empty_prompts() {
+    let server = MockServer::start().await;
+    let requests = AtomicUsize::new(0);
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(move |_: &Request| {
+            let response = if requests.fetch_add(1, Ordering::SeqCst) == 0 {
+                tool_chunk("call-1", "double", r#"{"value":21}"#) + DONE
+            } else {
+                text_chunk("done", Some("stop")) + DONE
+            };
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(response)
+        })
+        .expect(2)
+        .mount(&server)
+        .await;
+
+    let hooks = Hooks::new().add_user_prompt_submit(|event| async move {
+        event
+            .prompt
+            .trim()
+            .is_empty()
+            .then(|| HookDecision::block("empty prompts are not allowed"))
+    });
+    let options = AgentOptions::builder()
+        .model("m")
+        .base_url(format!("{}/v1", server.uri()))
+        .tool(tool("double", "Double a value").build(|input| async move {
+            Ok(json!({"result": input["value"].as_i64().unwrap() * 2}))
+        }))
+        .hooks(hooks)
+        .auto_execute_tools(true)
+        .build()
+        .unwrap();
+    let mut client = Client::new(options).unwrap();
+    client.send("double 21").await.unwrap();
+    let mut output = Vec::new();
+    while let Some(block) = client.receive().await.unwrap() {
+        output.push(block);
+    }
+    assert_eq!(common::text_of(&output), "done");
+
+    // A caller who submits an empty prompt is still subject to the hook.
+    let error = client.send("").await.expect_err("the hook blocks it");
+    assert!(error.to_string().contains("empty prompts are not allowed"));
+}
