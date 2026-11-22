@@ -4,7 +4,7 @@ const CI: &str = include_str!("../.github/workflows/ci.yml");
 const AUDIT: &str = include_str!("../.github/workflows/scheduled-audit.yml");
 const DEPENDABOT: &str = include_str!("../.github/dependabot.yml");
 const MUTATION_INSTALL_ACTION: &str =
-    "taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad";
+    "taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f";
 const UPLOAD_ARTIFACT_ACTION: &str =
     "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9";
 /// About three times the slowest measured full sweep; see the mutation job in ci.yml.
@@ -226,7 +226,7 @@ fn mutation_sweep_uses_complete_event_scope_and_an_explicit_backstop() {
         .unwrap();
     assert_eq!(installer["uses"], MUTATION_INSTALL_ACTION);
     // The exact installer pin/comment is a documented project requirement.
-    let expected_installer_line = format!("- uses: {MUTATION_INSTALL_ACTION} # v2.87.26");
+    let expected_installer_line = format!("- uses: {MUTATION_INSTALL_ACTION} # v2.90.6");
     assert!(
         CI.lines()
             .any(|line| line.trim() == expected_installer_line.as_str())
