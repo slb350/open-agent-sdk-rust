@@ -97,7 +97,7 @@ impl ImageBlock {
     ///
     /// # Warnings
     ///
-    /// - Logs a warning to stderr if URL exceeds 2000 characters
+    /// - Logs a warning if URL exceeds 2000 characters
     ///
     /// # Example
     ///
@@ -125,9 +125,8 @@ impl ImageBlock {
 
         // Warn about very long URLs (>2000 chars)
         if url.len() > 2000 {
-            eprintln!(
-                "WARNING: Very long image URL ({} chars). \
-                 Some APIs may have URL length limits.",
+            log::warn!(
+                "Very long image URL ({} chars). Some APIs may have URL length limits.",
                 url.len()
             );
         }
@@ -141,73 +140,21 @@ impl ImageBlock {
             })
         } else if let Some(mime_part) = url.strip_prefix("data:") {
             // Validate data URI format: data:MIME;base64,DATA
-            if !url.contains(";base64,") {
+            let Some((meta, base64_data)) = mime_part.split_once(";base64,") else {
                 return Err(crate::Error::invalid_input(
                     "Data URI must be in format: data:image/TYPE;base64,DATA",
                 ));
-            }
-
-            // Extract MIME type from data:MIME;base64,DATA
-            let mime_type = if let Some(semicolon_pos) = mime_part.find(';') {
-                &mime_part[..semicolon_pos]
-            } else {
-                return Err(crate::Error::invalid_input(
-                    "Malformed data URI: missing MIME type",
-                ));
             };
 
+            // Extract MIME type (before any optional parameters like `;charset=...`)
+            let mime_type = meta.split_once(';').map_or(meta, |(mime, _)| mime);
             if mime_type.is_empty() || !mime_type.starts_with("image/") {
                 return Err(crate::Error::invalid_input(
                     "Data URI MIME type must start with 'image/'",
                 ));
             }
 
-            // Extract and validate base64 data portion
-            if let Some(base64_start_pos) = url.find(";base64,") {
-                let base64_data = &url[base64_start_pos + 8..]; // Skip ";base64,"
-
-                // Validate base64 data using same rules as from_base64()
-                // Check data is not empty
-                if base64_data.is_empty() {
-                    return Err(crate::Error::invalid_input(
-                        "Data URI base64 data cannot be empty",
-                    ));
-                }
-
-                // Check character set
-                if !base64_data
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
-                {
-                    return Err(crate::Error::invalid_input(
-                        "Data URI base64 data contains invalid characters. Valid characters: A-Z, a-z, 0-9, +, /, =",
-                    ));
-                }
-
-                // Check length (must be multiple of 4)
-                if base64_data.len() % 4 != 0 {
-                    return Err(crate::Error::invalid_input(
-                        "Data URI base64 data has invalid length (must be multiple of 4)",
-                    ));
-                }
-
-                // Validate padding
-                let equals_count = base64_data.chars().filter(|c| *c == '=').count();
-                if equals_count > 2 {
-                    return Err(crate::Error::invalid_input(
-                        "Data URI base64 data has invalid padding (max 2 '=' characters allowed)",
-                    ));
-                }
-                // Padding must be at the end
-                if equals_count > 0 {
-                    let trimmed = base64_data.trim_end_matches('=');
-                    if trimmed.len() + equals_count != base64_data.len() {
-                        return Err(crate::Error::invalid_input(
-                            "Data URI base64 padding characters must be at the end",
-                        ));
-                    }
-                }
-            }
+            Self::validate_base64(base64_data, "Data URI base64 data")?;
 
             Ok(Self {
                 url,
@@ -218,6 +165,45 @@ impl ImageBlock {
                 "Image URL must start with http://, https://, or data:",
             ))
         }
+    }
+
+    /// Validates base64 characters, length, and trailing padding in a single byte pass.
+    fn validate_base64(data: &str, label: &str) -> crate::Result<()> {
+        if data.is_empty() {
+            return Err(crate::Error::invalid_input(format!(
+                "{label} cannot be empty"
+            )));
+        }
+
+        if data.len() % 4 != 0 {
+            return Err(crate::Error::invalid_input(format!(
+                "{label} has invalid length (must be multiple of 4)"
+            )));
+        }
+
+        let mut equals_count = 0usize;
+        for &byte in data.as_bytes() {
+            if byte == b'=' {
+                equals_count += 1;
+                if equals_count > 2 {
+                    return Err(crate::Error::invalid_input(format!(
+                        "{label} has invalid padding (max 2 '=' characters allowed)"
+                    )));
+                }
+            } else if byte.is_ascii_alphanumeric() || byte == b'+' || byte == b'/' {
+                if equals_count > 0 {
+                    return Err(crate::Error::invalid_input(format!(
+                        "{label} padding characters must be at the end"
+                    )));
+                }
+            } else {
+                return Err(crate::Error::invalid_input(format!(
+                    "{label} contains invalid characters. Valid characters: A-Z, a-z, 0-9, +, /, ="
+                )));
+            }
+        }
+
+        Ok(())
     }
 
     /// Creates a new image block from base64-encoded data.
@@ -240,7 +226,7 @@ impl ImageBlock {
     ///
     /// # Warnings
     ///
-    /// - Logs a warning to stderr if base64 data exceeds 10MB (~7.5MB decoded)
+    /// - Logs a warning if base64 data exceeds 10MB (~7.5MB decoded)
     ///
     /// # Example
     ///
@@ -259,47 +245,7 @@ impl ImageBlock {
         let data = base64_data.as_ref();
         let mime = mime_type.as_ref();
 
-        // Validate base64 data is not empty
-        if data.is_empty() {
-            return Err(crate::Error::invalid_input(
-                "Base64 image data cannot be empty",
-            ));
-        }
-
-        // Validate base64 character set (alphanumeric + +/=)
-        // This catches common errors like spaces, special characters, etc.
-        if !data
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
-        {
-            return Err(crate::Error::invalid_input(
-                "Base64 data contains invalid characters. Valid characters: A-Z, a-z, 0-9, +, /, =",
-            ));
-        }
-
-        // Validate base64 padding (length must be multiple of 4)
-        if data.len() % 4 != 0 {
-            return Err(crate::Error::invalid_input(
-                "Base64 data has invalid length (must be multiple of 4)",
-            ));
-        }
-
-        // Validate padding characters only appear at the end (max 2)
-        let equals_count = data.chars().filter(|c| *c == '=').count();
-        if equals_count > 2 {
-            return Err(crate::Error::invalid_input(
-                "Base64 data has invalid padding (max 2 '=' characters allowed)",
-            ));
-        }
-        if equals_count > 0 {
-            // Padding must be at the end
-            let trimmed = data.trim_end_matches('=');
-            if trimmed.len() + equals_count != data.len() {
-                return Err(crate::Error::invalid_input(
-                    "Base64 padding characters must be at the end",
-                ));
-            }
-        }
+        Self::validate_base64(data, "Base64 image data")?;
 
         // Validate MIME type is not empty
         if mime.is_empty() {
@@ -322,8 +268,8 @@ impl ImageBlock {
 
         // Warn about extremely large base64 data (>10MB)
         if data.len() > 10_000_000 {
-            eprintln!(
-                "WARNING: Very large base64 image data ({} chars, ~{:.1}MB). \
+            log::warn!(
+                "Very large base64 image data ({} chars, ~{:.1}MB). \
                  This may exceed API limits or cause performance issues.",
                 data.len(),
                 (data.len() as f64 * 0.75) / 1_000_000.0
@@ -352,7 +298,7 @@ impl ImageBlock {
     /// Returns `Error::InvalidInput` if:
     /// - File cannot be read
     /// - File extension is missing or unsupported
-    /// - File is too large (>10MB warning)
+    /// - File is empty
     ///
     /// # Supported Formats
     ///
@@ -381,16 +327,7 @@ impl ImageBlock {
 
         let path = path.as_ref();
 
-        // Read file bytes
-        let bytes = std::fs::read(path).map_err(|e| {
-            crate::Error::invalid_input(format!(
-                "Failed to read image file '{}': {}",
-                path.display(),
-                e
-            ))
-        })?;
-
-        // Determine MIME type from file extension
+        // Validate extension before reading potentially large files from disk
         let mime_type = match path.extension().and_then(|e| e.to_str()) {
             Some("jpg") | Some("jpeg") => "image/jpeg",
             Some("png") => "image/png",
@@ -411,11 +348,42 @@ impl ImageBlock {
             }
         };
 
-        // Encode to base64
-        let base64_data = general_purpose::STANDARD.encode(&bytes);
+        // Read file bytes
+        let bytes = std::fs::read(path).map_err(|e| {
+            crate::Error::invalid_input(format!(
+                "Failed to read image file '{}': {}",
+                path.display(),
+                e
+            ))
+        })?;
 
-        // Use existing from_base64 method for validation
-        Self::from_base64(&base64_data, mime_type)
+        if bytes.is_empty() {
+            return Err(crate::Error::invalid_input(
+                "Base64 image data cannot be empty",
+            ));
+        }
+
+        // Encode directly into the final data URI buffer without intermediate copies or re-scans
+        let encoded_len = base64::encoded_len(bytes.len(), true).unwrap_or(0);
+        if encoded_len > 10_000_000 {
+            log::warn!(
+                "Very large base64 image data ({} chars, ~{:.1}MB). \
+                 This may exceed API limits or cause performance issues.",
+                encoded_len,
+                (encoded_len as f64 * 0.75) / 1_000_000.0
+            );
+        }
+
+        let mut url = String::with_capacity("data:".len() + mime_type.len() + ";base64,".len() + encoded_len);
+        url.push_str("data:");
+        url.push_str(mime_type);
+        url.push_str(";base64,");
+        general_purpose::STANDARD.encode_string(&bytes, &mut url);
+
+        Ok(Self {
+            url,
+            detail: ImageDetail::default(),
+        })
     }
 
     /// Sets the image detail level.

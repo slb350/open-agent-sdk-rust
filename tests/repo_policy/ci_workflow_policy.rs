@@ -1,8 +1,8 @@
 use serde_norway::Value;
 
-const CI: &str = include_str!("../.github/workflows/ci.yml");
-const AUDIT: &str = include_str!("../.github/workflows/scheduled-audit.yml");
-const DEPENDABOT: &str = include_str!("../.github/dependabot.yml");
+const CI: &str = include_str!("../../.github/workflows/ci.yml");
+const AUDIT: &str = include_str!("../../.github/workflows/scheduled-audit.yml");
+const DEPENDABOT: &str = include_str!("../../.github/dependabot.yml");
 const MUTATION_INSTALL_ACTION: &str =
     "taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f";
 const UPLOAD_ARTIFACT_ACTION: &str =
@@ -86,18 +86,16 @@ fn dependabot_excludes_known_msrv_breaking_releases() {
         .unwrap();
     let ignored = cargo["ignore"].as_sequence().unwrap();
 
-    for (dependency, version) in [("wiremock", "0.6.5"), ("yoke-derive", "0.8.3")] {
-        let rule = ignored
-            .iter()
-            .find(|rule| rule["dependency-name"] == dependency)
-            .unwrap_or_else(|| panic!("{dependency} must have an MSRV exception"));
-        assert!(
-            rule["versions"]
-                .as_sequence()
-                .unwrap()
-                .contains(&Value::from(version))
-        );
-    }
+    let rule = ignored
+        .iter()
+        .find(|rule| rule["dependency-name"] == "yoke-derive")
+        .expect("yoke-derive must have an MSRV exception");
+    assert!(
+        rule["versions"]
+            .as_sequence()
+            .unwrap()
+            .contains(&Value::from("0.8.3"))
+    );
 }
 
 #[test]

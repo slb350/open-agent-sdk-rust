@@ -79,14 +79,25 @@ impl FromStr for Provider {
     /// Accepts `lmstudio`, `lm-studio`, `lm_studio`, `ollama`, `llamacpp`, `llama-cpp`,
     /// `llama_cpp`, `llama.cpp`, and `vllm`. Unknown names return an error.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "lmstudio" | "lm-studio" | "lm_studio" => Ok(Provider::LMStudio),
+        match s {
+            s if s.eq_ignore_ascii_case("lmstudio")
+                || s.eq_ignore_ascii_case("lm-studio")
+                || s.eq_ignore_ascii_case("lm_studio") =>
+            {
+                Ok(Provider::LMStudio)
+            }
 
-            "ollama" => Ok(Provider::Ollama),
+            s if s.eq_ignore_ascii_case("ollama") => Ok(Provider::Ollama),
 
-            "llamacpp" | "llama-cpp" | "llama_cpp" | "llama.cpp" => Ok(Provider::LlamaCpp),
+            s if s.eq_ignore_ascii_case("llamacpp")
+                || s.eq_ignore_ascii_case("llama-cpp")
+                || s.eq_ignore_ascii_case("llama_cpp")
+                || s.eq_ignore_ascii_case("llama.cpp") =>
+            {
+                Ok(Provider::LlamaCpp)
+            }
 
-            "vllm" => Ok(Provider::VLLM),
+            s if s.eq_ignore_ascii_case("vllm") => Ok(Provider::VLLM),
 
             _ => Err(format!("Unknown provider: {}", s)),
         }
@@ -158,8 +169,11 @@ mod tests {
     fn test_provider_from_str() {
         assert_eq!("lmstudio".parse::<Provider>(), Ok(Provider::LMStudio));
         assert_eq!("LM-Studio".parse::<Provider>(), Ok(Provider::LMStudio));
+        assert_eq!("lm_studio".parse::<Provider>(), Ok(Provider::LMStudio));
         assert_eq!("ollama".parse::<Provider>(), Ok(Provider::Ollama));
         assert_eq!("llamacpp".parse::<Provider>(), Ok(Provider::LlamaCpp));
+        assert_eq!("llama-cpp".parse::<Provider>(), Ok(Provider::LlamaCpp));
+        assert_eq!("llama_cpp".parse::<Provider>(), Ok(Provider::LlamaCpp));
         assert_eq!("llama.cpp".parse::<Provider>(), Ok(Provider::LlamaCpp));
         assert_eq!("vllm".parse::<Provider>(), Ok(Provider::VLLM));
         assert!("unknown".parse::<Provider>().is_err());

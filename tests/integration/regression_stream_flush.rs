@@ -6,9 +6,9 @@
 //! empty successful response and cannot distinguish it from a model that genuinely returned
 //! nothing.
 
-mod common;
-
-use common::{DONE, blocks_of, collect_events, text_chunk, text_of, text_of_events, tool_chunk};
+use crate::common::{
+    DONE, blocks_of, collect_events, text_chunk, text_of, text_of_events, tool_chunk,
+};
 use open_agent::ContentBlock;
 
 /// Serves `body` as an SSE response and collects every content block `query()` yields.

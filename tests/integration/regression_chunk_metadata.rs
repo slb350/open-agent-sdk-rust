@@ -12,9 +12,9 @@
 //! data: missing field` stream error, which is retryable, so the whole response was lost for
 //! a field nobody reads. Each omission must now be tolerated.
 
-mod common;
-
-use common::{DONE, collect_events, options_for, sole_finish_reason, sse_server, text_of_events};
+use crate::common::{
+    DONE, collect_events, options_for, sole_finish_reason, sse_server, text_of_events,
+};
 use futures::StreamExt;
 use open_agent::{Client, ContentBlock, FinishReason, query};
 use serde_json::json;

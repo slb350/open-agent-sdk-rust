@@ -1,16 +1,11 @@
-#![cfg(unix)]
-//! The mutation scripts are drep's (`~/dev/drep/scripts/`), copied with this repository's ai-1 role. These tests pin what the copy must keep: ai-1 as the only offload host, one host lock shared by hosted and laptop runs, results proven fresh, scratch beside the checkout, a sandboxed transport, and a verdict read from `missed.txt` rather than the exit code. The locks' behavior is exercised in `mutation_locks_test.rs`.
+//! The mutation scripts are drep's (`~/dev/drep/scripts/`), copied with this repository's ai-1 role. These tests pin what the copy must keep: ai-1 as the only offload host, one host lock shared by hosted and laptop runs, results proven fresh, scratch beside the checkout, a sandboxed transport, and a verdict read from `missed.txt` rather than the exit code. The locks' behavior is exercised in `mutation_locks.rs`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-#[path = "support/mutation.rs"]
-mod mutation;
-#[path = "support/process.rs"]
-mod process;
-use mutation::{Harness, ROLE, away_from_outer_git, git, without_comments};
-use process::{bash_with_fakes, repo_root, write_executable};
+use crate::mutation::{Harness, ROLE, away_from_outer_git, git, without_comments};
+use crate::process::{self, bash_with_fakes, repo_root, write_executable};
 
 #[test]
 fn remote_mutation_defaults_to_this_repositorys_ai1_role() {

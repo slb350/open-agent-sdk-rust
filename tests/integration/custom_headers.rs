@@ -1,6 +1,4 @@
-mod common;
-
-use common::{header_values, read_request};
+use crate::common::{header_values, read_request};
 use futures::StreamExt;
 use open_agent::{AgentOptions, ApiProtocol, Client, Error, query};
 use tokio::io::AsyncWriteExt;

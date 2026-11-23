@@ -1,0 +1,17 @@
+# Scope mutation testing to the library and SDK integration test targets.
+#
+# Skips compiling the 12 unexecuted example binaries, the repo-policy/script tests
+# (which never import `open_agent` and cannot catch a `src/` mutant), and doctests
+# (still compiled and executed by `cargo test` in CI and pre-commit).
+additional_cargo_args = [
+    "--lib",
+    "--test",
+    "integration",
+    "--test",
+    "config_env_test",
+    "--test",
+    "debug_logging_test",
+]
+
+# Build mutants without DWARF debuginfo to cut LLVM codegen, linking, and scratch disk I/O.
+profile = "mutants"

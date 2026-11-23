@@ -117,15 +117,15 @@ impl RetryConfig {
     }
 }
 
-/// Retries every error using the configured backoff and returns the final result.
-///
-/// `max_attempts` counts total attempts, including the first. Zero attempts returns
-/// an error without calling the operation. Use [`retry_with_backoff_conditional`]
-/// to stop immediately on non-retryable errors.
-pub async fn retry_with_backoff<F, Fut, T>(config: RetryConfig, mut operation: F) -> Result<T>
+async fn retry_inner<F, Fut, T, P>(
+    config: RetryConfig,
+    mut operation: F,
+    mut should_retry: P,
+) -> Result<T>
 where
     F: FnMut() -> Fut,
     Fut: Future<Output = Result<T>>,
+    P: FnMut(&Error) -> bool,
 {
     let mut last_error = None;
 
@@ -133,6 +133,10 @@ where
         match operation().await {
             Ok(result) => return Ok(result),
             Err(err) => {
+                if !should_retry(&err) {
+                    return Err(err);
+                }
+
                 last_error = Some(err);
 
                 // Don't sleep after the last attempt
@@ -145,6 +149,19 @@ where
     }
 
     Err(last_error.unwrap_or_else(|| Error::other("Retry failed with no error")))
+}
+
+/// Retries every error using the configured backoff and returns the final result.
+///
+/// `max_attempts` counts total attempts, including the first. Zero attempts returns
+/// an error without calling the operation. Use [`retry_with_backoff_conditional`]
+/// to stop immediately on non-retryable errors.
+pub async fn retry_with_backoff<F, Fut, T>(config: RetryConfig, operation: F) -> Result<T>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<T>>,
+{
+    retry_inner(config, operation, |_| true).await
 }
 
 /// HTTP status codes that indicate a transient failure worth retrying.
@@ -204,35 +221,13 @@ pub fn is_retryable_error(error: &Error) -> bool {
 /// ```
 pub async fn retry_with_backoff_conditional<F, Fut, T>(
     config: RetryConfig,
-    mut operation: F,
+    operation: F,
 ) -> Result<T>
 where
     F: FnMut() -> Fut,
     Fut: Future<Output = Result<T>>,
 {
-    let mut last_error = None;
-
-    for attempt in 0..config.max_attempts {
-        match operation().await {
-            Ok(result) => return Ok(result),
-            Err(err) => {
-                // Check if error is retryable
-                if !is_retryable_error(&err) {
-                    return Err(err);
-                }
-
-                last_error = Some(err);
-
-                // Don't sleep after the last attempt
-                if attempt < config.max_attempts - 1 {
-                    let delay = config.calculate_delay(attempt);
-                    sleep(delay).await;
-                }
-            }
-        }
-    }
-
-    Err(last_error.unwrap_or_else(|| Error::other("Retry failed with no error")))
+    retry_inner(config, operation, is_retryable_error).await
 }
 
 #[cfg(test)]

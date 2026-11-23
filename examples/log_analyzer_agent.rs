@@ -14,7 +14,6 @@
 //! - Prioritized recommendations
 
 use open_agent::{AgentOptions, Client, ContentBlock};
-use regex::Regex;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::env;
@@ -42,22 +41,40 @@ impl LogEntry {
     }
 }
 
-/// Parses log files
-struct LogParser {
-    // Common log pattern: timestamp, level, message
-    pattern: Regex,
-}
+/// Parses log files without external regex dependencies.
+struct LogParser;
 
 impl LogParser {
     fn new() -> Self {
-        // Pattern matches: [2025-01-01T12:00:00] ERROR some message
-        // Or: 2025-01-01 12:00:00 [ERROR] message
-        // Or: ERROR: message
-        let pattern = Regex::new(
-            r"(?i)(?:\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}[^\s]*)?\s*(?:\[)?(?P<level>ERROR|FATAL|CRITICAL|WARN|WARNING|INFO|DEBUG)(?:\])?\s*:?\s*(?P<message>.*)"
-        ).unwrap();
+        Self
+    }
 
-        Self { pattern }
+    fn parse_structured_level(line: &str) -> Option<(&str, &str)> {
+        // Matches lines like:
+        //   [2025-01-01T12:00:00] ERROR some message
+        //   2025-01-01 12:00:00 [ERROR] message
+        //   ERROR: message
+        let mut rest = line;
+        for _ in 0..3 {
+            let trimmed = rest.trim_start();
+            let end = trimmed.find(char::is_whitespace).unwrap_or(trimmed.len());
+            let token = &trimmed[..end];
+            let cleaned = token.trim_matches(['[', ']', ':']);
+            if [
+                "ERROR", "FATAL", "CRITICAL", "WARN", "WARNING", "INFO", "DEBUG",
+            ]
+            .iter()
+            .any(|level| cleaned.eq_ignore_ascii_case(level))
+            {
+                let message = trimmed[end..].trim_start_matches([':', ' ', '\t']);
+                return Some((cleaned, message));
+            }
+            if end == trimmed.len() {
+                break;
+            }
+            rest = &trimmed[end..];
+        }
+        None
     }
 
     fn parse_line(&self, line: &str, line_number: usize) -> Option<LogEntry> {
@@ -90,11 +107,8 @@ impl LogParser {
             }
         }
 
-        // Try regex pattern
-        if let Some(caps) = self.pattern.captures(line) {
-            let level = caps.name("level").map(|m| m.as_str()).unwrap_or("INFO");
-            let message = caps.name("message").map(|m| m.as_str()).unwrap_or(line);
-
+        // Try structured timestamp/level prefix
+        if let Some((level, message)) = Self::parse_structured_level(line) {
             return Some(LogEntry::new(
                 line.to_string(),
                 level.to_string(),
@@ -129,6 +143,31 @@ impl LogParser {
             line_number,
         ))
     }
+}
+
+fn find_exception_name(msg: &str) -> Option<&str> {
+    msg.split(|c: char| !c.is_alphanumeric() && c != '_')
+        .find(|word| {
+            (word.ends_with("Exception") && word.len() > "Exception".len())
+                || (word.ends_with("Error") && word.len() > "Error".len())
+        })
+}
+
+fn find_file_reference(msg: &str) -> Option<&str> {
+    let mut words = msg.split_whitespace();
+    while let Some(word) = words.next() {
+        if matches!(word, "file" | "at") {
+            if let Some(next) = words.next() {
+                let candidate = next.split(':').next().unwrap_or(next);
+                if let Some((_, ext)) = candidate.rsplit_once('.') {
+                    if !ext.is_empty() && ext.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                        return Some(candidate);
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Analyzes parsed logs
@@ -186,23 +225,18 @@ impl LogAnalyzer {
 
         let mut patterns: HashMap<String, usize> = HashMap::new();
 
-        let exception_re = Regex::new(r"(\w+(?:Exception|Error))").unwrap();
-        let file_re = Regex::new(r"(?:file|at)\s+([^\s:]+\.\w+)").unwrap();
-
         for error in &self.errors {
             let msg = &error.message;
 
             // Look for exception names
-            if let Some(caps) = exception_re.captures(msg) {
-                let exception = caps.get(1).unwrap().as_str().to_string();
-                *patterns.entry(exception).or_insert(0) += 1;
+            if let Some(exception) = find_exception_name(msg) {
+                *patterns.entry(exception.to_string()).or_insert(0) += 1;
                 continue;
             }
 
             // Look for file paths
-            if let Some(caps) = file_re.captures(msg) {
-                let file = format!("File: {}", caps.get(1).unwrap().as_str());
-                *patterns.entry(file).or_insert(0) += 1;
+            if let Some(file) = find_file_reference(msg) {
+                *patterns.entry(format!("File: {file}")).or_insert(0) += 1;
                 continue;
             }
 

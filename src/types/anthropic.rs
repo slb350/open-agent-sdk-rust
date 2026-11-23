@@ -248,14 +248,14 @@ fn convert_part(part: &OpenAIContentPart) -> Option<Value> {
 /// such a URI and reads the media type the same way, so treating the parameters as part of it
 /// here would put a media type Anthropic rejects on the wire for an image the SDK had already
 /// accepted.
-fn parse_data_uri(url: &str) -> Option<(String, String)> {
+fn parse_data_uri(url: &str) -> Option<(&str, &str)> {
     let rest = url.strip_prefix("data:")?;
     let (meta, data) = rest.split_once(";base64,")?;
     let media_type = match meta.split_once(';') {
         Some((media_type, _parameters)) => media_type,
         None => meta,
     };
-    (!media_type.is_empty()).then(|| (media_type.to_string(), data.to_string()))
+    (!media_type.is_empty()).then_some((media_type, data))
 }
 
 /// Appends a tool result, merging it into the preceding user turn when there is one.

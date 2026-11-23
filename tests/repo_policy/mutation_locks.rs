@@ -1,15 +1,10 @@
-#![cfg(unix)]
 //! How the mutation scripts share a checkout and the ai-1 host: one run per checkout at a time, a host lock the remote session hands to the run it starts, scratch that never reaches beyond the run's own directory, and a staged run that tests a snapshot of the index.
 
 use std::fs;
 use std::path::PathBuf;
 
-#[path = "support/mutation.rs"]
-mod mutation;
-#[path = "support/process.rs"]
-mod process;
-use mutation::{Harness, LOCK_PROBE, git, hold_lock, isolated, lock_is_free};
-use process::{repo_root, write_executable};
+use crate::mutation::{Harness, LOCK_PROBE, git, hold_lock, isolated, lock_is_free};
+use crate::process::{repo_root, write_executable};
 
 /// The sweep is destructive only inside the run directory, and the run removes that directory, test debris included, when it ends.
 #[test]

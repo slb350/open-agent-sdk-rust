@@ -1,26 +1,34 @@
-//! Shared helpers for integration tests.
+//! Shared helpers and a lightweight loopback HTTP mock server for integration tests.
 //!
-//! Declared with `mod common;` by each consumer. Cargo compiles every file directly under
-//! `tests/` as its own test binary, but subdirectories are not, so helpers live here rather
-//! than in a top-level file. This module must contain no `#[test]` functions.
+//! Declared with `mod common;` by `tests/integration.rs` (and `tests/debug_logging_test.rs`).
+//! This module contains no `#[test]` functions.
 
-#![allow(dead_code)] // Each test binary uses only the helpers it needs.
+#![allow(dead_code)] // debug_logging_test uses only a subset of helpers.
+
+use std::sync::{Arc, Mutex};
 
 use futures::StreamExt;
 use open_agent::{AgentOptions, ContentBlock, FinishReason, Message, StreamEvent, query};
-use tokio::io::AsyncReadExt;
-use tokio::net::TcpStream;
-use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use serde::de::DeserializeOwned;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
 
 /// Reads one complete HTTP request, including a body identified by `Content-Length`.
 pub async fn read_request(socket: &mut TcpStream) -> Vec<u8> {
+    try_read_request(socket)
+        .await
+        .expect("SDK closed the request before sending its body")
+}
+
+async fn try_read_request(socket: &mut TcpStream) -> Option<Vec<u8>> {
     let mut request = Vec::new();
     let mut buffer = [0_u8; 4_096];
 
     loop {
-        let read = socket.read(&mut buffer).await.expect("read SDK request");
-        assert!(read > 0, "SDK closed the request before sending its body");
+        let read = socket.read(&mut buffer).await.ok()?;
+        if read == 0 {
+            return None;
+        }
         request.extend_from_slice(&buffer[..read]);
 
         let Some(header_end) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n") else {
@@ -41,7 +49,8 @@ pub async fn read_request(socket: &mut TcpStream) -> Vec<u8> {
             .unwrap_or_default();
 
         if request.len() >= body_start + content_length {
-            return request;
+            request.truncate(body_start + content_length);
+            return Some(request);
         }
     }
 }
@@ -56,23 +65,189 @@ pub fn header_values(request: &str, expected_name: &str) -> Vec<String> {
         .collect()
 }
 
+/// One HTTP request recorded by [`MockServer`].
+#[derive(Debug, Clone)]
+pub struct RecordedRequest {
+    pub method: String,
+    pub path: String,
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
+}
+
+impl RecordedRequest {
+    /// First header value matching `name` ASCII-case-insensitively.
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v.as_str())
+    }
+
+    /// Parses the recorded request body as JSON.
+    pub fn body_json<T: DeserializeOwned>(&self) -> serde_json::Result<T> {
+        serde_json::from_slice(&self.body)
+    }
+}
+
+/// HTTP response returned by a [`MockServer`] handler.
+#[derive(Debug, Clone)]
+pub struct MockResponse {
+    status: u16,
+    content_type: Option<&'static str>,
+    body: String,
+}
+
+impl MockResponse {
+    pub fn new(status: u16) -> Self {
+        Self {
+            status,
+            content_type: None,
+            body: String::new(),
+        }
+    }
+
+    pub fn sse(body: impl Into<String>) -> Self {
+        Self {
+            status: 200,
+            content_type: Some("text/event-stream"),
+            body: body.into(),
+        }
+    }
+
+    pub fn body(mut self, body: impl Into<String>) -> Self {
+        self.body = body.into();
+        self
+    }
+
+    fn format_http(&self) -> String {
+        let reason = match self.status {
+            200 => "OK",
+            400 => "Bad Request",
+            404 => "Not Found",
+            500 => "Internal Server Error",
+            503 => "Service Unavailable",
+            _ => "Status",
+        };
+        let mut head = format!("HTTP/1.1 {} {reason}\r\n", self.status);
+        if let Some(content_type) = self.content_type {
+            head.push_str("content-type: ");
+            head.push_str(content_type);
+            head.push_str("\r\n");
+        }
+        head.push_str(&format!(
+            "content-length: {}\r\nconnection: close\r\n\r\n{}",
+            self.body.len(),
+            self.body
+        ));
+        head
+    }
+}
+
+/// Lightweight loopback HTTP/1.1 mock server backed directly by Tokio's `TcpListener`.
+///
+/// Matches `POST` requests to one exact path (answering `404` for anything else) and records
+/// every matched request before sending its response. Dropping the server aborts the listener.
+pub struct MockServer {
+    uri: String,
+    requests: Arc<Mutex<Vec<RecordedRequest>>>,
+    handle: tokio::task::JoinHandle<()>,
+}
+
+impl MockServer {
+    /// Starts a server answering `POST expected_path` via `handler`.
+    pub async fn start_handler<F>(expected_path: impl Into<String>, handler: F) -> Self
+    where
+        F: Fn(&RecordedRequest) -> MockResponse + Send + Sync + 'static,
+    {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind loopback mock server");
+        let addr = listener.local_addr().expect("mock server address");
+        let expected_path = Arc::new(expected_path.into());
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let recorded = Arc::clone(&requests);
+        let handler = Arc::new(handler);
+
+        let handle = tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let expected_path = Arc::clone(&expected_path);
+                let recorded = Arc::clone(&recorded);
+                let handler = Arc::clone(&handler);
+                tokio::spawn(async move {
+                    let Some(raw) = try_read_request(&mut socket).await else {
+                        return;
+                    };
+                    let Some(request) = parse_http_request(&raw) else {
+                        return;
+                    };
+                    let response = if request.method == "POST" && request.path == *expected_path {
+                        let response = handler(&request);
+                        recorded.lock().expect("record request").push(request);
+                        response
+                    } else {
+                        MockResponse::new(404)
+                    };
+                    let wire = response.format_http();
+                    let _ = socket.write_all(wire.as_bytes()).await;
+                    let _ = socket.shutdown().await;
+                });
+            }
+        });
+
+        Self {
+            uri: format!("http://{addr}"),
+            requests,
+            handle,
+        }
+    }
+
+    /// Starts a server answering `POST expected_path` with a fixed `response`.
+    pub async fn start_static(expected_path: impl Into<String>, response: MockResponse) -> Self {
+        Self::start_handler(expected_path, move |_| response.clone()).await
+    }
+
+    /// Base URL without trailing slash (e.g. `http://127.0.0.1:12345`).
+    pub fn uri(&self) -> &str {
+        &self.uri
+    }
+
+    /// Snapshot of all matched requests received so far, in arrival order.
+    pub fn received_requests(&self) -> Vec<RecordedRequest> {
+        self.requests.lock().expect("read requests").clone()
+    }
+}
+
+impl Drop for MockServer {
+    fn drop(&mut self) {
+        self.handle.abort();
+    }
+}
+
+fn parse_http_request(raw: &[u8]) -> Option<RecordedRequest> {
+    let header_end = raw.windows(4).position(|bytes| bytes == b"\r\n\r\n")?;
+    let head = std::str::from_utf8(&raw[..header_end]).ok()?;
+    let mut lines = head.lines();
+    let request_line = lines.next()?;
+    let mut parts = request_line.split_whitespace();
+    let method = parts.next()?.to_string();
+    let path = parts.next()?.to_string();
+    let headers = lines
+        .filter_map(|line| line.split_once(':'))
+        .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
+        .collect();
+    let body = raw[header_end + 4..].to_vec();
+    Some(RecordedRequest {
+        method,
+        path,
+        headers,
+        body,
+    })
+}
+
 /// Starts a mock server that answers the chat-completions endpoint with `body` as an SSE
 /// stream.
-///
-/// The returned server must be kept alive for the duration of the request; dropping it shuts
-/// the listener down.
 pub async fn sse_server(body: impl Into<String>) -> MockServer {
-    let server = MockServer::start().await;
-    Mock::given(method("POST"))
-        .and(path("/v1/chat/completions"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "text/event-stream")
-                .set_body_string(body.into()),
-        )
-        .mount(&server)
-        .await;
-    server
+    MockServer::start_static("/v1/chat/completions", MockResponse::sse(body)).await
 }
 
 /// Builds minimal `AgentOptions` pointing at `server`.
@@ -140,26 +315,12 @@ pub const DONE: &str = "data: [DONE]\n\n";
 /// stream.
 ///
 /// Mounted on `/v1/messages` specifically, so a request that went to the chat-completions
-/// path would 404 rather than quietly succeeding — which is what makes the path itself part
-/// of what these tests assert.
+/// path would 404 rather than quietly succeeding.
 pub async fn anthropic_sse_server(body: impl Into<String>) -> MockServer {
-    let server = MockServer::start().await;
-    Mock::given(method("POST"))
-        .and(path("/v1/messages"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "text/event-stream")
-                .set_body_string(body.into()),
-        )
-        .mount(&server)
-        .await;
-    server
+    MockServer::start_static("/v1/messages", MockResponse::sse(body)).await
 }
 
 /// Formats one Anthropic SSE frame, with both the `event:` label and the `data:` payload.
-///
-/// Real servers send both. Emitting only the payload here would let a parser that reads the
-/// label pass a test it should fail.
 pub fn anthropic_frame(event: &str, data: serde_json::Value) -> String {
     format!("event: {event}\ndata: {data}\n\n")
 }
@@ -229,9 +390,6 @@ pub fn message_text(message: &Message) -> String {
 }
 
 /// Builds a single SSE `data:` frame carrying a reasoning delta on `field`.
-///
-/// `field` is the channel name the server uses: DeepSeek streams `reasoning_content`,
-/// OpenRouter streams `reasoning`.
 pub fn reasoning_chunk(field: &str, value: &str, finish: Option<&str>) -> String {
     sse_frame(serde_json::json!({
         "index": 0,
@@ -250,8 +408,6 @@ pub fn mixed_chunk(reasoning_field: &str, reasoning: &str, content: &str) -> Str
 }
 
 /// Serves `body` as an SSE response and collects every event `query()` yields.
-///
-/// `include_reasoning` selects whether reasoning deltas are surfaced or dropped.
 pub async fn collect_events(body: String, include_reasoning: bool) -> Vec<StreamEvent> {
     let server = sse_server(body).await;
     let options = options_with_reasoning(&server, include_reasoning);

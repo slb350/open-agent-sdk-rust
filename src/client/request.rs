@@ -32,7 +32,8 @@ pub(super) fn build_request(options: &AgentOptions, messages: Vec<OpenAIMessage>
 }
 
 pub(super) fn history_messages(options: &AgentOptions, history: &[Message]) -> Vec<OpenAIMessage> {
-    let mut messages = Vec::new();
+    let mut messages =
+        Vec::with_capacity(history.len() + usize::from(!options.system_prompt().is_empty()));
     if !options.system_prompt().is_empty() {
         messages.push(message(
             "system",
@@ -40,6 +41,13 @@ pub(super) fn history_messages(options: &AgentOptions, history: &[Message]) -> V
         ));
     }
     for entry in history {
+        if let [ContentBlock::Text(only)] = entry.content.as_slice() {
+            messages.push(message(
+                role_str(&entry.role),
+                OpenAIContent::Text(only.text.clone()),
+            ));
+            continue;
+        }
         let mut text = Vec::new();
         let mut tool_calls = Vec::new();
         let mut tool_results = Vec::new();
@@ -71,12 +79,7 @@ pub(super) fn history_messages(options: &AgentOptions, history: &[Message]) -> V
                 ..message("assistant", OpenAIContent::Text(text.join("\n")))
             });
         } else {
-            let role = match entry.role {
-                MessageRole::System => "system",
-                MessageRole::User => "user",
-                MessageRole::Assistant => "assistant",
-                MessageRole::Tool => "tool",
-            };
+            let role = role_str(&entry.role);
             let content = if has_images {
                 OpenAIContent::Parts(
                     entry
@@ -87,10 +90,10 @@ pub(super) fn history_messages(options: &AgentOptions, history: &[Message]) -> V
                             ContentBlock::Image(image) => {
                                 if log::log_enabled!(log::Level::Debug) {
                                     let url = image.url();
-                                    let mut end = url.len().min(100);
-                                    while !url.is_char_boundary(end) {
-                                        end -= 1;
-                                    }
+                                    let end = (0..=url.len().min(100))
+                                        .rev()
+                                        .find(|&i| url.is_char_boundary(i))
+                                        .unwrap_or(0);
                                     log::debug!(
                                         "  - Image: {}{} ({} bytes) (detail: {})",
                                         &url[..end],
@@ -112,6 +115,15 @@ pub(super) fn history_messages(options: &AgentOptions, history: &[Message]) -> V
         }
     }
     messages
+}
+
+fn role_str(role: &MessageRole) -> &'static str {
+    match role {
+        MessageRole::System => "system",
+        MessageRole::User => "user",
+        MessageRole::Assistant => "assistant",
+        MessageRole::Tool => "tool",
+    }
 }
 
 fn message(role: &str, content: OpenAIContent) -> OpenAIMessage {

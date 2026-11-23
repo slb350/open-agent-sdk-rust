@@ -1,22 +1,17 @@
 //! Exercise hook decisions through a complete tool round and its continuation request.
 
-mod common;
-
-use common::{DONE, sse_frame, sse_server, text_chunk, tool_chunk};
+use crate::common::{
+    self, DONE, MockResponse, MockServer, sse_frame, sse_server, text_chunk, tool_chunk,
+};
 use open_agent::{AgentOptions, Client, ContentBlock, Error, HookDecision, Hooks, tool};
 use serde_json::{Value, json};
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
 };
-use wiremock::{
-    Mock, MockServer, Request, ResponseTemplate,
-    matchers::{method, path},
-};
 
 #[tokio::test]
 async fn auto_hooks_block_modify_and_transform_results_before_the_continuation() {
-    let server = MockServer::start().await;
     let calls = ["blocked", "calculate", "failing"];
     let body = sse_frame(json!({
         "index": 0,
@@ -27,21 +22,15 @@ async fn auto_hooks_block_modify_and_transform_results_before_the_continuation()
         "finish_reason": "tool_calls"
     })) + DONE;
     let requests = AtomicUsize::new(0);
-    Mock::given(method("POST"))
-        .and(path("/v1/chat/completions"))
-        .respond_with(move |_: &Request| {
-            let response = if requests.fetch_add(1, Ordering::SeqCst) == 0 {
-                body.clone()
-            } else {
-                text_chunk("done", Some("stop")) + DONE
-            };
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "text/event-stream")
-                .set_body_string(response)
-        })
-        .expect(2)
-        .mount(&server)
-        .await;
+    let server = MockServer::start_handler("/v1/chat/completions", move |_| {
+        let response = if requests.fetch_add(1, Ordering::SeqCst) == 0 {
+            body.clone()
+        } else {
+            text_chunk("done", Some("stop")) + DONE
+        };
+        MockResponse::sse(response)
+    })
+    .await;
 
     let executed = Arc::new(Mutex::new(Vec::new()));
     let captured_execution = Arc::clone(&executed);
@@ -140,7 +129,8 @@ async fn auto_hooks_block_modify_and_transform_results_before_the_continuation()
             .collect::<Vec<_>>()
     };
 
-    let requests = server.received_requests().await.unwrap();
+    let requests = server.received_requests();
+    assert_eq!(requests.len(), 2);
     let continuation: Value = requests[1].body_json().unwrap();
     assert_eq!(continuation["tools"].as_array().unwrap().len(), 3);
     assert_eq!(continuation["tools"][1]["function"]["name"], "calculate");
@@ -191,23 +181,16 @@ async fn manual_receive_leaves_tool_execution_to_the_caller_and_skips_tool_hooks
 
 #[tokio::test]
 async fn auto_continuation_is_not_a_user_prompt_submission() {
-    let server = MockServer::start().await;
     let requests = AtomicUsize::new(0);
-    Mock::given(method("POST"))
-        .and(path("/v1/chat/completions"))
-        .respond_with(move |_: &Request| {
-            let response = if requests.fetch_add(1, Ordering::SeqCst) == 0 {
-                tool_chunk("call-1", "double", r#"{"value":21}"#) + DONE
-            } else {
-                text_chunk("done", Some("stop")) + DONE
-            };
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "text/event-stream")
-                .set_body_string(response)
-        })
-        .expect(2)
-        .mount(&server)
-        .await;
+    let server = MockServer::start_handler("/v1/chat/completions", move |_| {
+        let response = if requests.fetch_add(1, Ordering::SeqCst) == 0 {
+            tool_chunk("call-1", "double", r#"{"value":21}"#) + DONE
+        } else {
+            text_chunk("done", Some("stop")) + DONE
+        };
+        MockResponse::sse(response)
+    })
+    .await;
 
     // The hook records each prompt it sees and rewrites it, so a continuation that reaches it
     // is visible both in the record and in the request the server receives.
@@ -242,7 +225,8 @@ async fn auto_continuation_is_not_a_user_prompt_submission() {
 
     assert_eq!(common::text_of(&output), "done");
     assert_eq!(*submitted.lock().unwrap(), vec!["double 21".to_string()]);
-    let requests = server.received_requests().await.unwrap();
+    let requests = server.received_requests();
+    assert_eq!(requests.len(), 2);
     let continuation: Value = requests[1].body_json().unwrap();
     let user_turns: Vec<_> = continuation["messages"]
         .as_array()
@@ -256,23 +240,16 @@ async fn auto_continuation_is_not_a_user_prompt_submission() {
 
 #[tokio::test]
 async fn auto_continuation_proceeds_when_a_hook_blocks_empty_prompts() {
-    let server = MockServer::start().await;
     let requests = AtomicUsize::new(0);
-    Mock::given(method("POST"))
-        .and(path("/v1/chat/completions"))
-        .respond_with(move |_: &Request| {
-            let response = if requests.fetch_add(1, Ordering::SeqCst) == 0 {
-                tool_chunk("call-1", "double", r#"{"value":21}"#) + DONE
-            } else {
-                text_chunk("done", Some("stop")) + DONE
-            };
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "text/event-stream")
-                .set_body_string(response)
-        })
-        .expect(2)
-        .mount(&server)
-        .await;
+    let server = MockServer::start_handler("/v1/chat/completions", move |_| {
+        let response = if requests.fetch_add(1, Ordering::SeqCst) == 0 {
+            tool_chunk("call-1", "double", r#"{"value":21}"#) + DONE
+        } else {
+            text_chunk("done", Some("stop")) + DONE
+        };
+        MockResponse::sse(response)
+    })
+    .await;
 
     let hooks = Hooks::new().add_user_prompt_submit(|event| async move {
         event

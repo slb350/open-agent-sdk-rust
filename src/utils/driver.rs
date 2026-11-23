@@ -39,6 +39,22 @@ pub trait EventAccumulator {
     fn finish(&mut self) -> Result<Vec<StreamEvent>>;
 }
 
+enum BatchIter {
+    Events(std::vec::IntoIter<StreamEvent>),
+    Error(std::option::IntoIter<crate::Error>),
+}
+
+impl Iterator for BatchIter {
+    type Item = Result<StreamEvent>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Events(iter) => iter.next().map(Ok),
+            Self::Error(iter) => iter.next().map(Err),
+        }
+    }
+}
+
 /// Drives `events` through `accumulator`, yielding the [`StreamEvent`]s it produces.
 ///
 /// The `None` appended after the event stream is the explicit end-of-transport signal, and
@@ -72,8 +88,8 @@ where
         })
         .flat_map(|result| {
             futures::stream::iter(match result {
-                Ok(events) => events.into_iter().map(Ok).collect(),
-                Err(error) => vec![Err(error)],
+                Ok(events) => BatchIter::Events(events.into_iter()),
+                Err(error) => BatchIter::Error(Some(error).into_iter()),
             })
         });
 

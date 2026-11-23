@@ -1,14 +1,8 @@
-#![cfg(unix)]
-
 use std::{fs, path::Path, process::Command};
 
 use tempfile::TempDir;
 
-#[path = "support/mutation.rs"]
-mod mutation;
-#[path = "support/process.rs"]
-mod process;
-use mutation::isolated;
+use crate::mutation::{self, isolated};
 
 const SCOPE_SCRIPT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/scripts/mutants-ci-scope.sh");
 
@@ -210,6 +204,24 @@ fn production_changes_after_an_inline_test_module_do_not_start_mutation_ci() {
     assert_eq!(repository.scope(&base), ["none"]);
 }
 
+#[test]
+fn repo_policy_only_changes_do_not_start_mutation_ci() {
+    let repository = Repository::new();
+    repository.write("src/lib.rs", "pub fn answer() -> u8 { 42 }\n");
+    repository.write(
+        "tests/repo_policy/ci_workflow_policy.rs",
+        "#[test]\nfn policy() { assert_eq!(1, 1); }\n",
+    );
+    let base = repository.commit("initial policy test");
+    repository.write(
+        "tests/repo_policy/ci_workflow_policy.rs",
+        "#[test]\nfn policy() { assert_eq!(2, 2); }\n",
+    );
+    repository.commit("modify policy test");
+
+    assert_eq!(repository.scope(&base), ["none"]);
+}
+
 /// What a fixture leaking into a repository would change: what HEAD names, its configuration, its index and its branches.
 fn repository_state(git_dir: &Path) -> (Vec<u8>, Vec<u8>, Option<Vec<u8>>, Vec<String>) {
     let mut branches: Vec<String> = fs::read_dir(git_dir.join("refs").join("heads"))
@@ -231,7 +243,7 @@ fn repository_state(git_dir: &Path) -> (Vec<u8>, Vec<u8>, Option<Vec<u8>>, Vec<S
     )
 }
 
-/// A pre-commit hook runs this suite with what git exports to it: the committing repository's `GIT_DIR` and `GIT_INDEX_FILE`, and any `-c` configuration. Every other test here, run as the hook would run it, must still act only on its own repository.
+/// A pre-commit hook runs this suite with what git exports to it: the committing repository's `GIT_DIR` and `GIT_INDEX_FILE`, and any `-c` configuration. A fixture test run under that environment must still act only on its own repository.
 #[test]
 fn fixtures_leave_the_repository_a_hook_runs_them_in_alone() {
     let enclosing = TempDir::new().expect("create the enclosing repository");
@@ -241,8 +253,8 @@ fn fixtures_leave_the_repository_a_hook_runs_them_in_alone() {
 
     let output = Command::new(std::env::current_exe().expect("this test binary"))
         .args([
-            "--skip",
-            "fixtures_leave_the_repository_a_hook_runs_them_in_alone",
+            "mutation_ci_scope::modified_inline_test_scopes_mutants_to_its_owning_source_file",
+            "--exact",
             "--test-threads=1",
         ])
         .env("GIT_DIR", &git_dir)
@@ -257,8 +269,8 @@ fn fixtures_leave_the_repository_a_hook_runs_them_in_alone() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("test result: ok.") && !stdout.contains("ok. 0 passed"),
-        "every other fixture test ran cleanly: {output:?}"
+        stdout.contains("test result: ok. 1 passed;"),
+        "fixture test must execute cleanly under hook environment: {output:?}"
     );
     assert_eq!(
         repository_state(&git_dir),

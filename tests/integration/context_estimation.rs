@@ -1,8 +1,6 @@
 //! Exact tool-content arithmetic, threshold and truncation boundaries.
 
-mod common;
-
-use common::message_text;
+use crate::common::message_text;
 use open_agent::{
     ContentBlock, Message, MessageRole, TextBlock, ToolResultBlock, ToolUseBlock, estimate_tokens,
     is_approaching_limit, truncate_messages,

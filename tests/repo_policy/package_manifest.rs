@@ -15,18 +15,16 @@ fn development_only_files_are_excluded_from_package() {
         assert!(
             !matches!(path, "AGENTS.md" | "CLAUDE.md" | ".markdownlint.json")
                 && ![
+                    ".cargo/",
                     ".Codex/",
                     ".githooks/",
                     ".github/",
                     "mutants.out/",
                     "scripts/",
-                    "tests/support/",
-                    "tests/ci_workflow_policy_test.rs",
-                    "tests/mutation_ci_scope_test.rs",
-                    "tests/mutation_locks_test.rs",
-                    "tests/mutation_scripts_test.rs",
                     "tests/ai1-transport.sh",
-                    "tests/package_manifest_test.rs"
+                    "tests/repo_policy.rs",
+                    "tests/repo_policy/",
+                    "tests/support/",
                 ]
                 .iter()
                 .any(|prefix| path.starts_with(prefix)),

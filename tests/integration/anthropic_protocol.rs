@@ -7,11 +7,9 @@
 //! passes every unit test in the crate. The same holds for the history `Client` replays on a
 //! tool continuation, which only the real request assembly produces.
 
-mod common;
-
-use common::{
-    anthropic_frame, anthropic_sse_server, anthropic_text_response, sole_finish_reason, sse_server,
-    text_chunk,
+use crate::common::{
+    self, MockResponse, MockServer, anthropic_frame, anthropic_sse_server, anthropic_text_response,
+    sole_finish_reason, sse_server, text_chunk,
 };
 use futures::StreamExt;
 use open_agent::{
@@ -20,8 +18,6 @@ use open_agent::{
 };
 use serde_json::json;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 /// A builder pointing at `server` and speaking Anthropic, for tests that need one more field.
 ///
@@ -60,13 +56,10 @@ async fn collect(options: &AgentOptions, prompt: &str) -> Vec<StreamEvent> {
 }
 
 /// The single request the server received, as parsed JSON.
-async fn sole_request_body(server: &MockServer) -> serde_json::Value {
-    let requests = server
-        .received_requests()
-        .await
-        .expect("the server records requests");
+fn sole_request_body(server: &MockServer) -> serde_json::Value {
+    let requests = server.received_requests();
     assert_eq!(requests.len(), 1, "expected exactly one request");
-    serde_json::from_slice(&requests[0].body).expect("body is JSON")
+    requests[0].body_json().expect("body is JSON")
 }
 
 #[tokio::test]
@@ -90,21 +83,12 @@ async fn an_anthropic_query_authenticates_with_x_api_key_and_names_its_schema_ve
     let server = anthropic_sse_server(anthropic_text_response("hi", "end_turn")).await;
     collect(&anthropic_options(&server), "hello").await;
 
-    let requests = server.received_requests().await.expect("records requests");
-    let headers = &requests[0].headers;
+    let requests = server.received_requests();
 
-    assert_eq!(
-        headers.get("x-api-key").map(|v| v.to_str().expect("ascii")),
-        Some("secret")
-    );
-    assert_eq!(
-        headers
-            .get("anthropic-version")
-            .map(|v| v.to_str().expect("ascii")),
-        Some("2023-06-01")
-    );
+    assert_eq!(requests[0].header("x-api-key"), Some("secret"));
+    assert_eq!(requests[0].header("anthropic-version"), Some("2023-06-01"));
     assert!(
-        headers.get("authorization").is_none(),
+        requests[0].header("authorization").is_none(),
         "a bearer token is the other protocol's credential and Anthropic ignores it, so \
          sending one leaks the key to an endpoint that has no use for it"
     );
@@ -119,7 +103,7 @@ async fn the_system_prompt_is_sent_as_a_field_not_as_a_message() {
         .expect("options build");
 
     collect(&options, "hello").await;
-    let body = sole_request_body(&server).await;
+    let body = sole_request_body(&server);
 
     assert_eq!(body["system"], serde_json::json!("be terse"));
     let messages = body["messages"].as_array().expect("messages array");
@@ -136,7 +120,7 @@ async fn an_unset_temperature_is_omitted_from_the_request() {
     let server = anthropic_sse_server(anthropic_text_response("hi", "end_turn")).await;
     collect(&anthropic_options(&server), "hello").await;
 
-    let body = sole_request_body(&server).await;
+    let body = sole_request_body(&server);
     assert!(
         body.get("temperature").is_none(),
         "temperature must be absent, got {body}"
@@ -156,7 +140,7 @@ async fn a_set_temperature_reaches_the_request() {
         .expect("options build");
 
     collect(&options, "hello").await;
-    let body = sole_request_body(&server).await;
+    let body = sole_request_body(&server);
 
     assert!(
         (body["temperature"].as_f64().expect("a number") - 0.2).abs() < 1e-6,
@@ -326,23 +310,15 @@ async fn tool_round_server() -> MockServer {
     .concat();
     let requests = AtomicUsize::new(0);
 
-    let server = MockServer::start().await;
-    Mock::given(method("POST"))
-        .and(path("/v1/messages"))
-        .respond_with(move |_: &Request| {
-            let body = if requests.fetch_add(1, Ordering::SeqCst) == 0 {
-                tool_call.clone()
-            } else {
-                anthropic_text_response("done", "end_turn")
-            };
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "text/event-stream")
-                .set_body_string(body)
-        })
-        .expect(2)
-        .mount(&server)
-        .await;
-    server
+    MockServer::start_handler("/v1/messages", move |_| {
+        let body = if requests.fetch_add(1, Ordering::SeqCst) == 0 {
+            tool_call.clone()
+        } else {
+            anthropic_text_response("done", "end_turn")
+        };
+        MockResponse::sse(body)
+    })
+    .await
 }
 
 #[tokio::test]
@@ -382,7 +358,8 @@ async fn a_tool_continuation_sends_no_empty_text() {
             client.send("").await.expect("continuation");
         }
 
-        let requests = server.received_requests().await.expect("records requests");
+        let requests = server.received_requests();
+        assert_eq!(requests.len(), 2, "auto: {auto}");
         let continuation: serde_json::Value = requests[1].body_json().expect("body is JSON");
         assert_eq!(
             continuation["messages"],
@@ -408,15 +385,14 @@ async fn a_tool_continuation_sends_no_empty_text() {
 
 #[tokio::test]
 async fn an_http_error_on_the_anthropic_path_carries_its_status() {
-    let server = MockServer::start().await;
-    wiremock::Mock::given(wiremock::matchers::method("POST"))
-        .and(wiremock::matchers::path("/v1/messages"))
-        .respond_with(wiremock::ResponseTemplate::new(400).set_body_string(
+    let server = MockServer::start_static(
+        "/v1/messages",
+        MockResponse::new(400).body(
             r#"{"type":"error","error":{"type":"invalid_request_error",
                     "message":"invalid temperature: only 1 is allowed for this model"}}"#,
-        ))
-        .mount(&server)
-        .await;
+        ),
+    )
+    .await;
 
     // `expect_err` is unavailable here: the Ok type is a boxed stream and does not implement
     // Debug.
@@ -469,16 +445,10 @@ async fn the_default_protocol_still_sends_a_bearer_token() {
 
     collect(&options, "hello").await;
 
-    let requests = server.received_requests().await.expect("records requests");
-    assert_eq!(
-        requests[0]
-            .headers
-            .get("authorization")
-            .map(|v| v.to_str().expect("ascii")),
-        Some("Bearer secret")
-    );
+    let requests = server.received_requests();
+    assert_eq!(requests[0].header("authorization"), Some("Bearer secret"));
     assert!(
-        requests[0].headers.get("x-api-key").is_none(),
+        requests[0].header("x-api-key").is_none(),
         "the Anthropic credential must not leak into an OpenAI request"
     );
 }

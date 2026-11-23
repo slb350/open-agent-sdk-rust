@@ -1,6 +1,6 @@
 //! Assistant tool-call messages retain their content field in the actual HTTP request.
 
-mod common;
+use crate::common;
 
 use open_agent::{
     AgentOptions, ApiProtocol, Client, ContentBlock, Message, TextBlock, ToolUseBlock,
@@ -25,7 +25,7 @@ async fn assistant_tool_calls_keep_empty_or_present_text_on_the_wire() {
             .send_message(Message::assistant(blocks))
             .await
             .unwrap();
-        let requests = server.received_requests().await.unwrap();
+        let requests = server.received_requests();
         let body: Value = requests.last().unwrap().body_json().unwrap();
         assert_eq!(
             body["messages"],
@@ -86,7 +86,7 @@ async fn manual_tool_result_continuation_preserves_the_matching_call_id() {
             .add_tool_result(call.id(), json!({"answer": 84}))
             .unwrap();
         client.send("").await.unwrap();
-        let requests = server.received_requests().await.unwrap();
+        let requests = server.received_requests();
         let body: Value = requests[1].body_json().unwrap();
         assert_eq!(body["messages"][2], expected_result, "{protocol:?}");
     }

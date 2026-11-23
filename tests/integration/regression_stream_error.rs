@@ -18,9 +18,9 @@
 //! gave an HTTP status as `code`, that status, so `is_retryable_error` can tell a rate limit
 //! from a prompt that will never fit.
 
-mod common;
-
-use common::{DONE, message_text, options_for, sole_finish_reason, sse_server, text_chunk};
+use crate::common::{
+    self, DONE, MockServer, message_text, options_for, sole_finish_reason, sse_server, text_chunk,
+};
 use futures::StreamExt;
 use open_agent::retry::is_retryable_error;
 use open_agent::{Client, ContentBlock, Error, FinishReason, MessageRole, StreamEvent, query};
@@ -184,7 +184,7 @@ async fn text_that_merely_quotes_an_error_object_is_content() {
     assert_eq!(sole_finish_reason(&events), FinishReason::Stop);
 }
 
-async fn client_for(body: String) -> (wiremock::MockServer, Client) {
+async fn client_for(body: String) -> (MockServer, Client) {
     let server = sse_server(body).await;
     let client = Client::new(options_for(&server)).expect("client builds");
     (server, client)

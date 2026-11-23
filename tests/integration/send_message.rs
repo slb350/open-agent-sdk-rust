@@ -1,14 +1,8 @@
 //! Capture actual request bodies instead of inspecting messages inserted into history.
 
-mod common;
-
-use common::{DONE, options_for, sse_server};
+use crate::common::{DONE, MockResponse, MockServer, options_for, sse_server};
 use open_agent::{Client, ContentBlock, ImageBlock, ImageDetail, Message, MessageRole, TextBlock};
 use serde_json::{Value, json};
-use wiremock::{
-    Mock, MockServer, ResponseTemplate,
-    matchers::{method, path},
-};
 
 #[tokio::test]
 async fn text_roles_and_empty_or_multiblock_content_reach_the_wire() {
@@ -44,7 +38,7 @@ async fn text_roles_and_empty_or_multiblock_content_reach_the_wire() {
     for (message, expected) in cases {
         let mut client = Client::new(options_for(&server)).unwrap();
         client.send_message(message).await.unwrap();
-        let requests = server.received_requests().await.unwrap();
+        let requests = server.received_requests();
         let body: Value = requests.last().unwrap().body_json().unwrap();
         assert_eq!(body["messages"], json!([expected]));
         assert!(body.get("tools").is_none(), "no tools were registered");
@@ -79,7 +73,7 @@ async fn image_content_preserves_order_data_detail_and_empty_unicode_text_on_the
     let original = serde_json::to_value(&message).unwrap();
     let mut client = Client::new(options_for(&server)).unwrap();
     client.send_message(message).await.unwrap();
-    let requests = server.received_requests().await.unwrap();
+    let requests = server.received_requests();
     let body: Value = requests[0].body_json().unwrap();
     assert_eq!(
         body["messages"],
@@ -109,7 +103,7 @@ async fn image_content_preserves_order_data_detail_and_empty_unicode_text_on_the
         ))
         .await
         .unwrap();
-    let requests = server.received_requests().await.unwrap();
+    let requests = server.received_requests();
     let body: Value = requests[1].body_json().unwrap();
     assert_eq!(
         body["messages"][0]["content"],
@@ -122,18 +116,13 @@ async fn image_content_preserves_order_data_detail_and_empty_unicode_text_on_the
 
 #[tokio::test]
 async fn failed_request_keeps_the_original_message_in_history() {
-    let server = MockServer::start().await;
-    Mock::given(method("POST"))
-        .and(path("/v1/chat/completions"))
-        .respond_with(ResponseTemplate::new(503))
-        .expect(1)
-        .mount(&server)
-        .await;
+    let server = MockServer::start_static("/v1/chat/completions", MockResponse::new(503)).await;
     let mut client = Client::new(options_for(&server)).unwrap();
     let message = Message::user_with_base64_image("inspect", "AAAA", "image/png").unwrap();
     let original = serde_json::to_value(&message).unwrap();
     let error = client.send_message(message).await.unwrap_err();
     assert_eq!(error.status_code(), Some(503));
+    assert_eq!(server.received_requests().len(), 1);
     assert_eq!(
         serde_json::to_value(client.history()).unwrap(),
         json!([original])

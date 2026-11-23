@@ -11,9 +11,7 @@
 //! new call, and one that does not continues the most recent unindexed call. Defaulting every
 //! missing index to 0 would instead merge parallel calls into one.
 
-mod common;
-
-use common::{DONE, blocks_of, collect_events, options_for, sole_finish_reason, sse_server};
+use crate::common::{DONE, blocks_of, collect_events, options_for, sole_finish_reason, sse_server};
 use open_agent::{Client, ContentBlock, FinishReason};
 use serde_json::json;
 

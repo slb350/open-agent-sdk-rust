@@ -10,10 +10,8 @@
 //! it is the last event, and a server that never sends `finish_reason` yields
 //! [`FinishReason::Unspecified`] rather than being conflated with `"stop"`.
 
-mod common;
-
-use common::{
-    DONE, blocks_of, collect_events, options_for, sole_finish_reason, sse_server, text_chunk,
+use crate::common::{
+    self, DONE, blocks_of, collect_events, options_for, sole_finish_reason, sse_server, text_chunk,
     text_of_events,
 };
 use open_agent::{Client, ContentBlock, FinishReason};

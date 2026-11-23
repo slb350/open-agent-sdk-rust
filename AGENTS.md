@@ -66,44 +66,25 @@ open-agent-sdk-rust/
 │   ├── git_commit_agent.rs          # Production: git diff → commit message
 │   ├── log_analyzer_agent.rs        # Production: log file analysis
 │   ├── advanced_patterns.rs         # Retry logic, concurrent requests
-│   ├── vision_example.rs            # Multimodal: URLs, local files, base64
-│   ├── vision_api_demo.rs           # Vision API walkthrough
-│   └── test_tool_serialization.rs   # Tool call serialization verification
+│   └── vision_example.rs            # Multimodal: URLs, local files, base64
 ├── benches/
 │   └── performance.rs               # Criterion benchmarks
-├── tests/                         # Loopback protocol, lifecycle, validation, and infrastructure tests
-│   ├── anthropic_protocol_test.rs           # End-to-end Anthropic protocol path through query() and Client tool continuations
-│   ├── auto_execution_test.rs               # Optional provider smoke; deterministic behavior via mock-server tests
-│   ├── ci_workflow_policy_test.rs           # CI workflow YAML policy assertions (pinned actions, permissions)
-│   ├── config_env_test.rs                   # Environment-dependent provider helper isolation
-│   ├── context_estimation_test.rs           # Exact tool-content arithmetic, threshold and truncation boundaries
-│   ├── custom_headers_test.rs               # Custom caller HTTP header application and override semantics
-│   ├── debug_logging_test.rs                # Image payload truncation and UTF-8 safety in logging
-│   ├── endpoint_tolerance_test.rs           # Trailing-slash base_url and payload-less SSE events tolerated
-│   ├── hooks_history_snapshot_test.rs       # Structured conversation history in hook events
-│   ├── hooks_integration_test.rs            # Real auto-tool and hook outcomes
-│   ├── mutation_ci_scope_test.rs            # Mutation test scope classification (CI diffs)
-│   ├── mutation_locks_test.rs               # Checkout lock, host lock, scratch cleanup, and staged-run isolation (Unix)
-│   ├── mutation_scripts_test.rs             # Mutation sweep scripts correctness (Unix)
-│   ├── package_manifest_test.rs             # Crate archive excludes development-only files
-│   ├── redirect_policy_test.rs              # Model requests reject all HTTP redirects
-│   ├── regression_chunk_metadata_test.rs    # Chunks missing unused id/object/created/model fields still stream
-│   ├── regression_client_lifecycle_test.rs  # Repeated/abandoned requests, interruption, history reset
-│   ├── regression_finish_reason_test.rs     # finish_reason surfaced to callers (regression since 0.8.0)
-│   ├── regression_incremental_streaming_test.rs # Token-by-token text delivery (regression since 0.10.0)
-│   ├── regression_max_tokens_test.rs        # max_tokens unset omits the field (regression since 0.7.0)
-│   ├── regression_reasoning_channel_test.rs # Reasoning channel separated from content (regression since 0.8.0)
-│   ├── regression_retry_classification_test.rs # HTTP status classification for retry (regression since 0.7.0)
-│   ├── regression_stream_error_test.rs      # In-stream server errors surface as Error::Api (vLLM, llama.cpp, OpenRouter shapes)
-│   ├── regression_stream_flush_test.rs      # Stream flush when server omits finish_reason (regression since 0.7.0)
-│   ├── regression_tool_call_index_test.rs   # Tool-call deltas without an index (Gemini) stay separate and complete
-│   ├── send_message_test.rs                 # Text/image request-body and failed-send history checks
-│   ├── source_file_size_test.rs             # Architecture guard: Rust source-file 800-line hard limit
-│   ├── tool_call_content_test.rs            # Tool-call content field preserved in HTTP request body
-│   └── common/mod.rs                        # Shared loopback-server and stream helpers (no #[test] functions)
-│   └── support/mutation.rs                  # Shared mutation test harness (Harness, lock helpers, isolated runner)
-│   └── support/process.rs                   # Shared process/filesystem helpers for script tests
-│   └── ai1-transport.sh                     # Exercises fail-closed parsing of ai1-transport without SSH, rsync, or I/O
+├── tests/                         # Consolidated loopback protocol, lifecycle, validation, and policy tests
+│   ├── integration.rs               # Consolidated SDK integration binary (20 modules under tests/integration/)
+│   ├── integration/                 # anthropic_protocol, auto_execution, context_estimation, custom_headers,
+│   │                                # endpoint_tolerance, hooks_history_snapshot, hooks_integration, redirect_policy,
+│   │                                # regression_* (10 modules), send_message, tool_call_content
+│   ├── config_env_test.rs           # Process-isolated environment-dependent provider helper tests
+│   ├── debug_logging_test.rs        # Process-isolated global logger truncation and UTF-8 safety tests
+│   ├── repo_policy.rs               # Consolidated repo-only policy binary (excluded from crate archives & mutants)
+│   ├── repo_policy/                 # ci_workflow_policy, mutation_ci_scope, mutation_locks, mutation_scripts,
+│   │                                # package_manifest, source_file_size
+│   ├── common/mod.rs                # Shared pure-Tokio loopback MockServer and stream helpers (no #[test] functions)
+│   ├── support/mutation.rs          # Shared mutation test harness (Harness, lock helpers, isolated runner)
+│   ├── support/process.rs           # Shared process/filesystem helpers for script tests
+│   └── ai1-transport.sh             # Exercises fail-closed parsing of ai1-transport without SSH, rsync, or I/O
+├── .cargo/
+│   └── mutants.toml                 # Scopes cargo-mutants to SDK targets using [profile.mutants] (debug = 0)
 ├── scripts/
 │   ├── mutants-ci-scope.sh          # Classifies mutation work for complete CI diffs
 │   ├── mutants-common.sh            # The one definition of the results directory
@@ -139,12 +120,12 @@ open-agent-sdk-rust/
 | **Logging** | log 0.4.29+ |
 | **Retry jitter** | rand 0.10 |
 | **Base64** | base64 0.23 (no `simd-unsafe` feature) |
-| **Benchmarks** | criterion |
-| **HTTP mocking (dev)** | wiremock =0.6.4 (0.6.5 breaks MSRV) |
+| **Benchmarks** | criterion (CLI baseline features only; plotting disabled) |
+| **HTTP mocking (dev)** | Pure-Tokio loopback `MockServer` in `tests/common/mod.rs` |
 | **YAML (dev)** | serde_norway 0.9 (replaces serde_yaml_ng; resolves RUSTSEC-2024-0449) |
 | **Virtual clock (dev)** | tokio `test-util` |
-| **Mutation testing** | cargo-mutants 27.1.0 |
-| **Automation** | Dependabot (grouped weekly Cargo and Actions updates; wiremock 0.6.5 ignored for MSRV) |
+| **Mutation testing** | cargo-mutants 27.1.0 (`.cargo/mutants.toml` + `[profile.mutants]`) |
+| **Automation** | Dependabot (grouped weekly Cargo and Actions updates) |
 
 ## Common Commands
 
@@ -424,7 +405,7 @@ coverage, copied implementations, or source-substring checks for executable poli
 cargo test
 cargo clippy --all-targets --all-features -- -D warnings
 cargo fmt --all -- --check
-cargo test --test mutation_ci_scope_test
+cargo test --test repo_policy mutation_ci_scope
 ./scripts/mutants-remote.sh
 ```
 
@@ -438,7 +419,7 @@ cargo test --test mutation_ci_scope_test
 - `max_turns` is a retained, inert compatibility value. It does not limit Client conversations or tool rounds; `max_tool_iterations` controls automatic tool rounds. Do not silently implement a new turn limit or remove the public setter/getter in a cleanup.
 - Library Tokio features are minimal; test and example runtime features belong in dev-dependencies. Do not reintroduce unused direct dependencies.
 - Security floors are not unused dependencies: a `Cargo.toml` requirement whose sole purpose is to keep a transitive production dependency out of an advisory range (`url = "2.5.9"` for RUSTSEC-2026-0592) must survive any cleanup that flags it as unused. The crate is compiled in every build through `reqwest`, and the published floor is what keeps an unpatched version out of downstream resolves — a `Cargo.lock` pin protects only this repository. Where the advisory's crate is compiled by none of this crate's feature builds, as recorded for `rustls-webpki`, the lockfile pin is the whole fix and no direct requirement is added.
-- Package verification is a repository-only test: exclude `tests/package_manifest_test.rs` from crate archives. Validate an unpacked archive's test suite with a separate target directory so Cargo cannot reuse binaries carrying another checkout's `CARGO_MANIFEST_DIR`.
+- Package verification is a repository-only test: exclude `tests/repo_policy.rs`, `tests/repo_policy/`, and `.cargo/` from crate archives. Validate an unpacked archive's test suite with a separate target directory so Cargo cannot reuse binaries carrying another checkout's `CARGO_MANIFEST_DIR`.
 - Token estimates count tool JSON through its existing `Display` serializer into a byte counter. Preserve JSON escaping and UTF-8 byte lengths without allocating strings solely to measure them.
 
 - **TDD**: Write failing tests first, implement, refactor, commit
@@ -491,7 +472,6 @@ cargo test --test mutation_ci_scope_test
 - Commit format: `type(scope): description` (feat, fix, docs, test, refactor, chore)
 - Dependency updates: Dependabot runs weekly (grouped Cargo updates) — resolve security advisories promptly
 - Reqwest compatibility: keep reqwest on 0.12.x while `Error::Http` publicly wraps `reqwest::Error`; Dependabot ignores only semver-major reqwest updates until a release that reworks that public boundary. v0.7.0 is not that release — it carries the `max_tokens` and `Error::Api` breaks instead.
-- Wiremock compatibility: keep the dev-dependency pinned to 0.6.4 on Rust 1.85. Dependabot ignores exactly 0.6.5 because its let-chains do not compile on the MSRV; later releases remain eligible and must pass the all-target MSRV job before adoption.
 - yoke-derive compatibility: the lockfile carries 0.8.4, which declares `rust-version` 1.82, passes the locked Rust 1.85 all-target check, and shares `syn` 3 and `synstructure` 0.14 with `zerofrom-derive`. Dependabot ignores exactly 0.8.3 because it calls `str::from_utf8`, which is unavailable on the MSRV; never resolve to 0.8.3, and do not restore the former 0.8.2 hold. Later releases remain eligible and must pass the all-target MSRV job before adoption.
 - Lockfile MSRV holds: the lock resolves `criterion` 0.7.0 (0.8.x requires Rust 1.86), `idna_adapter` 1.2.1 (1.2.2 requires Rust 1.86), and `encoding_rs` 0.8.35 with the `icu_*` 2.1.x chain (0.8.42 and 2.4.0 require Rust 1.88). These are MSRV holds, not failures: do not raise `rust-version` or force them with `cargo update --precise` above the newest Rust-1.85-compatible release. Later releases remain eligible and must pass the all-target MSRV job before adoption.
 - For compatible lockfile refreshes, verify the complete updated lockfile with `cargo +1.85 check --all-features --all-targets --workspace --locked`. If a refresh moves `yoke-derive` to a release that fails that check, pin it back to the newest release that passes with `cargo update -p yoke-derive --precise <version>`.

@@ -133,6 +133,14 @@ while IFS= read -r -d '' path; do
       ;;
   esac
 
+  # Repository-only policy, packaging, and mutation-script tests never import the SDK
+  # and cannot affect `src/` mutant detection; editing them alone needs no mutation sweep.
+  case "$path" in
+    tests/repo_policy.rs|tests/repo_policy/*|tests/support/*|tests/ai1-transport.sh)
+      continue
+      ;;
+  esac
+
   case "$path" in
     tests/*|*/tests/*|test/*|*/test/*|test_support/*|*/test_support/*|test_support.rs|*/test_support.rs|*_test.rs|*_tests.rs|fixtures/*|*/fixtures/*|testdata/*|*/testdata/*|snapshots/*|*/snapshots/*|*.snap|*.snap.new|.cargo/mutants.toml)
       FULL=true

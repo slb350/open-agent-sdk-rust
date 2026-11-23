@@ -129,7 +129,7 @@ async fn stream_request(
     if !response.status().is_success() {
         let status = response.status().as_u16();
         let body = response.text().await.unwrap_or_else(|error| {
-            eprintln!("WARNING: Failed to read error response body: {error}");
+            log::warn!("Failed to read error response body: {error}");
             "Unknown error (failed to read response body)".to_string()
         });
         return Err(Error::api_status(status, body));

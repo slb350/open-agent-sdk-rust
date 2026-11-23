@@ -1417,43 +1417,19 @@ open-agent-sdk-rust/
 │   ├── git_commit_agent.rs          # Production: Git commit generator
 │   ├── log_analyzer_agent.rs        # Production: Log analyzer
 │   ├── advanced_patterns.rs         # Retry logic and concurrent requests
-│   ├── vision_example.rs            # Multimodal: URLs, local files, base64
-│   ├── vision_api_demo.rs           # Vision API walkthrough
-│   └── test_tool_serialization.rs   # Tool call serialization verification
+│   └── vision_example.rs            # Multimodal: URLs, local files, base64
 ├── benches/
 │   └── performance.rs               # Criterion benchmarks (token estimation, history ops)
-├── tests/                         # Loopback protocol, lifecycle, validation, and infrastructure tests
-│   ├── anthropic_protocol_test.rs           # End-to-end Anthropic protocol path through query() and Client tool continuations
-│   ├── auto_execution_test.rs               # Optional provider smoke; deterministic behavior via mock-server tests
-│   ├── ci_workflow_policy_test.rs           # CI workflow YAML policy assertions (pinned actions, permissions)
-│   ├── config_env_test.rs                   # Environment-dependent provider helper isolation
-│   ├── context_estimation_test.rs           # Exact tool-content arithmetic, threshold and truncation boundaries
-│   ├── custom_headers_test.rs               # Custom caller HTTP header application and override semantics
-│   ├── debug_logging_test.rs                # Image payload truncation and UTF-8 safety in logging
-│   ├── endpoint_tolerance_test.rs           # Trailing-slash base_url and payload-less SSE events tolerated
-│   ├── hooks_history_snapshot_test.rs       # Structured conversation history in hook events
-│   ├── hooks_integration_test.rs            # Real auto-tool and hook outcomes
-│   ├── mutation_ci_scope_test.rs            # Mutation test scope classification (CI diffs)
-│   ├── mutation_locks_test.rs               # Checkout lock, host lock, scratch cleanup, and staged-run isolation (Unix)
-│   ├── mutation_scripts_test.rs             # Mutation scripts: ai-1 role, verdict, and homelab runner contract (Unix)
-│   ├── ai1-transport.sh                     # ai-1 transport refuses anything that would bypass its sandbox
-│   ├── package_manifest_test.rs             # Crate archive excludes development-only files
-│   ├── redirect_policy_test.rs              # Model requests reject all HTTP redirects
-│   ├── regression_chunk_metadata_test.rs    # Chunks missing unused id/object/created/model fields still stream
-│   ├── regression_client_lifecycle_test.rs  # Repeated/abandoned requests, interruption, history reset
-│   ├── regression_finish_reason_test.rs     # finish_reason surfaced to callers (regression since 0.8.0)
-│   ├── regression_incremental_streaming_test.rs # Token-by-token text delivery (regression since 0.10.0)
-│   ├── regression_max_tokens_test.rs        # max_tokens unset omits the field (regression since 0.7.0)
-│   ├── regression_reasoning_channel_test.rs # Reasoning channel separated from content (regression since 0.8.0)
-│   ├── regression_retry_classification_test.rs # HTTP status classification for retry (regression since 0.7.0)
-│   ├── regression_stream_error_test.rs      # In-stream server errors surface as Error::Api (vLLM, llama.cpp, OpenRouter shapes)
-│   ├── regression_stream_flush_test.rs      # Stream flush when server omits finish_reason (regression since 0.7.0)
-│   ├── send_message_test.rs                 # Text/image request-body and failed-send history checks
-│   ├── source_file_size_test.rs             # Architecture guard: Rust source-file 800-line hard limit
-│   ├── tool_call_content_test.rs            # Tool-call content field preserved in HTTP request body
-│   └── common/mod.rs                        # Shared loopback-server and stream helpers (no #[test] functions)
-│   └── support/mutation.rs                  # Shared mutation test harness (Harness, lock helpers, isolated runner)
-│   └── support/process.rs                   # Shared process/filesystem helpers for script tests
+├── tests/                         # Consolidated loopback protocol, lifecycle, validation, and policy tests
+│   ├── integration.rs               # Consolidated SDK integration test binary (20 modules in tests/integration/)
+│   ├── config_env_test.rs           # Process-isolated environment-dependent provider helper tests
+│   ├── debug_logging_test.rs        # Process-isolated global logger truncation & UTF-8 safety tests
+│   ├── repo_policy.rs               # Repository-only CI, packaging, line-limit, and mutation-script tests (tests/repo_policy/)
+│   ├── common/mod.rs                # Shared pure-Tokio loopback MockServer and stream helpers
+│   ├── support/                     # Shared mutation/process test harness for repo_policy tests
+│   └── ai1-transport.sh             # ai-1 transport refuses anything that would bypass its sandbox
+├── .cargo/
+│   └── mutants.toml                 # Scopes cargo-mutants to SDK targets using the debuginfo-free mutants profile
 ├── scripts/
 │   ├── mutants-ci-scope.sh          # Complete event diff policy for CI mutation runs
 │   ├── mutants-ai1-transport.sh     # Sends every ai-1 command and rsync through the role's sandbox
@@ -1490,12 +1466,10 @@ open-agent-sdk-rust/
 - `calculator_tools.rs` – Manual tool execution pattern
 - `auto_execution_demo.rs` – Automatic tool execution pattern
 - `vision_example.rs` – Multimodal image support (URLs, local files, base64)
-- `vision_api_demo.rs` – Vision API walkthrough with token cost notes
 - `hooks_example.rs` – Lifecycle hooks patterns (security gates, audit logging)
 - `context_management.rs` – Manual history management patterns
 - `interrupt_demo.rs` – Interrupt capability patterns (timeout, conditional, concurrent)
 - `advanced_patterns.rs` – Retry logic and concurrent request handling
-- `test_tool_serialization.rs` – Verifies tool call serialization (see `examples/test_tool_serialization.rs`)
 
 ## Documentation
 
@@ -1556,7 +1530,6 @@ to a survivor, so a run with one of each would otherwise look like a timeout.
 - thiserror 2.0 (error handling)
 - log 0.4.29+ (logging)
 - base64 0.23 (multimodal image encoding)
-- wiremock =0.6.4 (dev-only: 0.6.5 uses syntax unavailable on the Rust 1.85 MSRV)
 - cargo-mutants 27.1.0 (dev-only: mutation testing gate)
 - rand (retry jitter)
 - serde_norway 0.9 (dev-only: YAML parsing; replaces serde_yaml_ng, resolves RUSTSEC-2024-0449)

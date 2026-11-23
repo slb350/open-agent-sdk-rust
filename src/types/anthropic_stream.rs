@@ -182,11 +182,17 @@ pub struct AnthropicErrorBody {
 /// assert_eq!(anthropic_finish_reason("max_tokens"), FinishReason::Length);
 /// ```
 pub fn anthropic_finish_reason(raw: &str) -> FinishReason {
-    match raw.to_ascii_lowercase().as_str() {
-        "end_turn" | "stop_sequence" => FinishReason::Stop,
-        "max_tokens" | "model_context_window_exceeded" => FinishReason::Length,
-        "tool_use" => FinishReason::ToolCalls,
-        "refusal" => FinishReason::ContentFilter,
+    match raw {
+        s if s.eq_ignore_ascii_case("end_turn") || s.eq_ignore_ascii_case("stop_sequence") => {
+            FinishReason::Stop
+        }
+        s if s.eq_ignore_ascii_case("max_tokens")
+            || s.eq_ignore_ascii_case("model_context_window_exceeded") =>
+        {
+            FinishReason::Length
+        }
+        s if s.eq_ignore_ascii_case("tool_use") => FinishReason::ToolCalls,
+        s if s.eq_ignore_ascii_case("refusal") => FinishReason::ContentFilter,
         _ => FinishReason::Other(raw.to_string()),
     }
 }

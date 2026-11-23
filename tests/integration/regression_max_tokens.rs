@@ -8,9 +8,7 @@
 //! Builder-level `max_tokens` validation is covered by the unit tests in
 //! `src/types/tests/core.rs`; these assert what actually reaches the wire.
 
-mod common;
-
-use common::{DONE, options_for, sse_server};
+use crate::common::{DONE, options_for, sse_server};
 use futures::StreamExt;
 use open_agent::{AgentOptions, query};
 
@@ -31,7 +29,7 @@ async fn captured_request_body(max_tokens: Option<u32>) -> serde_json::Value {
     let mut stream = query("hi", &options).await.expect("start query");
     while stream.next().await.is_some() {}
 
-    let requests = server.received_requests().await.expect("recorded requests");
+    let requests = server.received_requests();
     assert_eq!(requests.len(), 1);
     requests[0].body_json().expect("request body is JSON")
 }

@@ -250,20 +250,29 @@ async fn tool_hooks_receive_structured_history_at_each_lifecycle_stage() {
                 None
             }
         });
-    let server = wiremock::MockServer::start().await;
-    wiremock::Mock::given(wiremock::matchers::method("POST"))
-        .and(wiremock::matchers::path("/v1/chat/completions"))
-        .respond_with(
-            wiremock::ResponseTemplate::new(200)
-                .insert_header("content-type", "text/event-stream")
-                .set_body_string("data: [DONE]\n\n"),
-        )
-        .expect(1)
-        .mount(&server)
-        .await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind loopback server");
+    let address = listener.local_addr().expect("local addr");
+    let server = tokio::spawn(async move {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let (mut socket, _) = listener.accept().await.expect("accept continuation");
+        let mut buf = [0u8; 4096];
+        let _ = socket.read(&mut buf).await;
+        let body = "data: [DONE]\n\n";
+        let response = format!(
+            "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        socket
+            .write_all(response.as_bytes())
+            .await
+            .expect("write response");
+        let _ = socket.shutdown().await;
+    });
     let options = AgentOptions::builder()
         .model("test-model")
-        .base_url(format!("{}/v1", server.uri()))
+        .base_url(format!("http://{address}/v1"))
         .tool(
             tool("calculate", "Calculate a value")
                 .build(|_| async move { Ok(serde_json::json!({"result": 84})) }),
@@ -281,6 +290,7 @@ async fn tool_hooks_receive_structured_history_at_each_lifecycle_stage() {
     ))]));
 
     assert!(client.auto_execute_loop().await.unwrap().is_empty());
+    server.await.expect("continuation server completes");
 
     let pre_messages = [
         Message::user("Use the calculator"),

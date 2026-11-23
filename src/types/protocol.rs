@@ -74,9 +74,14 @@ impl ApiProtocol {
     /// assert_eq!(ApiProtocol::from_wire("cohere"), None);
     /// ```
     pub fn from_wire(raw: &str) -> Option<Self> {
-        match raw.to_ascii_lowercase().as_str() {
-            "openai" | "openai-chat" | "openai_chat" => Some(Self::OpenAiChat),
-            "anthropic" => Some(Self::Anthropic),
+        match raw {
+            s if s.eq_ignore_ascii_case("openai")
+                || s.eq_ignore_ascii_case("openai-chat")
+                || s.eq_ignore_ascii_case("openai_chat") =>
+            {
+                Some(Self::OpenAiChat)
+            }
+            s if s.eq_ignore_ascii_case("anthropic") => Some(Self::Anthropic),
             _ => None,
         }
     }

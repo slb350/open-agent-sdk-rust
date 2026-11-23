@@ -6,17 +6,14 @@
 //! `data` field is empty is valid framing that carries no JSON; the decoders treated it as a
 //! malformed payload and failed a stream that was otherwise complete.
 
-mod common;
-
-use common::{
-    DONE, anthropic_frame, anthropic_text_response, sole_finish_reason, text_chunk, text_of_events,
+use crate::common::{
+    DONE, MockResponse, MockServer, anthropic_frame, anthropic_text_response, sole_finish_reason,
+    text_chunk, text_of_events,
 };
 use futures::StreamExt;
 use open_agent::{
     AgentOptions, ApiProtocol, Client, ContentBlock, FinishReason, StreamEvent, query,
 };
-use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
 
 async fn collect(options: &AgentOptions) -> Vec<StreamEvent> {
     let mut stream = query("hi", options).await.expect("start query");
@@ -29,17 +26,7 @@ async fn collect(options: &AgentOptions) -> Vec<StreamEvent> {
 
 /// Serves `body` on exactly `endpoint`; any other path is a 404.
 async fn server_at(endpoint: &str, body: String) -> MockServer {
-    let server = MockServer::start().await;
-    Mock::given(method("POST"))
-        .and(path(endpoint))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "text/event-stream")
-                .set_body_string(body),
-        )
-        .mount(&server)
-        .await;
-    server
+    MockServer::start_static(endpoint, MockResponse::sse(body)).await
 }
 
 fn options(server: &MockServer, suffix: &str, protocol: ApiProtocol) -> AgentOptions {
@@ -93,8 +80,7 @@ async fn a_trailing_slash_is_tolerated_by_client_requests() {
 
 #[tokio::test]
 async fn the_configured_base_url_is_reported_unchanged() {
-    let server = MockServer::start().await;
-    let configured = format!("{}/v1/", server.uri());
+    let configured = "http://127.0.0.1:9999/v1/".to_string();
     let options = AgentOptions::builder()
         .model("m")
         .base_url(configured.clone())

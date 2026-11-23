@@ -9,10 +9,8 @@
 //! These tests make it a contract: reasoning is parsed, routed to its own channel, and never
 //! reaches a `ContentBlock::Text`.
 
-mod common;
-
-use common::{
-    DONE, blocks_of, collect_events, mixed_chunk, options_with_reasoning, reasoning_chunk,
+use crate::common::{
+    self, DONE, blocks_of, collect_events, mixed_chunk, options_with_reasoning, reasoning_chunk,
     reasoning_of, sole_finish_reason, sse_server, text_chunk, text_of_events,
 };
 use open_agent::{Client, FinishReason};

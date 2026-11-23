@@ -1,9 +1,8 @@
-mod common;
-
-use common::{header_values, read_request};
+use crate::common::{header_values, read_request};
 use open_agent::{AgentOptions, Client, Error, query};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, timeout};
 
@@ -17,19 +16,29 @@ fn redirect_response(address: std::net::SocketAddr) -> String {
     )
 }
 
-async fn start_redirect_pair() -> (String, JoinHandle<String>, JoinHandle<Option<String>>) {
+async fn start_redirect_pair() -> (
+    String,
+    oneshot::Sender<()>,
+    JoinHandle<String>,
+    JoinHandle<Option<String>>,
+) {
     let target_listener = TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind loopback redirect target");
     let target_address = target_listener
         .local_addr()
         .expect("read redirect target address");
+    let (done_tx, done_rx) = oneshot::channel();
     let target = tokio::spawn(async move {
-        let accepted = timeout(Duration::from_secs(1), target_listener.accept()).await;
+        let accepted = tokio::select! {
+            biased;
+            connection = target_listener.accept() => Some(connection),
+            _ = done_rx => None,
+        };
         let (mut socket, _) = match accepted {
-            Err(_) => return None,
-            Ok(Ok(connection)) => connection,
-            Ok(Err(error)) => panic!("accept redirect target request: {error}"),
+            None => return None,
+            Some(Ok(connection)) => connection,
+            Some(Err(error)) => panic!("accept redirect target request: {error}"),
         };
 
         let request = timeout(Duration::from_secs(1), read_request(&mut socket))
@@ -64,14 +73,19 @@ async fn start_redirect_pair() -> (String, JoinHandle<String>, JoinHandle<Option
         String::from_utf8(request).expect("origin request is valid UTF-8")
     });
 
-    (format!("http://{origin_address}"), origin, target)
+    (format!("http://{origin_address}"), done_tx, origin, target)
 }
 
-async fn start_same_origin_redirect() -> (String, JoinHandle<(String, Option<String>)>) {
+async fn start_same_origin_redirect() -> (
+    String,
+    oneshot::Sender<()>,
+    JoinHandle<(String, Option<String>)>,
+) {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind loopback origin");
     let address = listener.local_addr().expect("read origin address");
+    let (done_tx, done_rx) = oneshot::channel();
     let server = tokio::spawn(async move {
         let (mut origin_socket, _) = listener.accept().await.expect("accept origin request");
         let origin_request = read_request(&mut origin_socket).await;
@@ -85,18 +99,21 @@ async fn start_same_origin_redirect() -> (String, JoinHandle<(String, Option<Str
             .await
             .expect("close same-origin response");
 
-        let redirected_request = match timeout(Duration::from_secs(1), listener.accept()).await {
-            Err(_) => None,
-            Ok(Ok((mut socket, _))) => {
-                let request = timeout(Duration::from_secs(1), read_request(&mut socket))
-                    .await
-                    .expect("same-origin redirect request is complete before timeout");
-                Some(
-                    String::from_utf8(request)
-                        .expect("same-origin redirected request is valid UTF-8"),
-                )
-            }
-            Ok(Err(error)) => panic!("accept same-origin redirect request: {error}"),
+        let redirected_request = tokio::select! {
+            biased;
+            connection = listener.accept() => match connection {
+                Ok((mut socket, _)) => {
+                    let request = timeout(Duration::from_secs(1), read_request(&mut socket))
+                        .await
+                        .expect("same-origin redirect request is complete before timeout");
+                    Some(
+                        String::from_utf8(request)
+                            .expect("same-origin redirected request is valid UTF-8"),
+                    )
+                }
+                Err(error) => panic!("accept same-origin redirect request: {error}"),
+            },
+            _ = done_rx => None,
         };
 
         (
@@ -105,7 +122,7 @@ async fn start_same_origin_redirect() -> (String, JoinHandle<(String, Option<Str
         )
     });
 
-    (format!("http://{address}"), server)
+    (format!("http://{address}"), done_tx, server)
 }
 
 fn assert_redirect_not_contacted(target_request: Option<&str>) {
@@ -126,7 +143,7 @@ fn assert_origin_redirect_error(error: Option<Error>) {
 
 #[tokio::test]
 async fn query_rejects_redirect_without_forwarding_custom_headers() {
-    let (base_url, origin, target) = start_redirect_pair().await;
+    let (base_url, done_tx, origin, target) = start_redirect_pair().await;
     let options = AgentOptions::builder()
         .model("test-model")
         .base_url(base_url)
@@ -135,6 +152,7 @@ async fn query_rejects_redirect_without_forwarding_custom_headers() {
         .expect("valid options");
 
     let error = query("hello", &options).await.err();
+    let _ = done_tx.send(());
     let origin_request = origin.await.expect("origin task completes");
     let target_request = target.await.expect("redirect target task completes");
 
@@ -148,7 +166,7 @@ async fn query_rejects_redirect_without_forwarding_custom_headers() {
 
 #[tokio::test]
 async fn client_rejects_redirect_without_forwarding_custom_headers() {
-    let (base_url, origin, target) = start_redirect_pair().await;
+    let (base_url, done_tx, origin, target) = start_redirect_pair().await;
     let options = AgentOptions::builder()
         .model("test-model")
         .base_url(base_url)
@@ -158,6 +176,7 @@ async fn client_rejects_redirect_without_forwarding_custom_headers() {
     let mut client = Client::new(options).expect("construct SDK client");
 
     let error = client.send("hello").await.err();
+    let _ = done_tx.send(());
     let origin_request = origin.await.expect("origin task completes");
     let target_request = target.await.expect("redirect target task completes");
 
@@ -171,7 +190,7 @@ async fn client_rejects_redirect_without_forwarding_custom_headers() {
 
 #[tokio::test]
 async fn same_origin_redirect_is_rejected_without_a_second_request() {
-    let (base_url, server) = start_same_origin_redirect().await;
+    let (base_url, done_tx, server) = start_same_origin_redirect().await;
     let options = AgentOptions::builder()
         .model("test-model")
         .base_url(base_url)
@@ -180,6 +199,7 @@ async fn same_origin_redirect_is_rejected_without_a_second_request() {
         .expect("valid options");
 
     let error = query("hello", &options).await.err();
+    let _ = done_tx.send(());
     let (origin_request, redirected_request) = server.await.expect("origin task completes");
 
     assert_eq!(

@@ -6,9 +6,7 @@
 //! Text and reasoning now reach the caller as they arrive; tool calls still cannot, because
 //! their arguments are only valid JSON once the last fragment lands.
 
-mod common;
-
-use common::{
+use crate::common::{
     DONE, anthropic_frame, anthropic_sse_server, blocks_of, collect_events, mixed_chunk,
     options_for, reasoning_chunk, sse_server, text_chunk, text_of_events, tool_chunk,
 };

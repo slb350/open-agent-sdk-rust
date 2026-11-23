@@ -104,19 +104,24 @@ impl Client {
             }
             iteration += 1;
             self.push_assistant(&blocks);
+            let has_pre_hooks = !self.options.hooks().pre_tool_use.is_empty();
+            let has_post_hooks = !self.options.hooks().post_tool_use.is_empty();
+            let mut running_snapshot = if has_pre_hooks || has_post_hooks {
+                Some(serialize_history_snapshot(&self.history)?)
+            } else {
+                None
+            };
             for block in blocks {
                 if let ContentBlock::ToolUse(tool_use) = block {
                     if self.interrupted.load(Ordering::SeqCst) {
                         self.record_cancelled_tool(tool_use.id());
+                        if let Some(snapshot) = &mut running_snapshot {
+                            if let Some(last) = self.history.last() {
+                                snapshot.push(serialize_history_message(last)?);
+                            }
+                        }
                         continue;
                     }
-                    let has_pre_hooks = !self.options.hooks().pre_tool_use.is_empty();
-                    let has_post_hooks = !self.options.hooks().post_tool_use.is_empty();
-                    let mut history_snapshot = if has_pre_hooks || has_post_hooks {
-                        Some(serialize_history_snapshot(&self.history)?)
-                    } else {
-                        None
-                    };
 
                     use crate::hooks::PreToolUseEvent;
                     let mut tool_input = tool_use.input().clone();
@@ -124,16 +129,10 @@ impl Client {
                     let mut block_reason = None;
 
                     if has_pre_hooks {
-                        let pre_history = if has_post_hooks {
-                            history_snapshot
-                                .as_ref()
-                                .expect("hook history snapshot should exist")
-                                .clone()
-                        } else {
-                            history_snapshot
-                                .take()
-                                .expect("hook history snapshot should exist")
-                        };
+                        let pre_history = running_snapshot
+                            .as_ref()
+                            .expect("hook history snapshot should exist")
+                            .clone();
                         let pre_event = PreToolUseEvent::new(
                             tool_use.name().to_string(),
                             tool_use.input().clone(),
@@ -156,6 +155,11 @@ impl Client {
                     // Hooks can request cancellation before any tool side effects.
                     if self.interrupted.load(Ordering::SeqCst) {
                         self.record_cancelled_tool(tool_use.id());
+                        if let Some(snapshot) = &mut running_snapshot {
+                            if let Some(last) = self.history.last() {
+                                snapshot.push(serialize_history_message(last)?);
+                            }
+                        }
                         continue;
                     }
                     let post_input = has_post_hooks.then(|| tool_input.clone());
@@ -189,9 +193,10 @@ impl Client {
                             Message::user_with_blocks(vec![ContentBlock::ToolResult(
                                 ToolResultBlock::new(tool_use.id(), final_result.clone()),
                             )]);
-                        let mut post_history_snapshot = history_snapshot
-                            .take()
-                            .expect("hook history snapshot should exist");
+                        let mut post_history_snapshot = running_snapshot
+                            .as_ref()
+                            .expect("hook history snapshot should exist")
+                            .clone();
                         post_history_snapshot.push(serialize_history_message(&pending_result)?);
                         let post_event = PostToolUseEvent::new(
                             tool_use.name().to_string(),
@@ -213,6 +218,9 @@ impl Client {
                     let tool_result = ToolResultBlock::new(tool_use.id(), final_result);
                     let tool_result_msg =
                         Message::user_with_blocks(vec![ContentBlock::ToolResult(tool_result)]);
+                    if let Some(snapshot) = &mut running_snapshot {
+                        snapshot.push(serialize_history_message(&tool_result_msg)?);
+                    }
                     self.history.push(tool_result_msg);
                 }
             }

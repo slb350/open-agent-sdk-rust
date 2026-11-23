@@ -1,33 +1,21 @@
 //! Request transitions must discard previously buffered output in either client mode.
-mod common;
-
-use common::{DONE, message_text, text_chunk, text_of};
+use crate::common::{self, DONE, MockResponse, MockServer, message_text, text_chunk, text_of};
 use open_agent::{AgentOptions, Client, ContentBlock, Hooks, Message, MessageRole, tool};
 use serde_json::json;
 use std::sync::{
     Arc, OnceLock,
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
-use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
 
 async fn client(auto: bool) -> (MockServer, Client) {
-    let server = MockServer::start().await;
     let round = AtomicUsize::new(0);
-    Mock::given(method("POST"))
-        .and(path("/v1/chat/completions"))
-        .respond_with(move |_: &wiremock::Request| {
-            let n = round.fetch_add(1, Ordering::SeqCst) + 1;
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "text/event-stream")
-                .set_body_string(
-                    text_chunk(&format!("turn {n} "), None)
-                        + &text_chunk("done", Some("stop"))
-                        + DONE,
-                )
-        })
-        .mount(&server)
-        .await;
+    let server = MockServer::start_handler("/v1/chat/completions", move |_| {
+        let n = round.fetch_add(1, Ordering::SeqCst) + 1;
+        MockResponse::sse(
+            text_chunk(&format!("turn {n} "), None) + &text_chunk("done", Some("stop")) + DONE,
+        )
+    })
+    .await;
     let options = AgentOptions::builder()
         .model("m")
         .base_url(format!("{}/v1", server.uri()))
@@ -190,14 +178,10 @@ async fn cancellation_from_a_tool_or_hook_stops_remaining_work_and_continuation(
                 .map(|count| count.load(Ordering::SeqCst)),
             expected_hooks
         );
-        assert_eq!(
-            server.received_requests().await.unwrap().len(),
-            1,
-            "{stage}/{index}"
-        );
+        assert_eq!(server.received_requests().len(), 1, "{stage}/{index}");
         assert!(client.interrupt_handle().load(Ordering::SeqCst));
         client.send("next request").await.unwrap();
-        let requests = server.received_requests().await.unwrap();
+        let requests = server.received_requests();
         let body: serde_json::Value = requests[1].body_json().unwrap();
         let result_ids: Vec<_> = body["messages"]
             .as_array()

@@ -87,11 +87,11 @@ impl FinishReason {
     /// );
     /// ```
     pub fn from_wire(raw: &str) -> Self {
-        match raw.to_ascii_lowercase().as_str() {
-            "stop" => Self::Stop,
-            "length" => Self::Length,
-            "tool_calls" => Self::ToolCalls,
-            "content_filter" => Self::ContentFilter,
+        match raw {
+            s if s.eq_ignore_ascii_case("stop") => Self::Stop,
+            s if s.eq_ignore_ascii_case("length") => Self::Length,
+            s if s.eq_ignore_ascii_case("tool_calls") => Self::ToolCalls,
+            s if s.eq_ignore_ascii_case("content_filter") => Self::ContentFilter,
             _ => Self::Other(raw.to_string()),
         }
     }
