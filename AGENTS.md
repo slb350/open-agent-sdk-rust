@@ -18,7 +18,7 @@ This AGENTS.md is the tracked, authoritative instruction file for agents working
 
 ## Project Description
 
-A lightweight Rust SDK (v0.11.11 published — see CHANGELOG.md) for building AI agents with local or cloud LLMs. Speaks two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint with `ApiProtocol`. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
+A lightweight Rust SDK (v0.11.12 published — see CHANGELOG.md) for building AI agents with local or cloud LLMs. Speaks two wire protocols: OpenAI chat completions and Anthropic messages, selected per endpoint with `ApiProtocol`. Rust port of the Python open-agent-sdk. Published to crates.io as `open-agent-sdk`.
 
 ## Repository Structure
 
@@ -535,7 +535,7 @@ Recover a partial publication by re-running the workflow on the same tag. If cra
 has the version, the workflow compares every packaged file with the tag's package before skipping
 the upload and creating the GitHub release. A difference fails the run.
 
-## Security Advisories (resolved in v0.6.5, current v0.11.11)
+## Security Advisories (resolved in v0.6.5, current v0.11.12)
 
 RUSTSEC-2024-0449 resolved (v0.6.5):
 
@@ -561,6 +561,8 @@ url raised to 2.5.9 with a `Cargo.toml` floor (released in v0.11.11):
 - Lockfile and direct requirement updated to resolve RUSTSEC-2026-0592 / GHSA-hrj5-67jp-wqp9 (2026-11-20): `Url::origin()` (and `url::quirks::origin()`) recursed on each `blob:` prefix of a nested `blob:` URL, so a 50,020-byte URL overflowed the stack of a spawned thread and aborted the process, uncatchable by `catch_unwind()`. 2.5.9 follows the URL Standard and never recurses (servo/rust-url#1186). Unlike the `rustls-webpki` case above, `url` is compiled in every build here: `reqwest` requires `url = "2.4"`, which admits the vulnerable range, so `Cargo.toml` now carries `url = "2.5.9"` — a security floor on a dependency the SDK never calls, not an unused dependency to be removed by a cleanup. The lockfile alone would protect only this checkout.
 
 ## Current Version
+
+**v0.11.12**. Optimizes runtime streaming, Anthropic image translation, single-pass base64 validation, wire-string matching, request assembly, and parallel tool-loop history snapshots; consolidates integration and repo-policy test binaries, scopes mutation builds with `.cargo/mutants.toml` and `[profile.mutants]`, replaces `wiremock` with a pure-Tokio loopback mock server, and removes unused dev-dependencies. No public API changed. See CHANGELOG.md [0.11.12].
 
 **v0.11.11**. Automatic tool continuations skip `UserPromptSubmit` hooks, and bare object tool schemas are sent with empty `properties`. The manifest now requires `url = "2.5.9"` to apply the security floor to downstream builds. See CHANGELOG.md [0.11.11] for both Rust 1.85-compatible lockfile refreshes.
 

@@ -15,7 +15,7 @@
 - **Local or hosted** - run on your own hardware at no API cost and with no data leaving the machine, or point it at a vendor
 - **Control** - pick your model (Qwen, Llama, Mistral, Claude, etc.)
 
-[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.11.11)](https://crates.io/crates/open-agent-sdk)
+[![Crates.io](https://img.shields.io/crates/v/open-agent-sdk.svg?label=open-agent-sdk%200.11.12)](https://crates.io/crates/open-agent-sdk)
 [![Documentation](https://docs.rs/open-agent-sdk/badge.svg)](https://docs.rs/open-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -82,7 +82,7 @@ explicitly when an endpoint asks for them.
 
 ```toml
 [dependencies]
-open-agent-sdk = "0.11.11"
+open-agent-sdk = "0.11.12"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 serde_json = "1.0"
@@ -1550,6 +1550,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Status**: v0.11.11 is the current published crates.io release. It skips `UserPromptSubmit` hooks during automatic tool continuations and keeps bare object tool schemas from gaining a required `type` parameter. It requires at least `url` 2.5.9 to resolve RUSTSEC-2026-0592. See CHANGELOG.md.
+**Status**: v0.11.12 is the current published crates.io release. It optimizes runtime streaming, image handling, request assembly, and tool-loop snapshots, consolidates the test suite and mutation builds, and trims development dependencies without changing the public API. See CHANGELOG.md.
 
 Star this repo if you're building AI agents with local models in Rust!

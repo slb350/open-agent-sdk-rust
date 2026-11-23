@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.12] - 2026-11-23
+
+This patch release optimizes streaming, image handling, request assembly, and tool-loop history
+snapshots, trims development dependencies, and speeds up the test and mutation-testing suites. No
+public API changed.
+
+### Changed
+
+- Reduced allocations across runtime hot paths:
+  - Replaced per-chunk `Vec` allocations inside `utils::driver::drive` with a zero-allocation
+    `BatchIter` iterator.
+  - Changed Anthropic `data:` URI parsing to borrow the media type and base64 payload directly
+    instead of cloning multi-megabyte image payloads.
+  - Consolidated `ImageBlock` base64 validation into a single-pass byte check, validated file
+    extensions before reading files from disk in `ImageBlock::from_file_path`, and encoded directly
+    into a pre-sized `data:` URI buffer.
+  - Replaced `eprintln!` diagnostics in image validation and HTTP error-body truncation with
+    `log::warn!`.
+  - Replaced temporary lowercase `String` allocations in wire-protocol, finish-reason, and
+    provider parsing with `eq_ignore_ascii_case` match guards.
+  - Added a single-text-block fast path and pre-sized message vector in request assembly, and
+    cached the hook history JSON snapshot across parallel tool calls in `auto_execute_loop`.
+  - Deduplicated retry execution between `retry_with_backoff` and
+    `retry_with_backoff_conditional`, and removed dead `skip_serializing_if` attributes on
+    `Deserialize`-only OpenAI stream types.
+  - Replaced the manual UTF-8 char-boundary `while` loop in debug image-URL truncation with a
+    bounded reverse iterator.
+
+### Maintenance
+
+- Consolidated 20 stateless SDK integration tests into `tests/integration.rs` and 6 repository-only
+  policy tests into `tests/repo_policy.rs`, keeping environment- and logger-isolated tests
+  standalone.
+- Scoped `cargo-mutants` to SDK targets via `.cargo/mutants.toml` with a `debug = 0`
+  `[profile.mutants]` build profile, and skipped mutation CI for edits limited to repository-only
+  policy tests.
+- Replaced `wiremock` with a lightweight pure-Tokio loopback mock server, removed unused
+  dev-dependencies (`env_logger`, `regex`, and Criterion's plotting stack), and pruned `Cargo.lock`
+  from 213 to 182 resolved packages (Rust 1.85 MSRV preserved).
+- Removed unconditional 1-second sleeps in redirect policy tests and serial suite re-runs in
+  mutation scope tests, cached `cargo-audit` in GitHub Actions workflows, and removed obsolete
+  examples (`examples/test_tool_serialization.rs`, `examples/vision_api_demo.rs`).
+
 ## [0.11.11] - 2026-11-22
 
 This patch release fixes automatic tool continuations and bare object tool schemas, and
